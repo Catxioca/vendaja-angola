@@ -28,6 +28,10 @@
  * Ponto de entrada para requisições HTTP POST (API REST)
  * Permite que apps Mobile (Android/iOS) e Desktop comuniquem com o Google Apps Script.
  */
+/**
+ * Ponto de entrada para requisições HTTP POST (API REST)
+ * Permite que apps Mobile (Android/iOS) e Desktop comuniquem com o Google Apps Script.
+ */
 function doPost(e) {
   try {
     const requestData = JSON.parse(e.postData.contents);
@@ -39,6 +43,11 @@ function doPost(e) {
     switch (action) {
       case 'ping':
         result = { status: 'success', message: 'Conexão com a API estabelecida com sucesso!' };
+        break;
+
+      case 'login':
+        // Executa a tua função de login já existente no Código.js
+        result = verificarLogin(payload.usuario, payload.senha);
         break;
 
       default:

@@ -34,7 +34,6 @@
   });
 </script>
 
-
 <script>
 /**
  * TMP Kinaxixi V2.0 — JavaScript
@@ -741,31 +740,37 @@
       );
     }
   };
-
   const handleLogin = async (event) => {
     event.preventDefault();
+   const handleLogin = async (event) => {
+  event.preventDefault();
 
-    const email = $('login-email')?.value.trim() || '';
-    const senha = $('login-senha')?.value || '';
+  const email = $('login-email')?.value.trim() || '';
+  const senha = $('login-senha')?.value || '';
 
-    if (!email || !senha) {
-      showNotification('E-mail e senha são obrigatórios.', 'error');
-      return;
-    }
+  if (!email || !senha) {
+    showNotification('E-mail e senha são obrigatórios.', 'error');
+    return;
+  }
 
-    try {
-      const result = await runWithLoading(
-        $('btn-login'),
-        'loginUser',
-        [email, senha]
-      );
+  try {
+    const result = await runWithLoading(
+      $('btn-login'),
+      'loginUser',
+      [email, senha]
+    );
 
-      await enterDashboard(result.user);
+    // Se o backend retornar o objeto com a propriedade user ou a resposta direta
+    const userData = result.user || result;
+    await enterDashboard(userData);
 
-      showNotification(
-        result.message || 'Sessão iniciada com sucesso.',
-        'success'
-      );
+  } catch (error) {
+    showNotification(
+      error.message || 'Não foi possível efetuar o login.',
+      'error'
+    );
+  }
+};
     } catch (error) {
       showNotification(
         error.message || 'E-mail ou senha incorretos.',

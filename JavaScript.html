@@ -1,4 +1,41 @@
 <script>
+  // URL global da API REST do Google Apps Script
+  const API_URL = "https://script.google.com/macros/s/AKfycbyEIID3u6EjeQ5kKIfwXihUL3h_cqGmYFsAbM0rFF2ufAIxdQmEePLYp5VpFr7BcETcDg/exec";
+
+  /**
+   * Função genérica para efetuar chamadas à API em substituição do google.script.run
+   * Funciona nativamente em Web, Mobile (Android/iOS) e Desktop.
+   */
+  async function callApi(action, payload = {}) {
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify({
+          action: action,
+          payload: payload
+        })
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Erro de ligação à API:", error);
+      return { status: "error", message: "Falha na comunicação com o servidor. Verifica a tua ligação à Internet." };
+    }
+  }
+
+  // Teste de ligação inicial da API (executado ao carregar a página)
+  document.addEventListener("DOMContentLoaded", async () => {
+    const teste = await callApi("ping");
+    console.log("Resposta da API:", teste);
+  });
+</script>
+
+
+<script>
 /**
  * TMP Kinaxixi V2.0 — JavaScript
  * Frontend SPA: autenticação, sessão, turnos, formulários,

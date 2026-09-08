@@ -24,7 +24,37 @@
 // ============================================================================
 // CONFIGURAÇÃO GLOBAL
 // ============================================================================
+/**
+ * Ponto de entrada para requisições HTTP POST (API REST)
+ * Permite que apps Mobile (Android/iOS) e Desktop comuniquem com o Google Apps Script.
+ */
+function doPost(e) {
+  try {
+    const requestData = JSON.parse(e.postData.contents);
+    const action = requestData.action;
+    const payload = requestData.payload || {};
 
+    let result;
+
+    switch (action) {
+      case 'ping':
+        result = { status: 'success', message: 'Conexão com a API estabelecida com sucesso!' };
+        break;
+
+      default:
+        result = { status: 'error', message: 'Ação "' + action + '" não foi reconhecida pela API.' };
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
 const APP_NAME = 'TMP Kinaxixi V2.0';
 
 const TOKEN_TTL_MINUTES = 15;

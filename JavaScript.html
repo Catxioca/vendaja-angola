@@ -1,0 +1,1699 @@
+<script>
+/**
+ * TMP Kinaxixi V2.0 — JavaScript
+ * Frontend SPA: autenticação, sessão, turnos, formulários,
+ * perfil e administração.
+ */
+(() => {
+  'use strict';
+
+  const SCREENS = Object.freeze([
+    'screen-login',
+    'screen-register',
+    'screen-forgot',
+    'screen-reset',
+    'dashboard-container'
+  ]);
+
+  const AUTH_SCREENS = Object.freeze([
+    'screen-login',
+    'screen-register',
+    'screen-forgot',
+    'screen-reset'
+  ]);
+
+  const MIN_PASSWORD_LENGTH = 6;
+  const TOAST_MS = 4200;
+
+  let sessionUser = null;
+  let pendingResetEmail = '';
+  let locaisCache = [];
+  let currentLang = 'pt';
+
+  const $ = (id) => document.getElementById(id);
+
+  // ===========================================================================
+  // INTERNACIONALIZAÇÃO (i18n)
+  // ===========================================================================
+
+  const TRANSLATIONS = {
+    pt: {
+      auth_subtitle: "Gestão de turnos e disponibilidade",
+      login_title: "Iniciar sessão",
+      login_subtitle: "Utilize a sua conta Kinaxixi para continuar.",
+      email: "E-mail",
+      password: "Senha",
+      login_btn: "Entrar",
+      create_account: "Criar uma conta",
+      forgot_password: "Esqueceu a senha?",
+      create_account_title: "Criar uma conta",
+      create_account_subtitle: "Preencha os dados para aceder à plataforma.",
+      first_name: "Nome",
+      last_name: "Apelido",
+      phone: "Celular",
+      confirm_email: "Confirmar e-mail",
+      password_min_hint: "Mínimo de 6 caracteres.",
+      register_btn: "Cadastrar",
+      already_have_account: "Já tem uma conta? Faça Login",
+      recover_title: "Recuperar senha",
+      recover_subtitle: "Enviaremos um código de 6 dígitos para o e-mail registado.",
+      registered_email: "E-mail registado",
+      send_code: "Enviar Código de Confirmação",
+      back_to_login: "Voltar ao Login",
+      reset_title: "Redefinir senha",
+      reset_subtitle: "Insira o código de 6 dígitos enviado ao seu e-mail.",
+      reset_code_info: "O código é válido durante 15 minutos.",
+      token_label: "Código / Token",
+      new_password: "Nova senha",
+      reset_btn: "Redefinir Senha",
+      request_new_code: "Pedir um novo código",
+      logout: "Sair / Logout",
+      nav_turnos: "Turnos Programados",
+      nav_disponibilidade: "Disponibilidade",
+      nav_ocorrencias: "Ocorrências & Cancelamentos",
+      nav_perfil: "Meu Perfil",
+      nav_admin: "Painel de Administração",
+      turnos_subtitle: "Consulte os turnos disponíveis e filtre por local.",
+      local: "Local",
+      select_local: "Selecione um local",
+      select_local_title: "Selecione um local",
+      select_local_desc: "Os turnos ativos com vagas aparecerão aqui.",
+      disp_subtitle: "Selecione o mês e abra o formulário de disponibilidade.",
+      month: "Mês",
+      select_month: "Selecione o mês",
+      open_form: "Abrir Google Form",
+      ocorr_subtitle: "Aceda aos formulários oficiais para reportar situações.",
+      form_badge: "Formulário",
+      ocorr_title: "Registar ocorrência",
+      ocorr_desc: "Comunique incidentes durante o turno. Os seus dados serão pré-preenchidos.",
+      cancel_title: "Cancelar turno",
+      cancel_desc: "Solicite o cancelamento de um turno atribuído. Os seus dados serão pré-preenchidos.",
+      perfil_subtitle: "Consulte e atualize os seus dados cadastrais.",
+      profile_role: "Perfil",
+      language: "Idioma",
+      save_changes: "Guardar alterações",
+      admin_panel_title: "Painel de Administração",
+      admin_panel_subtitle: "Gestão de utilizadores, turnos, locais e relatórios.",
+      tab_users: "Usuários",
+      tab_turnos: "Turnos",
+      tab_locais: "Locais",
+      tab_links: "Links / Forms",
+      tab_inscricoes: "Inscrições",
+      tab_relatorios: "Relatórios",
+      create_user: "Criar Novo Utilizador",
+      status: "Status",
+      actions: "Ações",
+      create: "Criar",
+      create_turno: "Criar Novo Turno",
+      date: "Data",
+      start_time: "Início",
+      end_time: "Fim",
+      vagas: "Vagas",
+      create_local: "Criar Novo Local",
+      local_name: "Nome do Local",
+      type: "Tipo",
+      create_link: "Criar Novo Link / Formulário",
+      user_name: "Utilizador",
+      generate_report: "Gerar Relatório Consolidado",
+      reports_desc: "Indicadores de acessos, ocupação de turnos e disponibilidade."
+    },
+    en: {
+      auth_subtitle: "Shift management and availability",
+      login_title: "Sign In",
+      login_subtitle: "Use your Kinaxixi account to continue.",
+      email: "Email",
+      password: "Password",
+      login_btn: "Login",
+      create_account: "Create an account",
+      forgot_password: "Forgot password?",
+      create_account_title: "Create an account",
+      create_account_subtitle: "Fill in the details to access the platform.",
+      first_name: "First Name",
+      last_name: "Last Name",
+      phone: "Phone",
+      confirm_email: "Confirm Email",
+      password_min_hint: "Minimum 6 characters.",
+      register_btn: "Register",
+      already_have_account: "Already have an account? Login",
+      recover_title: "Recover Password",
+      recover_subtitle: "We will send a 6-digit code to your registered email.",
+      registered_email: "Registered Email",
+      send_code: "Send Confirmation Code",
+      back_to_login: "Back to Login",
+      reset_title: "Reset Password",
+      reset_subtitle: "Enter the 6-digit code sent to your email.",
+      reset_code_info: "The code is valid for 15 minutes.",
+      token_label: "Code / Token",
+      new_password: "New Password",
+      reset_btn: "Reset Password",
+      request_new_code: "Request new code",
+      logout: "Logout",
+      nav_turnos: "Scheduled Shifts",
+      nav_disponibilidade: "Availability",
+      nav_ocorrencias: "Incidents & Cancellations",
+      nav_perfil: "My Profile",
+      nav_admin: "Admin Panel",
+      turnos_subtitle: "Check available shifts and filter by location.",
+      local: "Location",
+      select_local: "Select a location",
+      select_local_title: "Select a location",
+      select_local_desc: "Active shifts with open spots will appear here.",
+      disp_subtitle: "Select the month and open the availability form.",
+      month: "Month",
+      select_month: "Select month",
+      open_form: "Open Google Form",
+      ocorr_subtitle: "Access official forms to report situations.",
+      form_badge: "Form",
+      ocorr_title: "Report Incident",
+      ocorr_desc: "Report incidents during the shift. Your data will be pre-filled.",
+      cancel_title: "Cancel Shift",
+      cancel_desc: "Request cancellation of an assigned shift. Your data will be pre-filled.",
+      perfil_subtitle: "View and update your profile details.",
+      profile_role: "Role",
+      language: "Language",
+      save_changes: "Save Changes",
+      admin_panel_title: "Admin Panel",
+      admin_panel_subtitle: "Manage users, shifts, locations, and reports.",
+      tab_users: "Users",
+      tab_turnos: "Shifts",
+      tab_locais: "Locations",
+      tab_links: "Links / Forms",
+      tab_inscricoes: "Subscriptions",
+      tab_relatorios: "Reports",
+      create_user: "Create New User",
+      status: "Status",
+      actions: "Actions",
+      create: "Create",
+      create_turno: "Create New Shift",
+      date: "Date",
+      start_time: "Start Time",
+      end_time: "End Time",
+      vagas: "Spots",
+      create_local: "Create New Location",
+      local_name: "Location Name",
+      type: "Type",
+      create_link: "Create New Link / Form",
+      user_name: "User",
+      generate_report: "Generate Consolidated Report",
+      reports_desc: "Access logs, shift occupation, and availability metrics."
+    },
+    fr: {
+      auth_subtitle: "Gestion des meutes et disponibilité",
+      login_title: "Se connecter",
+      login_subtitle: "Utilisez votre compte Kinaxixi pour continuer.",
+      email: "E-mail",
+      password: "Mot de passe",
+      login_btn: "Connexion",
+      create_account: "Créer un compte",
+      forgot_password: "Mot de passe oublié?",
+      create_account_title: "Créer un compte",
+      create_account_subtitle: "Remplissez les détails pour accéder à la plateforme.",
+      first_name: "Prénom",
+      last_name: "Nom",
+      phone: "Téléphone",
+      confirm_email: "Confirmer l'e-mail",
+      password_min_hint: "Minimum 6 caractères.",
+      register_btn: "S'inscrire",
+      already_have_account: "Vous avez déjà un compte? Connexion",
+      recover_title: "Récupérer le mot de passe",
+      recover_subtitle: "Nous enverrons un code à 6 chiffres à votre e-mail enregistré.",
+      registered_email: "E-mail enregistré",
+      send_code: "Envoyer le code de confirmation",
+      back_to_login: "Retour à la connexion",
+      reset_title: "Réinitialiser le mot de passe",
+      reset_subtitle: "Entrez le code à 6 chiffres envoyé à votre e-mail.",
+      reset_code_info: "Le code est valide pendant 15 minutes.",
+      token_label: "Code / Jeton",
+      new_password: "Nouveau mot de passe",
+      reset_btn: "Réinitialiser le mot de passe",
+      request_new_code: "Demander un nouveau code",
+      logout: "Déconnexion",
+      nav_turnos: "Quarts programmés",
+      nav_disponibilidade: "Disponibilité",
+      nav_ocorrencias: "Incidents et Annulations",
+      nav_perfil: "Mon Profil",
+      nav_admin: "Panneau d'administration",
+      turnos_subtitle: "Consultez les meutes disponibles et filtrez par lieu.",
+      local: "Lieu",
+      select_local: "Sélectionnez un lieu",
+      select_local_title: "Sélectionnez un lieu",
+      select_local_desc: "Les meutes actives apparaîtront ici.",
+      disp_subtitle: "Sélectionnez le mois et ouvrez le formulaire de disponibilité.",
+      month: "Mois",
+      select_month: "Sélectionnez le mois",
+      open_form: "Ouvrir Google Form",
+      ocorr_subtitle: "Accédez aux formulaires officiels pour signaler des situations.",
+      form_badge: "Formulaire",
+      ocorr_title: "Signaler un incident",
+      ocorr_desc: "Signalez les incidents pendant le quart. Vos données seront préremplies.",
+      cancel_title: "Annuler le quart",
+      cancel_desc: "Demandez l'annulation d'un quart attribué. Vos données seront préremplies.",
+      perfil_subtitle: "Consultez et mettez à jour vos informations.",
+      profile_role: "Rôle",
+      language: "Langue",
+      save_changes: "Sauvegarder les modifications",
+      admin_panel_title: "Panneau d'administration",
+      admin_panel_subtitle: "Gérer les utilisateurs, les meutes, les lieux et les rapports.",
+      tab_users: "Utilisateurs",
+      tab_turnos: "Quarts",
+      tab_locais: "Lieux",
+      tab_links: "Liens / Formulaires",
+      tab_inscricoes: "Inscriptions",
+      tab_relatorios: "Rapports",
+      create_user: "Créer un utilisateur",
+      status: "Statut",
+      actions: "Actions",
+      create: "Créer",
+      create_turno: "Créer un nouveau quart",
+      date: "Date",
+      start_time: "Heure de début",
+      end_time: "Heure de fin",
+      vagas: "Places",
+      create_local: "Créer un nouveau lieu",
+      local_name: "Nom du lieu",
+      type: "Type",
+      create_link: "Créer un nouveau lien",
+      user_name: "Utilisateur",
+      generate_report: "Générer un rapport consolidé",
+      reports_desc: "Indicateurs d'accès, occupation des meutes et disponibilité."
+    },
+    es: {
+      auth_subtitle: "Gestión de turnos y disponibilidad",
+      login_title: "Iniciar sesión",
+      login_subtitle: "Utilice su cuenta Kinaxixi para continuar.",
+      email: "Correo electrónico",
+      password: "Contraseña",
+      login_btn: "Entrar",
+      create_account: "Crear una cuenta",
+      forgot_password: "¿Olvidó su contraseña?",
+      create_account_title: "Crear una cuenta",
+      create_account_subtitle: "Complete los datos para acceder a la plataforma.",
+      first_name: "Nombre",
+      last_name: "Apellido",
+      phone: "Teléfono",
+      confirm_email: "Confirmar correo electrónico",
+      password_min_hint: "Mínimo de 6 caracteres.",
+      register_btn: "Registrarse",
+      already_have_account: "¿Ya tiene una cuenta? Iniciar sesión",
+      recover_title: "Recuperar contraseña",
+      recover_subtitle: "Enviaremos un código de 6 dígitos a su correo registrado.",
+      registered_email: "Correo registrado",
+      send_code: "Enviar código de confirmación",
+      back_to_login: "Volver al inicio de sesión",
+      reset_title: "Restablecer contraseña",
+      reset_subtitle: "Ingrese el código de 6 dígitos enviado a su correo.",
+      reset_code_info: "El código es válido durante 15 minutos.",
+      token_label: "Código / Token",
+      new_password: "Nueva contraseña",
+      reset_btn: "Restablecer contraseña",
+      request_new_code: "Solicitar nuevo código",
+      logout: "Cerrar sesión",
+      nav_turnos: "Turnos Programados",
+      nav_disponibilidade: "Disponibilidad",
+      nav_ocorrencias: "Incidencias y Cancelaciones",
+      nav_perfil: "Mi Perfil",
+      nav_admin: "Panel de Administración",
+      turnos_subtitle: "Consulte los turnos disponibles y filtre por lugar.",
+      local: "Lugar",
+      select_local: "Seleccione un lugar",
+      select_local_title: "Seleccione un lugar",
+      select_local_desc: "Los turnos activos con plazas aparecerán aquí.",
+      disp_subtitle: "Seleccione el mes y abra el formulario de disponibilidad.",
+      month: "Mes",
+      select_month: "Seleccione el mes",
+      open_form: "Abrir Google Form",
+      ocorr_subtitle: "Acceda a los formularios oficiales para reportar situaciones.",
+      form_badge: "Formulario",
+      ocorr_title: "Registrar incidencia",
+      ocorr_desc: "Comunique incidentes durante el turno. Sus datos se rellenarán automáticamente.",
+      cancel_title: "Cancelar turno",
+      cancel_desc: "Solicite la cancelación de un turno asignado. Sus datos se rellenarán automáticamente.",
+      perfil_subtitle: "Consulte y actualice sus datos personales.",
+      profile_role: "Rol",
+      language: "Idioma",
+      save_changes: "Guardar cambios",
+      admin_panel_title: "Panel de Administración",
+      admin_panel_subtitle: "Gestión de usuarios, turnos, lugares y reportes.",
+      tab_users: "Usuarios",
+      tab_turnos: "Turnos",
+      tab_locais: "Lugares",
+      tab_links: "Enlaces / Forms",
+      tab_inscricoes: "Inscripciones",
+      tab_relatorios: "Reportes",
+      create_user: "Crear Nuevo Usuario",
+      status: "Estado",
+      actions: "Acciones",
+      create: "Crear",
+      create_turno: "Crear Nuevo Turno",
+      date: "Fecha",
+      start_time: "Inicio",
+      end_time: "Fin",
+      vagas: "Plazas",
+      create_local: "Crear Nuevo Lugar",
+      local_name: "Nombre del lugar",
+      type: "Tipo",
+      create_link: "Crear Nuevo Enlace",
+      user_name: "Usuario",
+      generate_report: "Generar Reporte Consolidado",
+      reports_desc: "Indicadores de acceso, ocupación de turnos y disponibilidad."
+    }
+  };
+
+  const setLanguage = (lang) => {
+    if (!TRANSLATIONS[lang]) lang = 'pt';
+    currentLang = lang;
+    const dict = TRANSLATIONS[lang];
+
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      const key = el.getAttribute('data-i18n');
+      if (dict[key]) {
+        el.textContent = dict[key];
+      }
+    });
+
+    if ($('perfil-idioma')) {
+      $('perfil-idioma').value = lang;
+    }
+  };
+
+  // ===========================================================================
+  // UTILITÁRIOS
+  // ===========================================================================
+
+  const escapeHtml = (value) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+  const showNotification = (message, type = 'info') => {
+    const stack = $('toast-stack');
+    if (!stack) return;
+
+    const titles = {
+      success: 'Sucesso',
+      error: 'Erro',
+      warning: 'Aviso',
+      info: 'Informação'
+    };
+
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.innerHTML = '<div><strong></strong><p></p></div>';
+
+    const title = el.querySelector('strong');
+    const text = el.querySelector('p');
+
+    if (title) title.textContent = titles[type] || titles.info;
+    if (text) text.textContent = String(message || '');
+
+    stack.appendChild(el);
+
+    window.setTimeout(() => {
+      if (el.parentNode) el.remove();
+    }, TOAST_MS);
+  };
+
+  const setButtonLoading = (button, isLoading) => {
+    if (!button) return;
+
+    button.disabled = isLoading;
+    button.classList.toggle('is-loading', isLoading);
+    button.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+  };
+
+  const normalizeResult = (result) => {
+    if (!result) {
+      throw new Error('O servidor não devolveu uma resposta válida.');
+    }
+
+    if (result.status === 'error' || result.success === false) {
+      throw new Error(result.message || 'Não foi possível concluir a operação.');
+    }
+
+    return result;
+  };
+
+  // ===========================================================================
+  // GOOGLE APPS SCRIPT
+  // ===========================================================================
+
+  const callServer = (fnName, ...args) =>
+    new Promise((resolve, reject) => {
+      if (
+        typeof google === 'undefined' ||
+        !google.script ||
+        !google.script.run
+      ) {
+        reject(
+          new Error(
+            'API google.script.run indisponível. Publique a Aplicação Web.'
+          )
+        );
+        return;
+      }
+
+      try {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler((error) => {
+            const message =
+              error && error.message
+                ? error.message
+                : String(error || 'Falha de comunicação com o servidor.');
+
+            reject(new Error(message));
+          })[fnName](...args);
+      } catch (error) {
+        reject(
+          new Error(
+            error?.message ||
+              `A função "${fnName}" não está disponível no servidor.`
+          )
+        );
+      }
+    });
+
+  const runWithLoading = async (button, fnName, args = []) => {
+    setButtonLoading(button, true);
+
+    try {
+      const result = await callServer(fnName, ...args);
+      return normalizeResult(result);
+    } finally {
+      setButtonLoading(button, false);
+    }
+  };
+
+  // ===========================================================================
+  // SPA / ROTAS
+  // ===========================================================================
+
+  const showScreen = (screenId) => {
+    if (!SCREENS.includes(screenId)) return;
+
+    const isDashboard = screenId === 'dashboard-container';
+
+    $('auth-shell')?.classList.toggle('hidden', isDashboard);
+    $('dashboard-container')?.classList.toggle('hidden', !isDashboard);
+
+    AUTH_SCREENS.forEach((id) => {
+      $(id)?.classList.toggle('hidden', id !== screenId);
+    });
+  };
+
+  const openModule = (modName) => {
+    document.querySelectorAll('.module').forEach((mod) => {
+      mod.classList.remove('is-visible');
+    });
+
+    const targetMod = $(`mod-${modName}`);
+    if (targetMod) {
+      targetMod.classList.add('is-visible');
+    }
+
+    document.querySelectorAll('.sidebar .nav-item, .nav-mobile .nav-item').forEach((item) => {
+      if (item.getAttribute('data-module') === modName) {
+        item.classList.add('is-active');
+      } else {
+        item.classList.remove('is-active');
+      }
+    });
+
+    if (modName === 'admin') {
+      loadAdminUsers();
+      loadAdminTurnos();
+      loadAdminLocais();
+      loadAdminLinks();
+      loadAdminInscricoes();
+    }
+  };
+
+  const initials = (nome = '', apelido = '') => {
+    const first = String(nome).trim().charAt(0);
+    const last = String(apelido).trim().charAt(0);
+
+    const value = `${first}${last}`.toUpperCase();
+
+    return value || 'U';
+  };
+
+  const cloneMobileNav = () => {
+    const sidebar = $('sidebar');
+    const navMobile = $('nav-mobile');
+    if (sidebar && navMobile) {
+      navMobile.innerHTML = sidebar.innerHTML;
+      navMobile.querySelectorAll('.nav-item').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const mod = btn.getAttribute('data-module');
+          if (mod) openModule(mod);
+        });
+      });
+    }
+  };
+
+  // ===========================================================================
+  // SESSÃO
+  // ===========================================================================
+
+  const isAdmin = () =>
+    !!sessionUser &&
+    sessionUser.perfil === 'Administrador' &&
+    String(sessionUser.status || 'Ativo').toLowerCase() === 'ativo';
+
+  const applySessionToHeader = (user) => {
+    if (!user) return;
+
+    const fullName =
+      `${user.nome || ''} ${user.apelido || ''}`.trim() ||
+      user.email ||
+      'Utilizador';
+
+    if ($('user-fullname')) {
+      $('user-fullname').textContent = fullName;
+    }
+
+    if ($('user-perfil')) {
+      $('user-perfil').textContent = user.perfil || 'Utilizador';
+    }
+
+    if ($('user-avatar')) {
+      $('user-avatar').textContent = initials(user.nome, user.apelido);
+    }
+
+    const admin = isAdmin();
+
+    $('nav-admin')?.classList.toggle('hidden', !admin);
+
+    document
+      .querySelectorAll('#nav-mobile [data-module="admin"]')
+      .forEach((item) => {
+        item.classList.toggle('hidden', !admin);
+      });
+
+    if (!admin && $('mod-admin')?.classList.contains('is-visible')) {
+      openModule('turnos');
+    }
+  };
+
+  const enterDashboard = async (user) => {
+    if (!user) {
+      throw new Error('Dados de sessão inválidos.');
+    }
+
+    sessionUser = {
+      email: user.email || '',
+      nome: user.nome || '',
+      apelido: user.apelido || '',
+      celular: user.celular || '',
+      perfil: user.perfil || 'Utilizador',
+      status: user.status || 'Ativo',
+      idioma: user.idioma || 'pt'
+    };
+
+    setLanguage(sessionUser.idioma);
+    applySessionToHeader(sessionUser);
+    fillProfileForm(sessionUser);
+
+    showScreen('dashboard-container');
+    openModule('turnos');
+
+    cloneMobileNav();
+
+    await loadLocais();
+
+    if (isAdmin()) {
+      await loadAdminUsers();
+    }
+  };
+
+  // ===========================================================================
+  // AUTENTICAÇÃO
+  // ===========================================================================
+
+  const handleRegister = async (event) => {
+    event.preventDefault();
+
+    const formData = {
+      Nome: $('reg-nome')?.value.trim() || '',
+      Apelido: $('reg-apelido')?.value.trim() || '',
+      Celular: $('reg-celular')?.value.trim() || '',
+      Email: $('reg-email')?.value.trim() || '',
+      ConfirmarEmail: $('reg-email2')?.value.trim() || '',
+      Senha: $('reg-senha')?.value || ''
+    };
+
+    if (
+      !formData.Nome ||
+      !formData.Apelido ||
+      !formData.Celular ||
+      !formData.Email ||
+      !formData.ConfirmarEmail ||
+      !formData.Senha
+    ) {
+      showNotification('Preencha todos os campos obrigatórios.', 'error');
+      return;
+    }
+
+    if (
+      formData.Email.toLowerCase() !==
+      formData.ConfirmarEmail.toLowerCase()
+    ) {
+      showNotification(
+        'O e-mail e a confirmação não coincidem.',
+        'error'
+      );
+      return;
+    }
+
+    if (formData.Senha.length < MIN_PASSWORD_LENGTH) {
+      showNotification(
+        `A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
+        'error'
+      );
+      return;
+    }
+
+    try {
+      const result = await runWithLoading(
+        $('btn-register'),
+        'registerUser',
+        [formData]
+      );
+
+      showNotification(
+        result.message || 'Conta criada com sucesso!',
+        'success'
+      );
+
+      if ($('login-email')) {
+        $('login-email').value = formData.Email;
+      }
+
+      if ($('login-senha')) {
+        $('login-senha').value = '';
+      }
+
+      showScreen('screen-login');
+    } catch (error) {
+      showNotification(
+        error.message || 'Não foi possível criar a conta.',
+        'error'
+      );
+    }
+  };
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+
+    const email = $('login-email')?.value.trim() || '';
+    const senha = $('login-senha')?.value || '';
+
+    if (!email || !senha) {
+      showNotification('E-mail e senha são obrigatórios.', 'error');
+      return;
+    }
+
+    try {
+      const result = await runWithLoading(
+        $('btn-login'),
+        'loginUser',
+        [email, senha]
+      );
+
+      await enterDashboard(result.user);
+
+      showNotification(
+        result.message || 'Sessão iniciada com sucesso.',
+        'success'
+      );
+    } catch (error) {
+      showNotification(
+        error.message || 'E-mail ou senha incorretos.',
+        'error'
+      );
+    }
+  };
+
+  const handleRequestReset = async (event) => {
+    event.preventDefault();
+
+    const email = $('recover-email')?.value.trim() || '';
+
+    if (!email) {
+      showNotification(
+        'Indique o e-mail registado.',
+        'error'
+      );
+      return;
+    }
+
+    try {
+      const result = await runWithLoading(
+        $('btn-recover'),
+        'requestPasswordReset',
+        [email]
+      );
+
+      pendingResetEmail = email;
+
+      if ($('reset-email')) {
+        $('reset-email').value = email;
+      }
+
+      showNotification(
+        result.message ||
+          'Código enviado com sucesso para o seu e-mail.',
+        'success'
+      );
+
+      showScreen('screen-reset');
+    } catch (error) {
+      showNotification(
+        error.message || 'Não foi possível solicitar a recuperação.',
+        'error'
+      );
+    }
+  };
+
+  const handleResetPassword = async (event) => {
+    event.preventDefault();
+
+    const email =
+      $('reset-email')?.value.trim() ||
+      pendingResetEmail ||
+      '';
+
+    const token = $('reset-token')?.value.trim() || '';
+    const novaSenha = $('reset-senha')?.value || '';
+
+    if (!email) {
+      showNotification('O e-mail é obrigatório.', 'error');
+      return;
+    }
+
+    if (!/^\d{6}$/.test(token)) {
+      showNotification(
+        'O código deve ter exatamente 6 dígitos.',
+        'error'
+      );
+      return;
+    }
+
+    if (novaSenha.length < MIN_PASSWORD_LENGTH) {
+      showNotification(
+        `A nova senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`,
+        'error'
+      );
+      return;
+    }
+
+    try {
+      const result = await runWithLoading(
+        $('btn-reset'),
+        'resetPasswordWithToken',
+        [email, token, novaSenha]
+      );
+
+      showNotification(
+        result.message || 'Senha redefinida com sucesso!',
+        'success'
+      );
+
+      $('screen-reset')?.reset();
+      $('screen-forgot')?.reset();
+
+      pendingResetEmail = '';
+
+      if ($('login-email')) {
+        $('login-email').value = email;
+      }
+
+      showScreen('screen-login');
+    } catch (error) {
+      showNotification(
+        error.message || 'Não foi possível redefinir a senha.',
+        'error'
+      );
+    }
+  };
+
+  const handleLogout = () => {
+    sessionUser = null;
+    pendingResetEmail = '';
+    locaisCache = [];
+
+    $('screen-login')?.reset();
+    $('screen-register')?.reset();
+    $('screen-forgot')?.reset();
+    $('screen-reset')?.reset();
+
+    if ($('user-fullname')) {
+      $('user-fullname').textContent = '—';
+    }
+
+    if ($('user-perfil')) {
+      $('user-perfil').textContent = '—';
+    }
+
+    if ($('user-avatar')) {
+      $('user-avatar').textContent = 'U';
+    }
+
+    $('nav-admin')?.classList.add('hidden');
+
+    document
+      .querySelectorAll('#nav-mobile [data-module="admin"]')
+      .forEach((item) => item.classList.add('hidden'));
+
+    openModule('turnos');
+    showScreen('screen-login');
+
+    showNotification(
+      'Sessão terminada.',
+      'info'
+    );
+  };
+
+  // ===========================================================================
+  // DADOS DA SESSÃO
+  // ===========================================================================
+
+  const sessionPayload = () => ({
+    email: sessionUser?.email || '',
+    nome: sessionUser?.nome || '',
+    apelido: sessionUser?.apelido || '',
+    celular: sessionUser?.celular || '',
+
+    Email: sessionUser?.email || '',
+    Nome: sessionUser?.nome || '',
+    Apelido: sessionUser?.apelido || '',
+    Celular: sessionUser?.celular || ''
+  });
+
+  // ===========================================================================
+  // PERFIL
+  // ===========================================================================
+
+  const fillProfileForm = (user) => {
+    if (!user) return;
+
+    if ($('perfil-email')) {
+      $('perfil-email').value = user.email || '';
+    }
+
+    if ($('perfil-nome')) {
+      $('perfil-nome').value = user.nome || '';
+    }
+
+    if ($('perfil-apelido')) {
+      $('perfil-apelido').value = user.apelido || '';
+    }
+
+    if ($('perfil-celular')) {
+      $('perfil-celular').value = user.celular || '';
+    }
+
+    if ($('perfil-tipo')) {
+      $('perfil-tipo').value = user.perfil || '';
+    }
+
+    if ($('perfil-idioma')) {
+      $('perfil-idioma').value = user.idioma || 'pt';
+    }
+  };
+
+  const handleUpdateProfile = async (event) => {
+    event.preventDefault();
+
+    if (!sessionUser) {
+      showNotification(
+        'Sessão expirada. Faça login novamente.',
+        'error'
+      );
+      return;
+    }
+
+    const data = {
+      Email: sessionUser.email,
+      Nome: $('perfil-nome')?.value.trim() || '',
+      Apelido: $('perfil-apelido')?.value.trim() || '',
+      Celular: $('perfil-celular')?.value.trim() || '',
+      Idioma: $('perfil-idioma')?.value || 'pt'
+    };
+
+    if (!data.Nome || !data.Apelido || !data.Celular) {
+      showNotification(
+        'Nome, apelido e celular são obrigatórios.',
+        'error'
+      );
+      return;
+    }
+
+    try {
+      const result = await runWithLoading(
+        $('btn-salvar-perfil'),
+        'updateUserProfile',
+        [data]
+      );
+
+      if (result.user) {
+        sessionUser = Object.assign(
+          {},
+          sessionUser,
+          result.user
+        );
+      }
+
+      setLanguage(data.Idioma);
+      applySessionToHeader(sessionUser);
+      fillProfileForm(sessionUser);
+
+      showNotification(
+        result.message ||
+          'Perfil atualizado com sucesso.',
+        'success'
+      );
+    } catch (error) {
+      showNotification(
+        error.message ||
+          'Não foi possível atualizar o perfil.',
+        'error'
+      );
+    }
+  };
+
+  // ===========================================================================
+  // LOCAIS
+  // ===========================================================================
+
+  const loadLocais = async () => {
+    const select = $('filtro-local');
+
+    if (!select) return;
+
+    try {
+      const result = await callServer('getLocaisAtivos');
+      normalizeResult(result);
+
+      locaisCache = Array.isArray(result.locais)
+        ? result.locais
+        : [];
+
+      select.innerHTML =
+        '<option value="">Selecione um local</option>';
+
+      locaisCache.forEach((local) => {
+        const option = document.createElement('option');
+
+        option.value = local.id || '';
+        option.textContent = local.nome || 'Local';
+
+        select.appendChild(option);
+      });
+    } catch (error) {
+      locaisCache = [];
+
+      select.innerHTML =
+        '<option value="">Não foi possível carregar</option>';
+
+      showNotification(
+        error.message ||
+          'Não foi possível carregar os locais.',
+        'error'
+      );
+    }
+  };
+
+  const loadTurnosPorLocal = async (localId) => {
+    const container = $('turnos-lista');
+    if (!container) return;
+
+    if (!localId) {
+      container.innerHTML = `
+        <article class="card empty-state" style="grid-column:1/-1">
+          <h3>Selecione um local</h3>
+          <p>Os turnos ativos com vagas aparecerão aqui.</p>
+        </article>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <article class="card empty-state" style="grid-column:1/-1">
+        <p>A carregar turnos...</p>
+      </article>`;
+
+    try {
+      const result = await callServer('getTurnosPorLocal', localId);
+      normalizeResult(result);
+
+      const turnos = Array.isArray(result.turnos) ? result.turnos : [];
+
+      if (turnos.length === 0) {
+        container.innerHTML = `
+          <article class="card empty-state" style="grid-column:1/-1">
+            <h3>Nenhum turno disponível</h3>
+            <p>Não existem turnos ativos com vagas para este local.</p>
+          </article>`;
+        return;
+      }
+
+      container.innerHTML = turnos.map((t) => `
+        <article class="card">
+          <span class="badge badge-blue">${escapeHtml(t.localNome)}</span>
+          <h3>${escapeHtml(t.data)}</h3>
+          <p>Horário: ${escapeHtml(t.horaInicio)} - ${escapeHtml(t.horaFim)}</p>
+          <p>Vagas disponíveis: <strong>${escapeHtml(t.vagas)}</strong></p>
+          <button type="button" class="btn btn-primary btn-inscrever-turno" data-id="${escapeHtml(t.id)}" style="margin-top:12px;">
+            <span class="btn-label">Inscrever-me</span>
+          </button>
+        </article>
+      `).join('');
+
+      container.querySelectorAll('.btn-inscrever-turno').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const tId = btn.getAttribute('data-id');
+          if (!tId) return;
+
+          setButtonLoading(btn, true);
+          try {
+            const res = await callServer('inscreverTurno', tId, sessionPayload());
+            normalizeResult(res);
+            showNotification(res.message || 'Inscrição efetuada com sucesso!', 'success');
+            loadTurnosPorLocal(localId);
+          } catch (err) {
+            showNotification(err.message || 'Erro ao inscrever no turno.', 'error');
+          } finally {
+            setButtonLoading(btn, false);
+          }
+        });
+      });
+    } catch (error) {
+      container.innerHTML = `
+        <article class="card empty-state" style="grid-column:1/-1">
+          <h3>Erro ao carregar turnos</h3>
+          <p>${escapeHtml(error.message)}</p>
+        </article>`;
+    }
+  };
+
+  const handleAbrirForm = async () => {
+    const mes = $('disp-mes')?.value;
+    if (!mes) {
+      showNotification('Selecione o mês desejado.', 'error');
+      return;
+    }
+
+    try {
+      const res = await runWithLoading($('btn-abrir-form'), 'getFormUrlWithPrefill', ['disponibilidade', mes, sessionPayload()]);
+      if (res.url) {
+        window.open(res.url, '_blank');
+      }
+    } catch (err) {
+      showNotification(err.message || 'Erro ao obter link do formulário.', 'error');
+    }
+  };
+
+  const handleAbrirOcorrencia = async () => {
+    try {
+      const res = await runWithLoading($('btn-ocorrencia'), 'getFormUrlWithPrefill', ['ocorrencia', '', sessionPayload()]);
+      if (res.url) {
+        window.open(res.url, '_blank');
+      }
+    } catch (err) {
+      showNotification(err.message || 'Erro ao obter link de ocorrência.', 'error');
+    }
+  };
+
+  const handleAbrirCancelamento = async () => {
+    try {
+      const res = await runWithLoading($('btn-cancelamento'), 'getFormUrlWithPrefill', ['cancelamento', '', sessionPayload()]);
+      if (res.url) {
+        window.open(res.url, '_blank');
+      }
+    } catch (err) {
+      showNotification(err.message || 'Erro ao obter link de cancelamento.', 'error');
+    }
+  };
+
+  // ===========================================================================
+  // ADMIN — OPERAÇÕES
+  // ===========================================================================
+
+  const loadAdminUsers = async () => {
+    const tbody = $('tbl-admin-usuarios-body');
+    if (!tbody || !isAdmin()) return;
+
+    try {
+      const res = await callServer('getAllUsersAdmin', sessionUser.email);
+      normalizeResult(res);
+
+      const users = res.users || [];
+      if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6">Nenhum utilizador encontrado.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = users.map((u) => `
+        <tr>
+          <td>${escapeHtml(u.nome)}</td>
+          <td>${escapeHtml(u.apelido)}</td>
+          <td>${escapeHtml(u.email)}</td>
+          <td>${escapeHtml(u.perfil)}</td>
+          <td><span class="badge ${u.status === 'Ativo' ? 'badge-blue' : 'badge-red'}">${escapeHtml(u.status)}</span></td>
+          <td>
+            <button type="button" class="btn btn-outline btn-sm btn-edit-usr" data-id="${escapeHtml(u.id)}" data-nome="${escapeHtml(u.nome)}" data-apelido="${escapeHtml(u.apelido)}" data-celular="${escapeHtml(u.celular)}" data-perfil="${escapeHtml(u.perfil)}" data-status="${escapeHtml(u.status)}">Editar</button>
+            <button type="button" class="btn btn-outline btn-sm btn-del-usr" data-id="${escapeHtml(u.id)}">Excluir</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.btn-edit-usr').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const uId = btn.getAttribute('data-id');
+          const nNome = prompt('Novo Nome:', btn.getAttribute('data-nome'));
+          if (nNome === null) return;
+          const nApelido = prompt('Novo Apelido:', btn.getAttribute('data-apelido'));
+          if (nApelido === null) return;
+          const nCelular = prompt('Novo Celular:', btn.getAttribute('data-celular'));
+          if (nCelular === null) return;
+          const nPerfil = prompt('Perfil (Administrador/Utilizador):', btn.getAttribute('data-perfil'));
+          if (nPerfil === null) return;
+          const nStatus = prompt('Status (Ativo/Inativo):', btn.getAttribute('data-status'));
+          if (nStatus === null) return;
+
+          try {
+            const resUp = await callServer('updateUserByAdmin', sessionUser.email, {
+              id: uId,
+              nome: nNome,
+              apelido: nApelido,
+              celular: nCelular,
+              perfil: nPerfil,
+              status: nStatus
+            });
+            normalizeResult(resUp);
+            showNotification('Utilizador atualizado!', 'success');
+            loadAdminUsers();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao atualizar utilizador.', 'error');
+          }
+        });
+      });
+
+      tbody.querySelectorAll('.btn-del-usr').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const uId = btn.getAttribute('data-id');
+          if (!confirm('Deseja realmente excluir este utilizador?')) return;
+
+          try {
+            const resDel = await callServer('deleteUserByAdmin', sessionUser.email, uId);
+            normalizeResult(resDel);
+            showNotification('Utilizador eliminado!', 'success');
+            loadAdminUsers();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao excluir utilizador.', 'error');
+          }
+        });
+      });
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6">Erro: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  };
+
+  const handleAdminAddUser = async (e) => {
+    e.preventDefault();
+    const payload = {
+      nome: $('adm-usr-nome')?.value.trim(),
+      apelido: $('adm-usr-apelido')?.value.trim(),
+      email: $('adm-usr-email')?.value.trim(),
+      celular: $('adm-usr-celular')?.value.trim(),
+      senha: $('adm-usr-senha')?.value,
+      perfil: $('adm-usr-perfil')?.value,
+      status: 'Ativo'
+    };
+
+    try {
+      const res = await runWithLoading($('btn-admin-add-user'), 'createUserByAdmin', [sessionUser.email, payload]);
+      showNotification(res.message || 'Utilizador criado com sucesso!', 'success');
+      $('form-admin-user')?.reset();
+      loadAdminUsers();
+    } catch (err) {
+      showNotification(err.message || 'Erro ao criar utilizador.', 'error');
+    }
+  };
+
+  const loadAdminTurnos = async () => {
+    const tbody = $('tbl-admin-turnos-body');
+    const selectLoc = $('adm-trn-local');
+    if (!tbody || !isAdmin()) return;
+
+    if (selectLoc && locaisCache.length > 0) {
+      selectLoc.innerHTML = locaisCache.map((l) => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.nome)}</option>`).join('');
+    }
+
+    try {
+      const res = await callServer('getAllTurnosAdmin', sessionUser.email);
+      normalizeResult(res);
+
+      const turnos = res.turnos || [];
+      if (turnos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8">Nenhum turno encontrado.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = turnos.map((t) => `
+        <tr>
+          <td>${escapeHtml(t.id)}</td>
+          <td>${escapeHtml(t.localNome)}</td>
+          <td>${escapeHtml(t.data)}</td>
+          <td>${escapeHtml(t.horaInicio)}</td>
+          <td>${escapeHtml(t.horaFim)}</td>
+          <td>${escapeHtml(t.vagas)}</td>
+          <td><span class="badge ${t.status === 'Ativo' ? 'badge-blue' : 'badge-red'}">${escapeHtml(t.status)}</span></td>
+          <td>
+            <button type="button" class="btn btn-outline btn-sm btn-edit-trn" data-id="${escapeHtml(t.id)}" data-vagas="${escapeHtml(t.vagas)}" data-status="${escapeHtml(t.status)}">Editar</button>
+            <button type="button" class="btn btn-outline btn-sm btn-del-trn" data-id="${escapeHtml(t.id)}">Excluir</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.btn-edit-trn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const tId = btn.getAttribute('data-id');
+          const nVagas = prompt('Novas Vagas:', btn.getAttribute('data-vagas'));
+          if (nVagas === null) return;
+          const nStatus = prompt('Novo Status (Ativo/Inativo/Esgotado):', btn.getAttribute('data-status'));
+          if (nStatus === null) return;
+
+          try {
+            const resUp = await callServer('updateTurnoAdmin', sessionUser.email, {
+              id: tId,
+              vagas: Number(nVagas),
+              status: nStatus
+            });
+            normalizeResult(resUp);
+            showNotification('Turno atualizado!', 'success');
+            loadAdminTurnos();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao atualizar turno.', 'error');
+          }
+        });
+      });
+
+      tbody.querySelectorAll('.btn-del-trn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const tId = btn.getAttribute('data-id');
+          if (!confirm('Deseja realmente excluir este turno?')) return;
+
+          try {
+            const resDel = await callServer('deleteTurnoAdmin', sessionUser.email, tId);
+            normalizeResult(resDel);
+            showNotification('Turno eliminado!', 'success');
+            loadAdminTurnos();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao excluir turno.', 'error');
+          }
+        });
+      });
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="8">Erro: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  };
+
+  const handleAdminAddTurno = async (e) => {
+    e.preventDefault();
+    const payload = {
+      localId: $('adm-trn-local')?.value,
+      data: $('adm-trn-data')?.value,
+      horaInicio: $('adm-trn-inicio')?.value,
+      horaFim: $('adm-trn-fim')?.value,
+      vagas: Number($('adm-trn-vagas')?.value)
+    };
+
+    try {
+      const res = await runWithLoading($('btn-admin-add-turno'), 'createTurnoAdmin', [sessionUser.email, payload]);
+      showNotification(res.message || 'Turno criado com sucesso!', 'success');
+      $('form-admin-turno')?.reset();
+      loadAdminTurnos();
+    } catch (err) {
+      showNotification(err.message || 'Erro ao criar turno.', 'error');
+    }
+  };
+
+  const loadAdminLocais = async () => {
+    const tbody = $('tbl-admin-locais-body');
+    if (!tbody || !isAdmin()) return;
+
+    try {
+      const res = await callServer('getAllLocaisAdmin', sessionUser.email);
+      normalizeResult(res);
+
+      const locais = res.locais || [];
+      if (locais.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">Nenhum local encontrado.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = locais.map((l) => `
+        <tr>
+          <td>${escapeHtml(l.id)}</td>
+          <td>${escapeHtml(l.nome)}</td>
+          <td>${escapeHtml(l.tipo)}</td>
+          <td><span class="badge ${l.status === 'Ativo' ? 'badge-blue' : 'badge-red'}">${escapeHtml(l.status)}</span></td>
+          <td>
+            <button type="button" class="btn btn-outline btn-sm btn-edit-loc" data-id="${escapeHtml(l.id)}" data-nome="${escapeHtml(l.nome)}" data-tipo="${escapeHtml(l.tipo)}" data-status="${escapeHtml(l.status)}">Editar</button>
+            <button type="button" class="btn btn-outline btn-sm btn-del-loc" data-id="${escapeHtml(l.id)}">Excluir</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.btn-edit-loc').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const lId = btn.getAttribute('data-id');
+          const nNome = prompt('Novo Nome:', btn.getAttribute('data-nome'));
+          if (nNome === null) return;
+          const nTipo = prompt('Novo Tipo (Fixo/Móvel):', btn.getAttribute('data-tipo'));
+          if (nTipo === null) return;
+          const nStatus = prompt('Novo Status (Ativo/Inativo):', btn.getAttribute('data-status'));
+          if (nStatus === null) return;
+
+          try {
+            const resUp = await callServer('updateLocalAdmin', sessionUser.email, {
+              id: lId,
+              nome: nNome,
+              tipo: nTipo,
+              status: nStatus
+            });
+            normalizeResult(resUp);
+            showNotification('Local atualizado!', 'success');
+            loadAdminLocais();
+            loadLocais();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao atualizar local.', 'error');
+          }
+        });
+      });
+
+      tbody.querySelectorAll('.btn-del-loc').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const lId = btn.getAttribute('data-id');
+          if (!confirm('Deseja realmente excluir este local?')) return;
+
+          try {
+            const resDel = await callServer('deleteLocalAdmin', sessionUser.email, lId);
+            normalizeResult(resDel);
+            showNotification('Local eliminado!', 'success');
+            loadAdminLocais();
+            loadLocais();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao excluir local.', 'error');
+          }
+        });
+      });
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="5">Erro: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  };
+
+  const handleAdminAddLocal = async (e) => {
+    e.preventDefault();
+    const payload = {
+      nome: $('adm-loc-nome')?.value.trim(),
+      tipo: $('adm-loc-tipo')?.value
+    };
+
+    try {
+      const res = await runWithLoading($('btn-admin-add-local'), 'createLocalAdmin', [sessionUser.email, payload]);
+      showNotification(res.message || 'Local criado com sucesso!', 'success');
+      $('form-admin-local')?.reset();
+      loadAdminLocais();
+      loadLocais();
+    } catch (err) {
+      showNotification(err.message || 'Erro ao criar local.', 'error');
+    }
+  };
+
+  const loadAdminLinks = async () => {
+    const tbody = $('tbl-admin-links-body');
+    if (!tbody || !isAdmin()) return;
+
+    try {
+      const res = await callServer('getAllLinksAdmin', sessionUser.email);
+      normalizeResult(res);
+
+      const links = res.links || [];
+      if (links.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5">Nenhum link encontrado.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = links.map((l) => `
+        <tr>
+          <td>${escapeHtml(l.id)}</td>
+          <td>${escapeHtml(l.tipo)}</td>
+          <td>${escapeHtml(l.mes || '-')}</td>
+          <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(l.url)}</td>
+          <td>
+            <button type="button" class="btn btn-outline btn-sm btn-edit-lnk" data-id="${escapeHtml(l.id)}" data-tipo="${escapeHtml(l.tipo)}" data-mes="${escapeHtml(l.mes)}" data-url="${escapeHtml(l.url)}">Editar</button>
+            <button type="button" class="btn btn-outline btn-sm btn-del-lnk" data-id="${escapeHtml(l.id)}">Excluir</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.btn-edit-lnk').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const lId = btn.getAttribute('data-id');
+          const nTipo = prompt('Novo Tipo (disponibilidade/ocorrencia/cancelamento):', btn.getAttribute('data-tipo'));
+          if (nTipo === null) return;
+          const nMes = prompt('Novo Mês (opcional):', btn.getAttribute('data-mes'));
+          if (nMes === null) return;
+          const nUrl = prompt('Nova URL:', btn.getAttribute('data-url'));
+          if (nUrl === null) return;
+
+          try {
+            const resUp = await callServer('updateLinkAdmin', sessionUser.email, {
+              id: lId,
+              tipo: nTipo,
+              mes: nMes,
+              url: nUrl
+            });
+            normalizeResult(resUp);
+            showNotification('Link atualizado!', 'success');
+            loadAdminLinks();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao atualizar link.', 'error');
+          }
+        });
+      });
+
+      tbody.querySelectorAll('.btn-del-lnk').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const lId = btn.getAttribute('data-id');
+          if (!confirm('Deseja realmente excluir este link?')) return;
+
+          try {
+            const resDel = await callServer('deleteLinkAdmin', sessionUser.email, lId);
+            normalizeResult(resDel);
+            showNotification('Link eliminado!', 'success');
+            loadAdminLinks();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao excluir link.', 'error');
+          }
+        });
+      });
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="5">Erro: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  };
+
+  const handleAdminAddLink = async (e) => {
+    e.preventDefault();
+    const payload = {
+      tipo: $('adm-lnk-tipo')?.value,
+      mes: $('adm-lnk-mes')?.value.trim(),
+      url: $('adm-lnk-url')?.value.trim()
+    };
+
+    try {
+      const res = await runWithLoading($('btn-admin-add-link'), 'createLinkAdmin', [sessionUser.email, payload]);
+      showNotification(res.message || 'Link criado com sucesso!', 'success');
+      $('form-admin-link')?.reset();
+      loadAdminLinks();
+    } catch (err) {
+      showNotification(err.message || 'Erro ao criar link.', 'error');
+    }
+  };
+
+  const loadAdminInscricoes = async () => {
+    const tbody = $('tbl-admin-inscricoes-body');
+    if (!tbody || !isAdmin()) return;
+
+    try {
+      const res = await callServer('getAllInscricoesAdmin', sessionUser.email);
+      normalizeResult(res);
+
+      const inscricoes = res.inscricoes || [];
+      if (inscricoes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7">Nenhuma inscrição encontrada.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = inscricoes.map((i) => `
+        <tr>
+          <td>${escapeHtml(i.id)}</td>
+          <td>${escapeHtml(i.nome)} ${escapeHtml(i.apelido)}</td>
+          <td>${escapeHtml(i.email)}</td>
+          <td>${escapeHtml(i.turnoLocal || '-')}</td>
+          <td>${escapeHtml(i.turnoData || '-')} (${escapeHtml(i.turnoHorario || '-')})</td>
+          <td><span class="badge ${i.status === 'Ativo' ? 'badge-blue' : 'badge-red'}">${escapeHtml(i.status)}</span></td>
+          <td>
+            <button type="button" class="btn btn-outline btn-sm btn-edit-insc" data-id="${escapeHtml(i.id)}" data-turnoid="${escapeHtml(i.turnoId)}" data-status="${escapeHtml(i.status)}">Editar</button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.btn-edit-insc').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const iId = btn.getAttribute('data-id');
+          const nTurnoId = prompt('Novo ID do Turno:', btn.getAttribute('data-turnoid'));
+          if (nTurnoId === null) return;
+          const nStatus = prompt('Novo Status (Ativo/Cancelado):', btn.getAttribute('data-status'));
+          if (nStatus === null) return;
+
+          try {
+            const resUp = await callServer('updateInscricaoAdmin', sessionUser.email, {
+              id: iId,
+              turnoId: nTurnoId,
+              status: nStatus
+            });
+            normalizeResult(resUp);
+            showNotification('Inscrição atualizada!', 'success');
+            loadAdminInscricoes();
+          } catch (e) {
+            showNotification(e.message || 'Erro ao atualizar inscrição.', 'error');
+          }
+        });
+      });
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7">Erro: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  };
+
+  const handleGerarRelatorio = async () => {
+    const container = $('relatorio-resultado');
+    if (!container) return;
+
+    try {
+      const res = await runWithLoading($('btn-gerar-relatorio'), 'getConsolidatedReport', [sessionUser.email]);
+      normalizeResult(res);
+
+      const r = res.relatorio;
+      container.innerHTML = `
+        <h3>Relatório Consolidado</h3>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-top:16px;">
+          <div class="card" style="background:#f8fafc;">
+            <h4>Utilizadores</h4>
+            <p>Total: <strong>${r.usuarios.total}</strong></p>
+            <p>Ativos: <strong>${r.usuarios.ativos}</strong></p>
+          </div>
+          <div class="card" style="background:#f8fafc;">
+            <h4>Turnos & Vagas</h4>
+            <p>Total Turnos: <strong>${r.turnos.total}</strong></p>
+            <p>Total Vagas: <strong>${r.turnos.vagasTotais}</strong></p>
+          </div>
+          <div class="card" style="background:#f8fafc;">
+            <h4>Inscrições</h4>
+            <p>Total: <strong>${r.inscricoes.total}</strong></p>
+            <p>Ativas: <strong>${r.inscricoes.ativas}</strong></p>
+          </div>
+          <div class="card" style="background:#f8fafc;">
+            <h4>Acessos</h4>
+            <p>Total Registados: <strong>${r.acessos.total}</strong></p>
+            <p>Sucessos: <strong>${r.acessos.sucesso}</strong></p>
+            <p>Falhas: <strong>${r.acessos.falha}</strong></p>
+          </div>
+          <div class="card" style="background:#f8fafc;">
+            <h4>Formulários</h4>
+            <p>Links Configurados: <strong>${r.formularios.totalLinks}</strong></p>
+          </div>
+        </div>
+      `;
+    } catch (err) {
+      showNotification(err.message || 'Erro ao gerar relatório.', 'error');
+    }
+  };
+
+  // ===========================================================================
+  // EVENT LISTENERS
+  // ===========================================================================
+
+  const initEvents = () => {
+    document.querySelectorAll('[data-screen]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-screen');
+        if (target) showScreen(target);
+      });
+    });
+
+    $('screen-register')?.addEventListener('submit', handleRegister);
+    $('screen-login')?.addEventListener('submit', handleLogin);
+    $('screen-forgot')?.addEventListener('submit', handleRequestReset);
+    $('screen-reset')?.addEventListener('submit', handleResetPassword);
+
+    $('btn-logout')?.addEventListener('click', handleLogout);
+    $('form-perfil')?.addEventListener('submit', handleUpdateProfile);
+
+    $('filtro-local')?.addEventListener('change', (e) => {
+      loadTurnosPorLocal(e.target.value);
+    });
+
+    $('btn-abrir-form')?.addEventListener('click', handleAbrirForm);
+    $('btn-ocorrencia')?.addEventListener('click', handleAbrirOcorrencia);
+    $('btn-cancelamento')?.addEventListener('click', handleAbrirCancelamento);
+
+    document.querySelectorAll('.sidebar .nav-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mod = btn.getAttribute('data-module');
+        if (mod) openModule(mod);
+      });
+    });
+
+    document.querySelectorAll('.subtabs .subtab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.subtabs .subtab').forEach((t) => {
+          t.classList.remove('is-active');
+          t.setAttribute('aria-selected', 'false');
+        });
+        tab.classList.add('is-active');
+        tab.setAttribute('aria-selected', 'true');
+
+        const target = tab.getAttribute('data-admin');
+        document.querySelectorAll('.admin-panel').forEach((p) => {
+          p.classList.add('hidden');
+        });
+        $(`admin-${target}`)?.classList.remove('hidden');
+      });
+    });
+
+    $('form-admin-user')?.addEventListener('submit', handleAdminAddUser);
+    $('form-admin-turno')?.addEventListener('submit', handleAdminAddTurno);
+    $('form-admin-local')?.addEventListener('submit', handleAdminAddLocal);
+    $('form-admin-link')?.addEventListener('submit', handleAdminAddLink);
+    $('btn-gerar-relatorio')?.addEventListener('click', handleGerarRelatorio);
+
+    $('btn-menu')?.addEventListener('click', () => {
+      const navMobile = $('nav-mobile');
+      if (navMobile) {
+        navMobile.classList.toggle('is-visible');
+      }
+    });
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initEvents();
+    showScreen('screen-login');
+  });
+})();
+</script>

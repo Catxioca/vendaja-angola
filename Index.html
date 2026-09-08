@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="pt">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMP Kinaxixi V2.0</title>
+
+    <?!= HtmlService.createHtmlOutputFromFile('Style').getContent(); ?>
+  </head>
+
+  <body>
+    <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+    <!-- =========================================================
+         AUTENTICAÇÃO
+         ========================================================= -->
+    <section id="auth-shell" class="auth-shell">
+
+      <div class="auth-brand">
+        <div class="brand-mark" aria-hidden="true">TMP</div>
+
+        <div class="brand-text">
+          <strong>TMP Kinaxixi V2.0</strong>
+          <span data-i18n="auth_subtitle">Gestão de turnos e disponibilidade</span>
+        </div>
+      </div>
+
+      <div class="auth-card">
+
+        <!-- LOGIN -->
+        <form id="screen-login" class="auth-form" autocomplete="on">
+          <h1 data-i18n="login_title">Iniciar sessão</h1>
+
+          <p class="subtitle" data-i18n="login_subtitle">
+            Utilize a sua conta Kinaxixi para continuar.
+          </p>
+
+          <div class="field">
+            <label for="login-email" data-i18n="email">E-mail</label>
+            <input
+              id="login-email"
+              name="email"
+              type="email"
+              required
+              placeholder="nome@dominio.com"
+              autocomplete="username"
+            >
+          </div>
+
+          <div class="field">
+            <label for="login-senha" data-i18n="password">Senha</label>
+            <input
+              id="login-senha"
+              name="senha"
+              type="password"
+              required
+              placeholder="Introduza a senha"
+              autocomplete="current-password"
+            >
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn-primary btn-block"
+            id="btn-login"
+          >
+            <span class="btn-label" data-i18n="login_btn">Entrar</span>
+            <span class="spinner spinner-abs" aria-hidden="true"></span>
+          </button>
+
+          <div class="auth-links">
+            <button
+              type="button"
+              class="link-btn"
+              data-screen="screen-register"
+              data-i18n="create_account"
+            >
+              Criar uma conta
+            </button>
+
+            <button
+              type="button"
+              class="link-btn"
+              data-screen="screen-forgot"
+              data-i18n="forgot_password"
+            >
+              Esqueceu a senha?
+            </button>
+          </div>
+        </form>
+
+
+        <!-- REGISTO -->
+        <form
+          id="screen-register"
+          class="auth-form hidden"
+          autocomplete="on"
+        >
+          <h1 data-i18n="create_account_title">Criar uma conta</h1>
+
+          <p class="subtitle" data-i18n="create_account_subtitle">
+            Preencha os dados para aceder à plataforma.
+          </p>
+
+          <div class="field">
+            <label for="reg-nome" data-i18n="first_name">Nome</label>
+            <input
+              id="reg-nome"
+              name="Nome"
+              type="text"
+              required
+              autocomplete="given-name"
+            >
+          </div>
+
+          <div class="field">
+            <label for="reg-apelido" data-i18n="last_name">Apelido</label>
+            <input
+              id="reg-apelido"
+              name="Apelido"
+              type="text"
+              required
+              autocomplete="family-name"
+            >
+          </div>
+
+          <div class="field">
+            <label for="reg-celular" data-i18n="phone">Celular</label>
+            <input
+              id="reg-celular"
+              name="Celular"
+              type="tel"
+              required
+              autocomplete="tel"
+              placeholder="+244 ..."
+            >
+          </div>
+
+          <div class="field">
+            <label for="reg-email" data-i18n="email">E-mail</label>
+            <input
+              id="reg-email"
+              name="Email"
+              type="email"
+              required
+              autocomplete="email"
+            >
+          </div>
+
+          <div class="field">
+            <label for="reg-email2" data-i18n="confirm_email">Confirmar e-mail</label>
+            <input
+              id="reg-email2"
+              name="ConfirmarEmail"
+              type="email"
+              required
+              autocomplete="email"
+            >
+          </div>
+
+          <div class="field">
+            <label for="reg-senha" data-i18n="password">Senha</label>
+            <input
+              id="reg-senha"
+              name="Senha"
+              type="password"
+              required
+              minlength="6"
+              autocomplete="new-password"
+            >
+
+            <p class="field-hint" data-i18n="password_min_hint">
+              Mínimo de 6 caracteres.
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn-primary btn-block"
+            id="btn-register"
+          >
+            <span class="btn-label" data-i18n="register_btn">Cadastrar</span>
+            <span class="spinner spinner-abs" aria-hidden="true"></span>
+          </button>
+
+          <div class="auth-links">
+            <button
+              type="button"
+              class="link-btn"
+              data-screen="screen-login"
+              data-i18n="already_have_account"
+            >
+              Já tem uma conta? Faça Login
+            </button>
+          </div>
+        </form>
+
+
+        <!-- RECUPERAÇÃO -->
+        <form id="screen-forgot" class="auth-form hidden">
+          <h1 data-i18n="recover_title">Recuperar senha</h1>
+
+          <p class="subtitle" data-i18n="recover_subtitle">
+            Enviaremos um código de 6 dígitos para o e-mail registado.
+          </p>
+
+          <div class="field">
+            <label for="recover-email" data-i18n="registered_email">E-mail registado</label>
+            <input
+              id="recover-email"
+              name="email"
+              type="email"
+              required
+              autocomplete="email"
+            >
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn-primary btn-block"
+            id="btn-recover"
+          >
+            <span class="btn-label" data-i18n="send_code">
+              Enviar Código de Confirmação
+            </span>
+
+            <span
+              class="spinner spinner-abs"
+              aria-hidden="true"
+            ></span>
+          </button>
+
+          <div class="auth-links">
+            <button
+              type="button"
+              class="link-btn"
+              data-screen="screen-login"
+              data-i18n="back_to_login"
+            >
+              Voltar ao Login
+            </button>
+          </div>
+        </form>
+
+
+        <!-- REDEFINIÇÃO -->
+        <form id="screen-reset" class="auth-form hidden">
+          <h1 data-i18n="reset_title">Redefinir senha</h1>
+
+          <p class="subtitle" data-i18n="reset_subtitle">
+            Insira o código de 6 dígitos enviado ao seu e-mail.
+          </p>
+
+          <div class="info-banner" data-i18n="reset_code_info">
+            O código é válido durante 15 minutos.
+          </div>
+
+          <input
+            type="hidden"
+            id="reset-email"
+            name="email"
+          >
+
+          <div class="field">
+            <label for="reset-token" data-i18n="token_label">
+              Código / Token
+            </label>
+
+            <input
+              id="reset-token"
+              name="token"
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              pattern="[0-9]{6}"
+              required
+              placeholder="000000"
+              autocomplete="one-time-code"
+            >
+          </div>
+
+          <div class="field">
+            <label for="reset-senha" data-i18n="new_password">
+              Nova senha
+            </label>
+
+            <input
+              id="reset-senha"
+              name="novaSenha"
+              type="password"
+              required
+              minlength="6"
+              autocomplete="new-password"
+            >
+          </div>
+
+          <button
+            type="submit"
+            class="btn btn-primary btn-block"
+            id="btn-reset"
+          >
+            <span class="btn-label" data-i18n="reset_btn">
+              Redefinir Senha
+            </span>
+
+            <span
+              class="spinner spinner-abs"
+              aria-hidden="true"
+            ></span>
+          </button>
+
+          <div class="auth-links">
+            <button
+              type="button"
+              class="link-btn"
+              data-screen="screen-forgot"
+              data-i18n="request_new_code"
+            >
+              Pedir um novo código
+            </button>
+
+            <button
+              type="button"
+              class="link-btn"
+              data-screen="screen-login"
+              data-i18n="back_to_login"
+            >
+              Voltar ao Login
+            </button>
+          </div>
+        </form>
+
+      </div>
+
+      <p class="auth-footer">
+        © TMP Kinaxixi V2.0 · Ambiente interno
+      </p>
+
+    </section>
+
+
+    <!-- =========================================================
+         DASHBOARD PRINCIPAL
+         ========================================================= -->
+    <section
+      id="dashboard-container"
+      class="app-shell hidden"
+    >
+
+      <!-- HEADER -->
+      <header class="app-header">
+
+        <div class="header-left">
+
+          <button
+            type="button"
+            class="icon-btn"
+            id="btn-menu"
+            aria-label="Abrir navegação"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M2 4h12v1.5H2V4zm0 3.25h12v1.5H2v-1.5zM2 10.5h12V12H2v-1.5z"/>
+            </svg>
+          </button>
+
+          <div
+            class="brand-mark"
+            style="width:28px;height:28px;font-size:10px;"
+          >
+            TMP
+          </div>
+
+          <span class="header-title">
+            TMP Kinaxixi V2.0
+          </span>
+
+        </div>
+
+
+        <div class="header-right">
+
+          <div class="user-chip">
+            <span
+              class="name"
+              id="user-fullname"
+            >
+              —
+            </span>
+
+            <span
+              class="role"
+              id="user-perfil"
+            >
+              —
+            </span>
+          </div>
+
+          <div
+            class="avatar"
+            id="user-avatar"
+            aria-hidden="true"
+            title="Meu Perfil"
+          >
+            U
+          </div>
+
+          <button
+            type="button"
+            class="btn btn-outline"
+            id="btn-logout"
+            data-i18n="logout"
+          >
+            Sair / Logout
+          </button>
+
+        </div>
+
+      </header>
+
+
+      <!-- CORPO -->
+      <div class="app-body">
+
+        <!-- SIDEBAR -->
+        <aside
+          class="sidebar"
+          id="sidebar"
+        >
+
+          <button
+            type="button"
+            class="nav-item is-active"
+            data-module="turnos"
+            data-i18n="nav_turnos"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm1 4h8v1.5H4V6zm0 3h5v1.5H4V9z"/>
+            </svg>
+
+            Turnos Programados
+          </button>
+
+
+          <button
+            type="button"
+            class="nav-item"
+            data-module="disponibilidade"
+            data-i18n="nav_disponibilidade"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M4 2h1.5v1.5H12A1.5 1.5 0 0113.5 5v8A1.5 1.5 0 0112 14.5H4A1.5 1.5 0 012.5 13V5A1.5 1.5 0 014 3.5h.5V2zM4 6.5v6.5h8V6.5H4z"/>
+            </svg>
+
+            Disponibilidade
+          </button>
+
+
+          <button
+            type="button"
+            class="nav-item"
+            data-module="ocorrencias"
+            data-i18n="nav_ocorrencias"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M8 1.5L14.5 13h-13L8 1.5zM8 6v3.5H7V6h1zm0 5v1.5H7V11h1z"/>
+            </svg>
+
+            Ocorrências &amp; Cancelamentos
+          </button>
+
+
+          <button
+            type="button"
+            class="nav-item"
+            id="nav-perfil"
+            data-module="perfil"
+            data-i18n="nav_perfil"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6.5c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5H3z"/>
+            </svg>
+
+            Meu Perfil
+          </button>
+
+
+          <!-- ADMIN -->
+          <button
+            type="button"
+            class="nav-item hidden"
+            id="nav-admin"
+            data-module="admin"
+            data-i18n="nav_admin"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M8 1.5A2.5 2.5 0 005.5 4v1H4a1 1 0 00-1 1v7a1 1 0 001 1h8a1 1 0 001-1V6a1 1 0 00-1-1H10.5V4A2.5 2.5 0 008 1.5zM7 4a1 1 0 012 0v1H7V4z"/>
+            </svg>
+
+            Painel de Administração
+          </button>
+
+        </aside>
+
+
+        <!-- CONTEÚDO -->
+        <div class="app-content-wrapper">
+
+          <!-- NAVEGAÇÃO MOBILE -->
+          <nav
+            class="nav-mobile"
+            id="nav-mobile"
+            aria-label="Navegação móvel"
+          ></nav>
+
+
+          <main class="content">
+
+            <!-- ===================================================
+                 TURNOS
+                 =================================================== -->
+            <section
+              id="mod-turnos"
+              class="module is-visible"
+            >
+
+              <div class="page-head">
+
+                <div>
+                  <h2 data-i18n="nav_turnos">Turnos Programados</h2>
+
+                  <p data-i18n="turnos_subtitle">
+                    Consulte os turnos disponíveis e filtre por local.
+                  </p>
+                </div>
+
+
+                <div class="toolbar">
+
+                  <div class="field">
+
+                    <label for="filtro-local" data-i18n="local">
+                      Local
+                    </label>
+
+                    <select id="filtro-local">
+                      <option value="" data-i18n="select_local">
+                        Selecione um local
+                      </option>
+                    </select>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+              <div
+                id="turnos-lista"
+                class="card-grid"
+              >
+
+                <article
+                  class="card empty-state"
+                  style="grid-column:1/-1"
+                >
+                  <h3 data-i18n="select_local_title">Selecione um local</h3>
+
+                  <p data-i18n="select_local_desc">
+                    Os turnos ativos com vagas aparecerão aqui.
+                  </p>
+                </article>
+
+              </div>
+
+            </section>
+
+
+            <!-- ===================================================
+                 DISPONIBILIDADE
+                 =================================================== -->
+            <section
+              id="mod-disponibilidade"
+              class="module"
+            >
+
+              <div class="page-head">
+
+                <div>
+                  <h2 data-i18n="nav_disponibilidade">Disponibilidade</h2>
+
+                  <p data-i18n="disp_subtitle">
+                    Selecione o mês e abra o formulário de disponibilidade.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div
+                class="card"
+                style="max-width:480px"
+              >
+
+                <div class="field">
+
+                  <label for="disp-mes" data-i18n="month">
+                    Mês
+                  </label>
+
+                  <select id="disp-mes">
+
+                    <option value="" data-i18n="select_month">
+                      Selecione o mês
+                    </option>
+
+                    <option value="01">Janeiro</option>
+                    <option value="02">Fevereiro</option>
+                    <option value="03">Março</option>
+                    <option value="04">Abril</option>
+                    <option value="05">Maio</option>
+                    <option value="06">Junho</option>
+                    <option value="07">Julho</option>
+                    <option value="08">Agosto</option>
+                    <option value="09">Setembro</option>
+                    <option value="10">Outubro</option>
+                    <option value="11">Novembro</option>
+                    <option value="12">Dezembro</option>
+
+                  </select>
+
+                </div>
+
+
+                <div style="margin-top:16px">
+
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="btn-abrir-form"
+                  >
+                    <span class="btn-label" data-i18n="open_form">
+                      Abrir Google Form
+                    </span>
+
+                    <span
+                      class="spinner spinner-abs"
+                      aria-hidden="true"
+                    ></span>
+                  </button>
+
+                </div>
+
+              </div>
+
+            </section>
+
+
+            <!-- ===================================================
+                 OCORRÊNCIAS / CANCELAMENTOS
+                 =================================================== -->
+            <section
+              id="mod-ocorrencias"
+              class="module"
+            >
+
+              <div class="page-head">
+
+                <div>
+                  <h2 data-i18n="nav_ocorrencias">Ocorrências &amp; Cancelamentos</h2>
+
+                  <p data-i18n="ocorr_subtitle">
+                    Aceda aos formulários oficiais para reportar situações.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div class="card-grid">
+
+                <!-- OCORRÊNCIA -->
+                <article class="card">
+
+                  <span class="badge badge-blue" data-i18n="form_badge">
+                    Formulário
+                  </span>
+
+                  <h3 data-i18n="ocorr_title">
+                    Registar ocorrência
+                  </h3>
+
+                  <p class="field-hint" data-i18n="ocorr_desc">
+                    Comunique incidentes durante o turno.
+                    Os seus dados serão pré-preenchidos.
+                  </p>
+
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="btn-ocorrencia"
+                    style="margin-top:12px"
+                  >
+                    <span class="btn-label" data-i18n="open_form">
+                      Abrir formulário
+                    </span>
+
+                    <span
+                      class="spinner spinner-abs"
+                      aria-hidden="true"
+                    ></span>
+                  </button>
+
+                </article>
+
+
+                <!-- CANCELAMENTO -->
+                <article class="card">
+
+                  <span class="badge badge-red" data-i18n="form_badge">
+                    Formulário
+                  </span>
+
+                  <h3 data-i18n="cancel_title">
+                    Cancelar turno
+                  </h3>
+
+                  <p class="field-hint" data-i18n="cancel_desc">
+                    Solicite o cancelamento de um turno atribuído.
+                    Os seus dados serão pré-preenchidos.
+                  </p>
+
+                  <button
+                    type="button"
+                    class="btn btn-outline"
+                    id="btn-cancelamento"
+                    style="margin-top:12px"
+                  >
+                    <span class="btn-label" data-i18n="open_form">
+                      Abrir formulário
+                    </span>
+
+                    <span
+                      class="spinner spinner-abs spinner-dark"
+                      aria-hidden="true"
+                    ></span>
+                  </button>
+
+                </article>
+
+              </div>
+
+            </section>
+
+
+            <!-- ===================================================
+                 PERFIL
+                 =================================================== -->
+            <section
+              id="mod-perfil"
+              class="module"
+            >
+
+              <div class="page-head">
+
+                <div>
+                  <h2 data-i18n="nav_perfil">Meu Perfil</h2>
+
+                  <p data-i18n="perfil_subtitle">
+                    Consulte e atualize os seus dados cadastrais.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div
+                class="card"
+                style="max-width:480px"
+              >
+
+                <form
+                  id="form-perfil"
+                  class="auth-form"
+                >
+
+                  <div class="field">
+
+                    <label for="perfil-email" data-i18n="email">
+                      E-mail
+                    </label>
+
+                    <input
+                      id="perfil-email"
+                      type="email"
+                      disabled
+                    >
+
+                  </div>
+
+
+                  <div class="field">
+
+                    <label for="perfil-nome" data-i18n="first_name">
+                      Nome
+                    </label>
+
+                    <input
+                      id="perfil-nome"
+                      type="text"
+                      required
+                    >
+
+                  </div>
+
+
+                  <div class="field">
+
+                    <label for="perfil-apelido" data-i18n="last_name">
+                      Apelido
+                    </label>
+
+                    <input
+                      id="perfil-apelido"
+                      type="text"
+                      required
+                    >
+
+                  </div>
+
+
+                  <div class="field">
+
+                    <label for="perfil-celular" data-i18n="phone">
+                      Celular
+                    </label>
+
+                    <input
+                      id="perfil-celular"
+                      type="tel"
+                      required
+                    >
+
+                  </div>
+
+
+                  <div class="field">
+
+                    <label for="perfil-tipo" data-i18n="profile_role">
+                      Perfil
+                    </label>
+
+                    <input
+                      id="perfil-tipo"
+                      type="text"
+                      disabled
+                    >
+
+                  </div>
+
+
+                  <div class="field">
+
+                    <label for="perfil-idioma" data-i18n="language">
+                      Idioma
+                    </label>
+
+                    <select id="perfil-idioma">
+                      <option value="pt">Português</option>
+                      <option value="en">English</option>
+                      <option value="fr">Français</option>
+                      <option value="es">Español</option>
+                    </select>
+
+                  </div>
+
+
+                  <button
+                    type="submit"
+                    class="btn btn-primary"
+                    id="btn-salvar-perfil"
+                  >
+
+                    <span class="btn-label" data-i18n="save_changes">
+                      Guardar alterações
+                    </span>
+
+                    <span
+                      class="spinner spinner-abs"
+                      aria-hidden="true"
+                    ></span>
+
+                  </button>
+
+                </form>
+
+              </div>
+
+            </section>
+
+
+            <!-- ===================================================
+                 ADMINISTRAÇÃO
+                 =================================================== -->
+            <section
+              id="mod-admin"
+              class="module"
+            >
+
+              <div class="page-head">
+
+                <div>
+                  <h2 data-i18n="admin_panel_title">Painel de Administração</h2>
+
+                  <p data-i18n="admin_panel_subtitle">
+                    Gestão de utilizadores, turnos, locais e relatórios.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <!-- ABAS ADMIN -->
+              <div
+                class="subtabs"
+                role="tablist"
+              >
+
+                <button
+                  type="button"
+                  class="subtab is-active"
+                  data-admin="usuarios"
+                  role="tab"
+                  aria-selected="true"
+                  data-i18n="tab_users"
+                >
+                  Usuários
+                </button>
+
+                <button
+                  type="button"
+                  class="subtab"
+                  data-admin="turnos"
+                  role="tab"
+                  aria-selected="false"
+                  data-i18n="tab_turnos"
+                >
+                  Turnos
+                </button>
+
+                <button
+                  type="button"
+                  class="subtab"
+                  data-admin="locais"
+                  role="tab"
+                  aria-selected="false"
+                  data-i18n="tab_locais"
+                >
+                  Locais
+                </button>
+
+                <button
+                  type="button"
+                  class="subtab"
+                  data-admin="links"
+                  role="tab"
+                  aria-selected="false"
+                  data-i18n="tab_links"
+                >
+                  Links / Forms
+                </button>
+
+                <button
+                  type="button"
+                  class="subtab"
+                  data-admin="inscricoes"
+                  role="tab"
+                  aria-selected="false"
+                  data-i18n="tab_inscricoes"
+                >
+                  Inscrições
+                </button>
+
+                <button
+                  type="button"
+                  class="subtab"
+                  data-admin="relatorios"
+                  role="tab"
+                  aria-selected="false"
+                  data-i18n="tab_relatorios"
+                >
+                  Relatórios
+                </button>
+
+              </div>
+
+
+              <!-- ===============================================
+                   ADMIN - UTILIZADORES
+                   =============================================== -->
+              <div
+                id="admin-usuarios"
+                class="admin-panel"
+              >
+
+                <div class="card" style="margin-bottom:16px;">
+                  <h3 style="margin-top:0;" data-i18n="create_user">Criar Novo Utilizador</h3>
+                  <form id="form-admin-user" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; align-items:end;">
+                    <div>
+                      <label for="adm-usr-nome" data-i18n="first_name">Nome</label>
+                      <input type="text" id="adm-usr-nome" required>
+                    </div>
+                    <div>
+                      <label for="adm-usr-apelido" data-i18n="last_name">Apelido</label>
+                      <input type="text" id="adm-usr-apelido" required>
+                    </div>
+                    <div>
+                      <label for="adm-usr-email" data-i18n="email">E-mail</label>
+                      <input type="email" id="adm-usr-email" required>
+                    </div>
+                    <div>
+                      <label for="adm-usr-celular" data-i18n="phone">Celular</label>
+                      <input type="text" id="adm-usr-celular" required>
+                    </div>
+                    <div>
+                      <label for="adm-usr-senha" data-i18n="password">Senha</label>
+                      <input type="password" id="adm-usr-senha" required minlength="6">
+                    </div>
+                    <div>
+                      <label for="adm-usr-perfil" data-i18n="profile_role">Perfil</label>
+                      <select id="adm-usr-perfil">
+                        <option value="Utilizador">Utilizador</option>
+                        <option value="Administrador">Administrador</option>
+                      </select>
+                    </div>
+                    <div>
+                      <button type="submit" class="btn btn-primary" id="btn-admin-add-user" style="width:100%;">
+                        <span class="btn-label" data-i18n="create">Criar</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div class="card table-wrap">
+
+                  <table class="data">
+
+                    <thead>
+
+                      <tr>
+                        <th data-i18n="first_name">Nome</th>
+                        <th data-i18n="last_name">Apelido</th>
+                        <th data-i18n="email">E-mail</th>
+                        <th data-i18n="profile_role">Perfil</th>
+                        <th data-i18n="status">Status</th>
+                        <th data-i18n="actions">Ações</th>
+                      </tr>
+
+                    </thead>
+
+                    <tbody id="tbl-admin-usuarios-body">
+
+                      <tr>
+                        <td colspan="6">
+                          Os utilizadores serão carregados pelo módulo de dados.
+                        </td>
+                      </tr>
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+
+              <!-- ===============================================
+                   ADMIN - TURNOS
+                   =============================================== -->
+              <div
+                id="admin-turnos"
+                class="admin-panel hidden"
+              >
+
+                <div class="card" style="margin-bottom:16px;">
+                  <h3 style="margin-top:0;" data-i18n="create_turno">Criar Novo Turno</h3>
+                  <form id="form-admin-turno" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px; align-items:end;">
+                    <div>
+                      <label for="adm-trn-local" data-i18n="local">Local</label>
+                      <select id="adm-trn-local" required></select>
+                    </div>
+                    <div>
+                      <label for="adm-trn-data" data-i18n="date">Data</label>
+                      <input type="date" id="adm-trn-data" required>
+                    </div>
+                    <div>
+                      <label for="adm-trn-inicio" data-i18n="start_time">Início</label>
+                      <input type="time" id="adm-trn-inicio" required>
+                    </div>
+                    <div>
+                      <label for="adm-trn-fim" data-i18n="end_time">Fim</label>
+                      <input type="time" id="adm-trn-fim" required>
+                    </div>
+                    <div>
+                      <label for="adm-trn-vagas" data-i18n="vagas">Vagas</label>
+                      <input type="number" id="adm-trn-vagas" min="1" required>
+                    </div>
+                    <div>
+                      <button type="submit" class="btn btn-primary" id="btn-admin-add-turno" style="width:100%;">
+                        <span class="btn-label" data-i18n="create">Criar</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div class="card table-wrap">
+
+                  <table class="data">
+
+                    <thead>
+
+                      <tr>
+                        <th>ID</th>
+                        <th data-i18n="local">Local</th>
+                        <th data-i18n="date">Data</th>
+                        <th data-i18n="start_time">Início</th>
+                        <th data-i18n="end_time">Fim</th>
+                        <th data-i18n="vagas">Vagas</th>
+                        <th data-i18n="status">Status</th>
+                        <th data-i18n="actions">Ações</th>
+                      </tr>
+
+                    </thead>
+
+                    <tbody id="tbl-admin-turnos-body">
+
+                      <tr>
+                        <td colspan="8">
+                          Os turnos serão geridos aqui.
+                        </td>
+                      </tr>
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+
+              <!-- ===============================================
+                   ADMIN - LOCAIS
+                   =============================================== -->
+              <div
+                id="admin-locais"
+                class="admin-panel hidden"
+              >
+
+                <div class="card" style="margin-bottom:16px;">
+                  <h3 style="margin-top:0;" data-i18n="create_local">Criar Novo Local</h3>
+                  <form id="form-admin-local" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; align-items:end;">
+                    <div>
+                      <label for="adm-loc-nome" data-i18n="local_name">Nome do Local</label>
+                      <input type="text" id="adm-loc-nome" required>
+                    </div>
+                    <div>
+                      <label for="adm-loc-tipo" data-i18n="type">Tipo</label>
+                      <select id="adm-loc-tipo">
+                        <option value="Fixo">Fixo</option>
+                        <option value="Móvel">Móvel</option>
+                      </select>
+                    </div>
+                    <div>
+                      <button type="submit" class="btn btn-primary" id="btn-admin-add-local" style="width:100%;">
+                        <span class="btn-label" data-i18n="create">Criar</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div class="card table-wrap">
+
+                  <table class="data">
+
+                    <thead>
+
+                      <tr>
+                        <th>ID</th>
+                        <th data-i18n="local_name">Nome do local</th>
+                        <th data-i18n="type">Tipo</th>
+                        <th data-i18n="status">Status</th>
+                        <th data-i18n="actions">Ações</th>
+                      </tr>
+
+                    </thead>
+
+                    <tbody id="tbl-admin-locais-body">
+
+                      <tr>
+                        <td colspan="5">
+                          Os locais serão geridos aqui.
+                        </td>
+                      </tr>
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+
+              <!-- ===============================================
+                   ADMIN - LINKS / FORMULÁRIOS
+                   =============================================== -->
+              <div
+                id="admin-links"
+                class="admin-panel hidden"
+              >
+
+                <div class="card" style="margin-bottom:16px;">
+                  <h3 style="margin-top:0;" data-i18n="create_link">Criar Novo Link / Formulário</h3>
+                  <form id="form-admin-link" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; align-items:end;">
+                    <div>
+                      <label for="adm-lnk-tipo" data-i18n="type">Tipo</label>
+                      <select id="adm-lnk-tipo">
+                        <option value="disponibilidade">Disponibilidade</option>
+                        <option value="ocorrencia">Ocorrência</option>
+                        <option value="cancelamento">Cancelamento</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="adm-lnk-mes" data-i18n="month">Mês (opcional)</label>
+                      <input type="text" id="adm-lnk-mes" placeholder="Ex: 01 ou janeiro">
+                    </div>
+                    <div>
+                      <label for="adm-lnk-url">URL</label>
+                      <input type="url" id="adm-lnk-url" required placeholder="https://forms.google.com/...">
+                    </div>
+                    <div>
+                      <button type="submit" class="btn btn-primary" id="btn-admin-add-link" style="width:100%;">
+                        <span class="btn-label" data-i18n="create">Criar</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div class="card table-wrap">
+
+                  <table class="data">
+
+                    <thead>
+
+                      <tr>
+                        <th>ID</th>
+                        <th data-i18n="type">Tipo</th>
+                        <th data-i18n="month">Mês</th>
+                        <th>URL</th>
+                        <th data-i18n="actions">Ações</th>
+                      </tr>
+
+                    </thead>
+
+                    <tbody id="tbl-admin-links-body">
+
+                      <tr>
+                        <td colspan="5">
+                          Os links serão geridos aqui.
+                        </td>
+                      </tr>
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+
+              <!-- ===============================================
+                   ADMIN - INSCRIÇÕES
+                   =============================================== -->
+              <div
+                id="admin-inscricoes"
+                class="admin-panel hidden"
+              >
+
+                <div class="card table-wrap">
+
+                  <table class="data">
+
+                    <thead>
+
+                      <tr>
+                        <th>ID</th>
+                        <th data-i18n="user_name">Utilizador</th>
+                        <th data-i18n="email">E-mail</th>
+                        <th data-i18n="local">Local</th>
+                        <th data-i18n="date">Data Turno</th>
+                        <th data-i18n="status">Status</th>
+                        <th data-i18n="actions">Ações</th>
+                      </tr>
+
+                    </thead>
+
+                    <tbody id="tbl-admin-inscricoes-body">
+
+                      <tr>
+                        <td colspan="7">
+                          As inscrições serão geridas aqui.
+                        </td>
+                      </tr>
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+              </div>
+
+
+              <!-- ===============================================
+                   ADMIN - RELATÓRIOS
+                   =============================================== -->
+              <div
+                id="admin-relatorios"
+                class="admin-panel hidden"
+              >
+
+                <div class="card" style="margin-bottom:16px;">
+                  <button type="button" class="btn btn-primary" id="btn-gerar-relatorio">
+                    <span class="btn-label" data-i18n="generate_report">Gerar Relatório Consolidado</span>
+                  </button>
+                </div>
+
+                <div class="card" id="relatorio-resultado">
+
+                  <h3 data-i18n="tab_relatorios">
+                    Relatórios
+                  </h3>
+
+                  <p data-i18n="reports_desc">
+                    Indicadores de acessos, ocupação de turnos
+                    e disponibilidade.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </section>
+
+          </main>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- =========================================================
+         JAVASCRIPT
+         ========================================================= -->
+    <?!= HtmlService.createHtmlOutputFromFile('JavaScript').getContent(); ?>
+
+  </body>
+</html>

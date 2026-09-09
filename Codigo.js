@@ -41,17 +41,19 @@ function doPost(e) {
     let result;
 
     switch (action) {
-      case 'ping':
-        result = { status: 'success', message: 'Conexão com a API estabelecida com sucesso!' };
-        break;
-
-      case 'login':
-        // Executa a tua função de login já existente no Código.js
-        result = verificarLogin(payload.usuario, payload.senha);
+      case 'loginUser':
+        // Se a tua função de login receber e-mail e senha em separado:
+        result = loginUser(payload.email, payload.senha);
+        
+        // NOTA: Se a tua função de login esperar um único objeto payload, usa:
+        // result = loginUser(payload);
         break;
 
       default:
-        result = { status: 'error', message: 'Ação "' + action + '" não foi reconhecida pela API.' };
+        result = { 
+          status: 'error', 
+          message: 'Ação "' + action + '" não foi reconhecida pela API.' 
+        };
     }
 
     return ContentService
@@ -60,7 +62,10 @@ function doPost(e) {
 
   } catch (error) {
     return ContentService
-      .createTextOutput(JSON.stringify({ status: 'error', message: error.toString() }))
+      .createTextOutput(JSON.stringify({ 
+        status: 'error', 
+        message: error.toString() 
+      }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }

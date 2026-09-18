@@ -5,6 +5,34 @@ import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { issueAuthorizationGrant } from "../services/grants.js";
 import { audit, hashPassword, issueTokens, persistRefreshToken, tokenHash, verifyPassword } from "../services/security.js";
 export const authRouter = Router();
+authRouter.get("/attendants", requireAuth, async (req, res) => {
+  if ((req as AuthRequest).user?.role?.toUpperCase() !== "ADMIN") { res.status(403).json({ error: "forbidden" }); return; }
+  const users = await prisma.user.findMany({ where: { role: { not: "ADMIN" } }, select: { id: true, username: true, displayName: true, nif: true, phone: true, role: true, createdAt: true }, orderBy: { displayName: "asc" } });
+  res.json(users);
+});
+authRouter.post("/attendants", requireAuth, async (req, res) => {
+  const actor = (req as AuthRequest).user;
+  if (actor?.role?.toUpperCase() !== "ADMIN") { res.status(403).json({ error: "forbidden" }); return; }
+  const parsed = z.object({ displayName: z.string().min(2), nif: z.string().min(5), phone: z.string().min(7), pin: z.string().regex(/^\d{4,6}$/), username: z.string().min(2).optional() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_attendant", message: "Nome, NIF, telefone e PIN de 4 a 6 dígitos são obrigatórios." }); return; }
+  try {
+    const administrators = await prisma.user.findMany({ where: { role: { in: ["ADMIN", "admin"] }, pinHash: { not: null } }, select: { pinHash: true } });
+    if ((await Promise.all(administrators.map((administrator) => administrator.pinHash ? verifyPassword(parsed.data.pin, administrator.pinHash) : false))).some(Boolean)) { res.status(409).json({ error: "attendant_pin_conflict", message: "O PIN individual deve ser diferente do PIN mestre do Administrador." }); return; }
+    const username = parsed.data.username ?? `atendedor-${Date.now()}`;
+    const user = await prisma.user.create({ data: { username, email: `${username}@local.vendaja`, displayName: parsed.data.displayName, nif: parsed.data.nif, phone: parsed.data.phone, pinHash: await hashPassword(parsed.data.pin), passwordHash: await hashPassword(`${crypto.randomUUID()}-disabled`), role: "OPERATOR" }, select: { id: true, username: true, displayName: true, nif: true, phone: true, role: true } });
+    await audit("ATTENDANT_CREATED", actor.id, "USER", user.id, { username });
+    res.status(201).json(user);
+  } catch (error) { console.error("[attendants] create failed", error); res.status(409).json({ error: "attendant_create_failed", message: "Não foi possível cadastrar o atendedor." }); }
+});
+authRouter.patch("/attendants/:id", requireAuth, async (req, res) => {
+  const actor = (req as AuthRequest).user;
+  if (actor?.role?.toUpperCase() !== "ADMIN") { res.status(403).json({ error: "forbidden" }); return; }
+  const parsed = z.object({ displayName: z.string().min(2), nif: z.string().min(5), phone: z.string().min(7), pin: z.string().regex(/^\d{4,6}$/).optional() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_attendant", message: "Dados do atendedor inválidos." }); return; }
+  const user = await prisma.user.update({ where: { id: String(req.params.id) }, data: { displayName: parsed.data.displayName, nif: parsed.data.nif, phone: parsed.data.phone, ...(parsed.data.pin ? { pinHash: await hashPassword(parsed.data.pin) } : {}) }, select: { id: true, username: true, displayName: true, nif: true, phone: true, role: true } });
+  await audit("ATTENDANT_UPDATED", actor.id, "USER", user.id);
+  res.json(user);
+});
 const credentials = z.object({ identifier: z.string().min(1).optional(), email: z.string().email().optional(), password: z.string().min(4), mode: z.enum(["password", "pin"]).default("password") }).refine((v) => v.identifier || v.email, "identifier required");
 authRouter.post("/login", async (req, res) => {
   const parsed = credentials.safeParse(req.body); if (!parsed.success) { res.status(400).json({ error: "invalid_credentials" }); return; }

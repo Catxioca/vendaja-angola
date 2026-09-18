@@ -10,6 +10,8 @@ model User {
   email String @unique
   username String? @unique
   displayName String?
+  nif String?
+  phone String?
   passwordHash String
   pinHash String?
   role String @default("operator")

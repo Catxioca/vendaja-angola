@@ -10,6 +10,7 @@ import { fiscalRouter } from "./routes/fiscal.js";
 import { stockRouter } from "./routes/stock.js";
 import { hrRouter } from "./routes/hr.js";
 import { accountingRouter } from "./routes/accounting.js";
+import { localCashRouter } from "./routes/fiscal.js";
 
 export const prisma = new PrismaClient();
 const app = express();
@@ -24,6 +25,7 @@ app.use("/api/v1/products", productRouter);
 app.use("/api/v1/sales", saleRouter);
 app.use("/api/v1/sync", syncRouter);
 app.use("/api/v1/fiscal", fiscalRouter);
+app.use("/api/v1/cashier", localCashRouter);
 app.use("/api/v1/stock", stockRouter);
 app.use("/api/v1/hr", hrRouter);
 app.use("/api/v1/accounting", accountingRouter);

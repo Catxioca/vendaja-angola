@@ -5,6 +5,22 @@ import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.j
 import { prisma } from "../server.js";
 import { audit, verifyPassword } from "../services/security.js";
 import { encryptFiscalSecret, exportSaftAo, qrPayload, validateSaftXml } from "../services/fiscal.js";
+export const localCashRouter = Router();
+localCashRouter.post("/open-shift", async (req, res) => {
+  const parsed = z.object({ pin: z.string().regex(/^\d{4,6}$/), initialAmount: z.number().nonnegative(), registerNumber: z.string().min(1).default("01") }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_attendant_pin", message: "PIN de atendedor inválido ou não cadastrado." }); return; }
+  try {
+    const attendants = await prisma.user.findMany({ where: { role: { not: "ADMIN" }, pinHash: { not: null } }, select: { id: true, pinHash: true, displayName: true, nif: true, phone: true } });
+    let attendant: typeof attendants[number] | undefined;
+    for (const candidate of attendants) if (candidate.pinHash && await verifyPassword(parsed.data.pin, candidate.pinHash)) { attendant = candidate; break; }
+    if (!attendant) { console.warn("[cashier/open-shift] attendant PIN mismatch"); res.status(403).json({ error: "invalid_attendant_pin", message: "PIN de atendedor inválido ou não cadastrado." }); return; }
+    const existing = await prisma.cashSession.findFirst({ where: { openedBy: attendant.id, closedAt: null }, orderBy: { openedAt: "desc" } });
+    if (existing) { res.status(409).json({ error: "cash_already_open", message: "Este atendedor já possui um turno aberto.", session: existing }); return; }
+    const session = await prisma.cashSession.create({ data: { openedBy: attendant.id, openingCents: Math.round(parsed.data.initialAmount * 100), operatorName: attendant.displayName ?? "Atendedor", operatorNif: attendant.nif ?? "", operatorPhone: attendant.phone ?? "", terminalId: parsed.data.registerNumber } });
+    await audit("CASH_OPEN", attendant.id, "CASH_SESSION", session.id, { mode: "ATTENDANT_PIN", terminalId: parsed.data.registerNumber });
+    res.status(200).json({ ...session, attendant: { id: attendant.id, name: attendant.displayName, nif: attendant.nif, phone: attendant.phone } });
+  } catch (error) { console.error("[cashier/open-shift] failed", error); res.status(500).json({ error: "cash_open_failed", message: "Não foi possível abrir o turno localmente." }); }
+});
 export const fiscalRouter = Router();
 fiscalRouter.use(requireAuth);
 fiscalRouter.post("/cash/open", async (req, res) => {

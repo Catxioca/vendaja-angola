@@ -1,26 +1,44 @@
 {
-  "name": "tmp-kinaxixi-v2",
-  "version": "1.0.0",
-  "description": "",
-  "main": "Codigo.js",
+  "name": "angola-commerce-platform",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Hybrid Angola commerce, invoicing and point-of-sale platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npm run build -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "dev:backend": "npm --workspace @angola/backend run dev",
+    "dev:web": "npm --workspace @angola/web run dev",
+    "dev:desktop": "npm --workspace @angola/desktop run dev",
+    "build:web": "npm --workspace @angola/web run build",
+    "build:desktop": "npm --workspace @angola/desktop run build",
+    "cap:sync": "npx cap sync",
+    "cap:sync:android": "npx cap sync android",
+    "cap:sync:ios": "npx cap sync ios",
+    "cap:android": "npx cap open android",
+    "cap:ios": "npx cap open ios",
+    "android:assemble": "npm run cap:sync:android && gradlew.bat -p android assembleRelease",
+    "android:bundle": "npm run cap:sync:android && gradlew.bat -p android bundleRelease",
+    "ios:open": "npm run cap:sync:ios && npx cap open ios",
+    "desktop:dist": "npm run build:desktop && electron-builder --win nsis --linux deb --mac dmg",
+    "db:generate": "npm --workspace @angola/backend run prisma:generate",
+    "db:migrate": "npm --workspace @angola/backend run prisma:migrate",
+    "db:seed": "npm --workspace @angola/backend run db:seed"
+    ,"generate-license": "node scripts/generate-license.mjs"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Catxioca/tmp-kinaxixi-v2.git"
+  "engines": {
+    "node": ">=20"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Catxioca/tmp-kinaxixi-v2/issues"
-  },
-  "homepage": "https://github.com/Catxioca/tmp-kinaxixi-v2#readme",
-  "dependencies": {
-    "@capacitor/android": "^8.5.1",
-    "@capacitor/cli": "^8.5.1",
-    "@capacitor/core": "^8.5.1"
+  "devDependencies": {
+    "@capacitor-community/sqlite": "^7.0.3",
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
   }
 }

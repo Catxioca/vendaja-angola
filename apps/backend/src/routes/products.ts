@@ -1,0 +1,32 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../server.js";
+import { requireAdminOrGrant, requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { audit } from "../services/security.js";
+export const productRouter = Router();
+productRouter.use(requireAuth);
+productRouter.get("/", async (_req, res) => {
+  try {
+    res.json(await prisma.product.findMany({ where: { active: true }, orderBy: { name: "asc" } }));
+  } catch (error) {
+    console.error("[products-list] unavailable", error);
+    res.json([]);
+  }
+});
+const productInput = z.object({ sku: z.string().min(1), barcode: z.string().min(1).optional(), qrCode: z.string().min(1).optional().nullable(), name: z.string().min(1), priceCents: z.number().int().nonnegative(), costCents: z.number().int().nonnegative().default(0), stock: z.number().int().nonnegative().default(0), taxRate: z.number().min(0).max(1).default(0.14), exemptionCode: z.string().max(20).optional(), categoryId: z.string().optional(), supplierId: z.string().optional(), imageUrl: z.string().max(3_000_000).optional().nullable(), brand: z.string().max(120).optional().nullable(), model: z.string().max(120).optional().nullable(), active: z.boolean().optional() });
+productRouter.post("/", async (req, res) => {
+  const parsed = productInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_product", details: parsed.error.flatten() }); return; }
+  if (((req as AuthRequest).user?.role ?? "").toUpperCase() !== "ADMIN") { res.status(403).json({ error: "admin_required" }); return; }
+  const product = await prisma.product.create({ data: parsed.data }); await audit("PRODUCT_CREATED", (req as AuthRequest).user?.id, "PRODUCT", product.id, parsed.data); res.status(201).json(product);
+});
+productRouter.patch("/:id", requireAdminOrGrant("PRODUCT_UPDATED"), async (req, res) => {
+  const parsed = productInput.partial().safeParse(req.body); if (!parsed.success) { res.status(400).json({ error: "invalid_product" }); return; }
+  const product = await prisma.product.update({ where: { id: String(req.params.id) }, data: parsed.data }); await audit("PRODUCT_UPDATED", (req as AuthRequest).user?.id, "PRODUCT", product.id, parsed.data); res.json(product);
+});
+productRouter.delete("/:id", requireAdminOrGrant("PRODUCT_DELETED"), async (req, res) => {
+  const id = String(req.params.id);
+  const product = await prisma.product.update({ where: { id }, data: { active: false } });
+  await audit("PRODUCT_DELETED", (req as AuthRequest).user?.id, "PRODUCT", id);
+  res.json(product);
+});

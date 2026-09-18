@@ -1,5 +1,6 @@
 {
   "appId": "com.tmpkinaxixi.app",
-  "appName": "TMP Kinaxixi",
-  "webDir": "www"
+  "appName": "VendaJá Angola",
+  "webDir": "apps/web/dist",
+  "server": { "cleartext": true }
 }

@@ -1,0 +1,11 @@
+ALTER TABLE "Product" ADD COLUMN "costCents" INTEGER NOT NULL DEFAULT 0, ADD COLUMN "barcode" TEXT, ADD COLUMN "supplierId" TEXT;
+ALTER TABLE "Sale" ADD COLUMN "operatorId" TEXT;
+ALTER TABLE "FiscalConfig" ADD COLUMN "companyName" TEXT, ADD COLUMN "companyNif" TEXT, ADD COLUMN "saftSchedule" TEXT, ADD COLUMN "saftLastExportAt" TIMESTAMP(3);
+CREATE TABLE "Supplier" ("id" TEXT NOT NULL,"name" TEXT NOT NULL,"nif" TEXT,"email" TEXT,"phone" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "Supplier_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "Product_barcode_key" ON "Product"("barcode");
+CREATE TABLE "StockMovement" ("id" TEXT NOT NULL,"productId" TEXT NOT NULL,"quantity" INTEGER NOT NULL,"type" TEXT NOT NULL,"reference" TEXT,"note" TEXT,"occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"supplierId" TEXT,"operatorId" TEXT,CONSTRAINT "StockMovement_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "StockMovement_productId_occurredAt_idx" ON "StockMovement"("productId","occurredAt");
+ALTER TABLE "Product" ADD CONSTRAINT "Product_supplierId_fkey" FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Sale" ADD CONSTRAINT "Sale_operatorId_fkey" FOREIGN KEY ("operatorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "StockMovement" ADD CONSTRAINT "StockMovement_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "StockMovement" ADD CONSTRAINT "StockMovement_operatorId_fkey" FOREIGN KEY ("operatorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;

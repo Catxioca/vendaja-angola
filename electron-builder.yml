@@ -1,0 +1,19 @@
+appId: ao.commerce.desktop
+productName: VendaJá Angola
+directories:
+  output: release
+  app: apps/desktop
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: public.pem
+    to: public.pem
+asar: true
+publish: []
+win:
+  target: nsis
+linux:
+  target: AppImage
+mac:
+  target: dmg

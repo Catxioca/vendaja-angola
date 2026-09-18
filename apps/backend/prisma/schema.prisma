@@ -1,0 +1,319 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(uuid())
+  email String @unique
+  username String? @unique
+  displayName String?
+  passwordHash String
+  pinHash String?
+  role String @default("operator")
+  refreshTokens RefreshToken[]
+  auditLogs AuditLog[]
+  sales Sale[] @relation("SaleOperator")
+  stockMovements StockMovement[]
+  createdAt DateTime @default(now())
+}
+model Product {
+  id String @id @default(uuid())
+  sku String @unique
+  name String
+  priceCents Int
+  stock Int @default(0)
+  taxRate Decimal @db.Decimal(5,4)
+  active Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  saleLines SaleLine[]
+  taxCategory String @default("GENERAL")
+  exemptionCode String?
+  costCents Int @default(0)
+  barcode String? @unique
+  qrCode String? @unique
+  imageUrl String?
+  brand String?
+  model String?
+  supplierId String?
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+  categoryId String?
+  category Category? @relation(fields: [categoryId], references: [id])
+  stockMovements StockMovement[]
+}
+model Category {
+  id String @id @default(uuid())
+  name String @unique
+  products Product[]
+}
+model FiscalExemption {
+  code String @id
+  reason String
+  active Boolean @default(true)
+}
+model Sale {
+  id String @id
+  number String @unique
+  subtotalCents Int
+  taxCents Int
+  totalCents Int
+  currency String @default("AOA")
+  createdAt DateTime @default(now())
+  lines SaleLine[]
+  syncMutations SyncMutation[]
+  status String @default("COMPLETED")
+  fiscalType String @default("INVOICE_RECEIPT")
+  series String @default("A")
+  fiscalHash String?
+  fiscalSignature String?
+  signatureAlgorithm String?
+  qrCode String?
+  customerNif String?
+  customerId String?
+  customer Customer? @relation(fields: [customerId], references: [id])
+  cancelledAt DateTime?
+  cancelledBy String?
+  operatorId String?
+  operator User? @relation("SaleOperator", fields: [operatorId], references: [id])
+  cashSessionId String?
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id])
+  cashCents Int @default(0)
+  cardCents Int @default(0)
+  transferCents Int @default(0)
+  operatorName String?
+  operatorNif String?
+  operatorPhone String?
+  terminalId String?
+}
+
+model Customer {
+  id String @id @default(uuid())
+  nif String? @unique
+  name String
+  email String?
+  address String?
+  sales Sale[]
+  createdAt DateTime @default(now())
+}
+
+model FiscalConfig {
+  id String @id @default("default")
+  certificatePfxEncrypted String?
+  privateKeyPemEncrypted String?
+  passphraseEncrypted String?
+  licenseEncrypted String?
+  companyName String?
+  companyNif String?
+  companyAddress String?
+  companyProvince String?
+  companyPhone String?
+  saftSchedule String?
+  invoiceSeries String @default("A")
+  saftLastExportAt DateTime?
+  updatedAt DateTime @updatedAt
+}
+
+model Supplier {
+  id String @id @default(uuid())
+  name String
+  nif String?
+  email String?
+  phone String?
+  products Product[]
+  createdAt DateTime @default(now())
+}
+
+model StockMovement {
+  id String @id @default(uuid())
+  productId String
+  quantity Int
+  type String
+  reference String?
+  note String?
+  occurredAt DateTime @default(now())
+  supplierId String?
+  operatorId String?
+  product Product @relation(fields: [productId], references: [id])
+  operator User? @relation(fields: [operatorId], references: [id])
+  @@index([productId, occurredAt])
+}
+
+model RefreshToken {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  userId String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId, expiresAt])
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+  action String
+  entity String?
+  entityId String?
+  userId String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  user User? @relation(fields: [userId], references: [id])
+  @@index([createdAt])
+}
+
+model FiscalSequence {
+  id String @id @default(uuid())
+  documentType String
+  series String
+  nextNumber Int @default(1)
+  @@unique([documentType, series])
+}
+
+model CashSession {
+  id String @id @default(uuid())
+  openedBy String
+  openedAt DateTime @default(now())
+  openingCents Int
+  closedBy String?
+  closedAt DateTime?
+  closingCents Int?
+  sangriaCents Int @default(0)
+  suprimentoCents Int @default(0)
+  operatorName String?
+  operatorNif String?
+  operatorPhone String?
+  terminalId String?
+  sales Sale[]
+}
+
+model Employee {
+  id String @id @default(uuid())
+  fullName String
+  nif String? @unique
+  inss String? @unique
+  position String
+  department String?
+  contractType String @default("FIXED")
+  iban String?
+  baseSalaryCents Int
+  foodAllowanceCents Int @default(0)
+  transportAllowanceCents Int @default(0)
+  housingAllowanceCents Int @default(0)
+  otherAllowancesCents Int @default(0)
+  foodAllowanceExempt Boolean @default(true)
+  transportAllowanceExempt Boolean @default(true)
+  housingAllowanceExempt Boolean @default(false)
+  otherAllowancesExempt Boolean @default(false)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payrolls Payroll[]
+}
+
+model Payroll {
+  id String @id @default(uuid())
+  employeeId String
+  month String
+  salaryBaseCents Int
+  foodAllowanceCents Int @default(0)
+  transportAllowanceCents Int @default(0)
+  housingAllowanceCents Int @default(0)
+  otherAllowancesCents Int @default(0)
+  taxableAllowancesCents Int @default(0)
+  grossSalaryCents Int
+  irtCents Int @default(0)
+  inssEmployeeCents Int @default(0)
+  inssEmployerCents Int @default(0)
+  netSalaryCents Int
+  payDate DateTime?
+  status String @default("DRAFT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employee Employee @relation(fields: [employeeId], references: [id])
+  @@unique([employeeId, month])
+}
+
+model Account {
+  id String @id @default(uuid())
+  code String @unique
+  name String
+  type String
+  category String?
+  parentCode String?
+  createdAt DateTime @default(now())
+  debitEntries JournalEntry[] @relation("DebitAccount")
+  creditEntries JournalEntry[] @relation("CreditAccount")
+  journalLines JournalLine[]
+}
+
+model JournalEntry {
+  id String @id @default(uuid())
+  description String
+  entryDate DateTime @default(now())
+  debitAccountId String
+  creditAccountId String
+  amountCents Int
+  sourceType String?
+  sourceId String?
+  journalType String @default("GENERAL")
+  documentType String @default("MANUAL")
+  documentNumber String?
+  createdBy String?
+  createdAt DateTime @default(now())
+  debitAccount Account @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccount Account @relation("CreditAccount", fields: [creditAccountId], references: [id])
+}
+
+model Journal {
+  id String @id @default(uuid())
+  description String
+  entryDate DateTime @default(now())
+  journalType String @default("GENERAL")
+  documentType String @default("MANUAL")
+  documentNumber String?
+  sourceType String?
+  sourceId String?
+  createdBy String?
+  createdAt DateTime @default(now())
+  lines JournalLine[]
+  @@index([entryDate])
+}
+
+model JournalLine {
+  id String @id @default(uuid())
+  journalId String
+  accountId String
+  description String?
+  debitCents Int @default(0)
+  creditCents Int @default(0)
+  journal Journal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id])
+  @@index([accountId])
+  @@index([journalId])
+}
+
+model SaleLine {
+  id String @id @default(uuid())
+  saleId String
+  productId String
+  quantity Int
+  unitPriceCents Int
+  taxRate Decimal @db.Decimal(5,4)
+  sale Sale @relation(fields: [saleId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  @@index([saleId])
+}
+
+model SyncMutation {
+  id String @id
+  deviceId String
+  entity String
+  operation String
+  occurredAt DateTime
+  saleId String?
+  sale Sale? @relation(fields: [saleId], references: [id])
+  createdAt DateTime @default(now())
+  @@index([deviceId, occurredAt])
+}

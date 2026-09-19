@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../server.js";
-import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 
 const baseAccounts = [
@@ -51,6 +51,7 @@ async function ensureBaseAccounts() {
 
 export const accountingRouter = Router();
 accountingRouter.use(requireAuth);
+accountingRouter.use(requireModuleAccess("ACCOUNTING"));
 
 accountingRouter.get("/chart", async (_req, res) => {
   await ensureBaseAccounts();
@@ -66,7 +67,7 @@ accountingRouter.get("/entries", async (_req, res) => {
   res.json(entries);
 });
 
-  accountingRouter.post("/journals", requireRole("ADMIN"), async (req, res) => {
+  accountingRouter.post("/journals", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
     const parsed = journalSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "invalid_journal", details: parsed.error.flatten() }); return; }
     const debit = parsed.data.lines.reduce((n, l) => n + l.debitCents, 0);
@@ -115,7 +116,7 @@ accountingRouter.get("/entries", async (_req, res) => {
   });
 
 
-accountingRouter.post("/entries", requireRole("ADMIN"), async (req, res) => {
+accountingRouter.post("/entries", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
   const parsed = journalEntrySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_journal_entry", details: parsed.error.flatten() });

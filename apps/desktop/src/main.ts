@@ -1,10 +1,24 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
+let backendProcess: ChildProcess | null = null;
+const backendEntry = () => app.isPackaged
+  ? path.join(process.resourcesPath, "backend", "dist", "bundle.js")
+  : path.resolve(here, "../../backend/dist/bundle.js");
+function startLocalBackend(): void {
+  const entry = backendEntry();
+  const env = { ...process.env, PORT: process.env.PORT ?? "4000", NODE_ENV: process.env.NODE_ENV ?? "production" };
+  backendProcess = spawn(process.execPath, [entry], { cwd: path.dirname(entry), env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  backendProcess.stdout?.on("data", (chunk) => console.log(`[backend] ${String(chunk).trim()}`));
+  backendProcess.stderr?.on("data", (chunk) => console.error(`[backend] ${String(chunk).trim()}`));
+  backendProcess.on("error", (error) => console.error("[desktop] backend start failed", error));
+  backendProcess.on("exit", (code, signal) => { backendProcess = null; console.warn("[desktop] backend stopped", { code, signal }); });
+}
 type LicensePayload = { version: number; licenseId: string; nif: string; hardwareId: string; startsAt: string; expiresAt: string; modules: string[] };
 type LicenseStatus = { valid: boolean; reason?: string; hardwareId: string; expiresAt?: string; nif?: string; modules?: string[] };
 const licenseStatePath = () => path.join(app.getPath("userData"), "license-state.json");
@@ -74,4 +88,6 @@ ipcMain.handle("activate-license", async (_event, token: string) => {
 });
 process.on("uncaughtException", (error) => console.error("[desktop] uncaught exception", error));
 process.on("unhandledRejection", (error) => console.error("[desktop] unhandled rejection", error));
-app.whenReady().then(createWindow).catch((error) => console.error("[desktop] startup failed", error)); app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+app.whenReady().then(() => { startLocalBackend(); createWindow(); }).catch((error) => console.error("[desktop] startup failed", error));
+app.on("before-quit", () => { if (backendProcess && !backendProcess.killed) backendProcess.kill(); });
+app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

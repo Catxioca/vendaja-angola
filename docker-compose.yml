@@ -3,22 +3,24 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: commerce
-      POSTGRES_PASSWORD: commerce
-      POSTGRES_DB: angola_commerce
-    ports: ["5432:5432"]
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
     volumes: [commerce-postgres:/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U commerce -d angola_commerce"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
   backend:
     build: ./apps/backend
     environment:
-      DATABASE_URL: postgresql://commerce:commerce@postgres:5432/angola_commerce
-      JWT_SECRET: ${JWT_SECRET:-development-only-change-me}
-      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER must be set}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      FISCAL_CONFIG_KEY: ${FISCAL_CONFIG_KEY:?FISCAL_CONFIG_KEY must be set}
+      COMPANY_NIF: ${COMPANY_NIF:?COMPANY_NIF must be set}
+      COMPANY_NAME: ${COMPANY_NAME:?COMPANY_NAME must be set}
+      PORT: ${PORT:-4000}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     ports: ["4000:4000"]
     depends_on:

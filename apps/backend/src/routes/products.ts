@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../server.js";
@@ -17,12 +18,24 @@ const productInput = z.object({ sku: z.string().min(1), barcode: z.string().min(
 productRouter.post("/", async (req, res) => {
   const parsed = productInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_product", details: parsed.error.flatten() }); return; }
-  if (((req as AuthRequest).user?.role ?? "").toUpperCase() !== "ADMIN") { res.status(403).json({ error: "admin_required" }); return; }
-  const product = await prisma.product.create({ data: parsed.data }); await audit("PRODUCT_CREATED", (req as AuthRequest).user?.id, "PRODUCT", product.id, parsed.data); res.status(201).json(product);
+  if (!["ADMIN", "ROLE_ADMIN"].includes(((req as AuthRequest).user?.role ?? "").toUpperCase())) { res.status(403).json({ error: "admin_required" }); return; }
+  const actorId = (req as AuthRequest).user?.id;
+  const product = await prisma.$transaction(async (tx) => {
+    const created = await tx.product.create({ data: parsed.data });
+    if (created.stock > 0) {
+      const movementId = randomUUID();
+      await tx.stockMovement.create({ data: { id: movementId, productId: created.id, quantity: created.stock, type: "ENTRY", reference: `PRODUCT_INITIAL_STOCK:${movementId}`, operatorId: actorId, note: "Stock inicial do produto" } });
+    }
+    return created;
+  });
+  await audit("PRODUCT_CREATED", actorId, "PRODUCT", product.id, parsed.data); res.status(201).json(product);
 });
 productRouter.patch("/:id", requireAdminOrGrant("PRODUCT_UPDATED"), async (req, res) => {
   const parsed = productInput.partial().safeParse(req.body); if (!parsed.success) { res.status(400).json({ error: "invalid_product" }); return; }
-  const product = await prisma.product.update({ where: { id: String(req.params.id) }, data: parsed.data }); await audit("PRODUCT_UPDATED", (req as AuthRequest).user?.id, "PRODUCT", product.id, parsed.data); res.json(product);
+  const updateSchema = productInput.partial().omit({ stock: true });
+  const update = updateSchema.safeParse(req.body);
+  if (!update.success) { res.status(400).json({ error: "invalid_product" }); return; }
+  const product = await prisma.product.update({ where: { id: String(req.params.id) }, data: update.data }); await audit("PRODUCT_UPDATED", (req as AuthRequest).user?.id, "PRODUCT", product.id, update.data); res.json(product);
 });
 productRouter.delete("/:id", requireAdminOrGrant("PRODUCT_DELETED"), async (req, res) => {
   const id = String(req.params.id);

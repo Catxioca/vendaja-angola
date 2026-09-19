@@ -8,3 +8,10 @@ scripts-license-private.pem
 private.pem
 cliente.key
 licenca-*.key
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/private*.pem
+**/*-private.pem
+**/*private*.pem

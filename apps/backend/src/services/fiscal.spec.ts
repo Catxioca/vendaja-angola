@@ -2,12 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 process.env.NODE_ENV = "test";
+process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+process.env.JWT_SECRET = crypto.randomBytes(32).toString("base64url");
+process.env.FISCAL_CONFIG_KEY = crypto.randomBytes(32).toString("base64url");
+process.env.COMPANY_NIF = "000000000";
+process.env.COMPANY_NAME = "Empresa de Teste";
 const { deterministicInvoiceHash, finalAgTQrString, signFiscalPayload, validateVatExemption } = await import("./fiscal.js");
 
 test("invoice hash and AGT QR are deterministic and contain required fields", () => {
   const hash = deterministicInvoiceHash({ number: "A/000001", date: "2026-01-02", totalCents: 11400, taxCents: 1400 });
   assert.equal(hash, deterministicInvoiceHash({ number: "A/000001", date: "2026-01-02", totalCents: 11400, taxCents: 1400 }));
-  assert.match(finalAgTQrString({ issuerNif: "123456789", customerNif: "987654321", date: "2026-01-02", totalCents: 11400, taxCents: 1400, hash }), /A:123456789;N:987654321;D:2026-01-02;T:114.00;I:14.00;H:/);
+  assert.match(finalAgTQrString({ issuerNif: "123456789", customerNif: "987654321", number: "A/INVOICE/000001", date: "2026-01-02", totalCents: 11400, taxCents: 1400, hash }), /A:123456789;F:A\/INVOICE\/000001;N:987654321;D:2026-01-02;T:114.00;I:14.00;H:/);
 });
 
 test("zero VAT requires a configurable-format exemption code", () => {

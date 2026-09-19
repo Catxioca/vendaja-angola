@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
+import { loadEnv } from "./config/env.js";
 import { authRouter } from "./routes/auth.js";
 import { productRouter } from "./routes/products.js";
 import { saleRouter } from "./routes/sales.js";
@@ -11,12 +12,22 @@ import { stockRouter } from "./routes/stock.js";
 import { hrRouter } from "./routes/hr.js";
 import { accountingRouter } from "./routes/accounting.js";
 import { localCashRouter } from "./routes/fiscal.js";
+import { assertImmutableFiscalMutation } from "./services/fiscal-integrity.js";
 
+const config = loadEnv();
 export const prisma = new PrismaClient();
+prisma.$use(async (params, next) => {
+  assertImmutableFiscalMutation(params.model, params.action, params.args?.data, params.args?.where);
+  return next(params.args);
+});
 const app = express();
-app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") ?? true }));
+app.use(cors({ origin: config.CORS_ORIGIN?.split(",") ?? true }));
 app.use(express.json({ limit: "1mb" }));
 app.get("/health", async (_req, res) => {
+  try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ok", service: "backend" }); }
+  catch { res.status(503).json({ status: "unavailable" }); }
+});
+app.get("/api/health", async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ok", service: "backend" }); }
   catch { res.status(503).json({ status: "unavailable" }); }
 });
@@ -30,8 +41,9 @@ app.use("/api/v1/stock", stockRouter);
 app.use("/api/v1/hr", hrRouter);
 app.use("/api/v1/accounting", accountingRouter);
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err); res.status(500).json({ error: "internal_error" });
+  console.error("[http] internal error");
+  res.status(500).json({ error: "internal_error" });
 });
-const port = Number(process.env.PORT ?? 4000);
+const port = config.PORT;
 if (process.env.NODE_ENV !== "test") app.listen(port, () => console.log(`API listening on ${port}`));
 export default app;

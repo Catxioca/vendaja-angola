@@ -1,10 +1,12 @@
 import { Router } from "express";
+import { getEnv } from "../config/env.js";
 import { z } from "zod";
 import QRCode from "qrcode";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { prisma } from "../server.js";
 import { audit, verifyPassword } from "../services/security.js";
 import { encryptFiscalSecret, exportSaftAo, qrPayload, validateSaftXml } from "../services/fiscal.js";
+import { canManageCashSession } from "../services/authorization.js";
 export const localCashRouter = Router();
 localCashRouter.post("/open-shift", async (req, res) => {
   const parsed = z.object({ pin: z.string().regex(/^\d{4,6}$/), initialAmount: z.number().nonnegative(), registerNumber: z.string().min(1).default("01") }).safeParse(req.body);
@@ -84,7 +86,12 @@ fiscalRouter.post("/cash/open", async (req, res) => {
 fiscalRouter.post("/cash/:id/close", async (req, res) => {
   const closingCents = z.object({ closingCents: z.number().int().nonnegative() }).parse(req.body).closingCents;
   const userId = (req as AuthRequest).user?.id as string;
-  const session = await prisma.cashSession.update({ where: { id: String(req.params.id) }, data: { closedBy: userId, closedAt: new Date(), closingCents } }); await audit("CASH_CLOSE", userId, "CASH_SESSION", session.id); res.json(session);
+  const role = (req as AuthRequest).user?.role;
+  const existing = await prisma.cashSession.findUnique({ where: { id: String(req.params.id) } });
+  if (!existing) { res.status(404).json({ error: "cash_session_not_found" }); return; }
+  if (!canManageCashSession(existing.openedBy, userId, role)) { res.status(403).json({ error: "cash_session_forbidden" }); return; }
+  if (existing.closedAt) { res.status(409).json({ error: "cash_session_already_closed" }); return; }
+  const session = await prisma.cashSession.update({ where: { id: String(req.params.id), }, data: { closedBy: userId, closedAt: new Date(), closingCents } }); await audit("CASH_CLOSE", userId, "CASH_SESSION", session.id); res.json(session);
 });
 fiscalRouter.get("/cash/current", async (req, res) => {
   const userId = (req as AuthRequest).user?.id as string;
@@ -96,9 +103,14 @@ fiscalRouter.get("/cash/current", async (req, res) => {
 fiscalRouter.post("/cash/:id/adjustment", async (req, res) => {
   const parsed = z.object({ type: z.enum(["SANGRIA", "SUPRIMENTO"]), amountCents: z.number().int().positive() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_cash_adjustment" }); return; }
+  const userId = (req as AuthRequest).user?.id as string;
+  const existing = await prisma.cashSession.findUnique({ where: { id: String(req.params.id) } });
+  if (!existing) { res.status(404).json({ error: "cash_session_not_found" }); return; }
+  if (!canManageCashSession(existing.openedBy, userId, (req as AuthRequest).user?.role)) { res.status(403).json({ error: "cash_session_forbidden" }); return; }
+  if (existing.closedAt) { res.status(409).json({ error: "cash_session_closed" }); return; }
   const field = parsed.data.type === "SANGRIA" ? "sangriaCents" : "suprimentoCents";
   const session = await prisma.cashSession.update({ where: { id: String(req.params.id) }, data: { [field]: { increment: parsed.data.amountCents } } });
-  await audit(parsed.data.type, (req as AuthRequest).user?.id, "CASH_SESSION", session.id, { amountCents: parsed.data.amountCents });
+  await audit(parsed.data.type, userId, "CASH_SESSION", session.id, { amountCents: parsed.data.amountCents });
   res.json(session);
 });
 fiscalRouter.get("/saft", async (req, res) => {
@@ -109,7 +121,7 @@ fiscalRouter.get("/saft", async (req, res) => {
   res.type("application/xml").send(xml);
 });
 
-fiscalRouter.get("/saft/validation", (_req, res) => res.json({ mode: process.env.SAFT_AO_XSD_PATH ? "configured-xsd" : "structural", caveat: "This is not official AGT legal homologation. Configure the current official XSD to validate against it." }));
+fiscalRouter.get("/saft/validation", (_req, res) => res.json({ mode: getEnv().SAFT_AO_XSD_PATH ? "configured-xsd" : "structural", caveat: "This is not official AGT legal homologation. Configure the current official XSD to validate against it." }));
 
 fiscalRouter.get("/sales/:id/qr.svg", async (req, res) => {
   const sale = await prisma.sale.findUnique({ where: { id: String(req.params.id) } });
@@ -120,10 +132,13 @@ fiscalRouter.get("/sales/:id/qr.svg", async (req, res) => {
 fiscalRouter.post("/qr/validate", async (req, res) => {
   const parsed = z.object({ payload: z.string().min(1).max(1000) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_qr_payload" }); return; }
-  const parts = parsed.data.payload.trim().split("|");
-  if (parts.length !== 4 || parts[0] !== "AO") { res.status(400).json({ error: "invalid_agt_qr" }); return; }
-  const sale = await prisma.sale.findUnique({ where: { number: parts[1] }, include: { lines: { include: { product: true } } } });
-  if (!sale || sale.fiscalHash !== parts[3] || String(sale.totalCents) !== parts[2]) { res.status(404).json({ error: "qr_validation_failed" }); return; }
+  const fields = new Map(parsed.data.payload.trim().split(";").map((field) => field.split(/:(.*)/s, 2) as [string, string]));
+  const number = fields.get("F");
+  const hash = fields.get("H");
+  const total = fields.get("T");
+  if (fields.get("A") !== getEnv().COMPANY_NIF || !number || !hash || !total) { res.status(400).json({ error: "invalid_agt_qr" }); return; }
+  const sale = await prisma.sale.findUnique({ where: { number }, include: { lines: { include: { product: true } } } });
+  if (!sale || sale.fiscalHash !== hash || Number(total) !== sale.totalCents / 100) { res.status(404).json({ error: "qr_validation_failed" }); return; }
   res.json({ valid: true, document: { number: sale.number, totalCents: sale.totalCents, taxCents: sale.taxCents, issuedAt: sale.createdAt, hash: sale.fiscalHash, status: sale.status }, lines: sale.lines.map((line) => ({ product: line.product.name, quantity: line.quantity, unitPriceCents: line.unitPriceCents })) });
 });
 

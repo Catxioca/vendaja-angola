@@ -48,4 +48,4 @@ async function main() {
   console.log(`Seed concluído: administrador ${admin.email}, ${products.length} produtos e ${exemptions.length} códigos fiscais.`);
 }
 
-main().catch((error) => { console.error("Seed falhou", error); process.exitCode = 1; }).finally(() => prisma.$disconnect());
+main().catch(() => { console.error("Seed falhou"); process.exitCode = 1; }).finally(() => prisma.$disconnect());

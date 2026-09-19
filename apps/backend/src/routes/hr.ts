@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../server.js";
-import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 
 const employeeSchema = z.object({
@@ -66,13 +66,14 @@ function calculatePayroll(employee: { baseSalaryCents: number; foodAllowanceCent
 
 export const hrRouter = Router();
 hrRouter.use(requireAuth);
+hrRouter.use(requireModuleAccess("HR"));
 
 hrRouter.get("/employees", async (_req, res) => {
   const employees = await prisma.employee.findMany({ orderBy: { fullName: "asc" } });
   res.json(employees);
 });
 
-hrRouter.post("/employees", requireRole("ADMIN"), async (req, res) => {
+hrRouter.post("/employees", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR"), async (req, res) => {
   const parsed = employeeSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_employee", details: parsed.error.flatten() });
@@ -84,7 +85,7 @@ hrRouter.post("/employees", requireRole("ADMIN"), async (req, res) => {
   res.status(201).json(employee);
 });
 
-hrRouter.patch("/employees/:id", requireRole("ADMIN"), async (req, res) => {
+hrRouter.patch("/employees/:id", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR"), async (req, res) => {
   const parsed = employeeSchema.partial().safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_employee_update" });
@@ -107,7 +108,7 @@ hrRouter.get("/payrolls", async (_req, res) => {
   res.json(rows);
 });
 
-hrRouter.post("/payrolls/compute", requireRole("ADMIN"), async (req, res) => {
+hrRouter.post("/payrolls/compute", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR"), async (req, res) => {
   const parsed = payrollSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "invalid_payroll_request", details: parsed.error.flatten() });
@@ -149,7 +150,7 @@ hrRouter.post("/payrolls/compute", requireRole("ADMIN"), async (req, res) => {
   res.status(201).json({ ...row, payslip: { employee: employee.fullName, nif: employee.nif, month: parsed.data.month, grossSalaryCents: row.grossSalaryCents, netSalaryCents: row.netSalaryCents, irtCents: row.irtCents, inssEmployeeCents: row.inssEmployeeCents } });
 });
 
-hrRouter.post("/payrolls/process-month", requireRole("ADMIN"), async (req, res) => {
+hrRouter.post("/payrolls/process-month", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR"), async (req, res) => {
   const parsed = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_payroll_month" }); return; }
   const employees = await prisma.employee.findMany({ where: { active: true } });

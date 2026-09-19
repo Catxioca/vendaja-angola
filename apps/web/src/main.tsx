@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createPosStorage, SyncEngine, formatKwanza } from "@angola/shared";
 import { ErrorBoundary } from "./ErrorBoundary";
 import "./style.css";
-const api = () => (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__ ?? "http://localhost:4000";
+const api = () => (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__ ?? (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "http://localhost:4000";
 function Login({ onLogin }: { onLogin: () => void }) {
   const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState("");
   async function submit(event: FormEvent) { event.preventDefault(); const response = await fetch(`${api()}/api/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier, password }) }); const data = await response.json(); if (!response.ok) { setError("Credenciais inválidas."); return; } localStorage.setItem("accessToken", data.accessToken); localStorage.setItem("refreshToken", data.refreshToken); localStorage.setItem("posUser", JSON.stringify(data.user)); onLogin(); }

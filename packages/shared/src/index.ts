@@ -18,7 +18,7 @@ export type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "CREDIT" | "MIXED";
 export type SyncOperation = "CREATE" | "UPDATE";
 export interface Product { id: string; sku: string; name: string; priceCents: number; stock: number; taxRate: number; active: boolean; exemptionCode?: string | null; costCents?: number; barcode?: string | null; qrCode?: string | null; imageUrl?: string | null; brand?: string | null; model?: string | null; categoryId?: string | null; }
 export interface SaleLine { productId: string; quantity: number; unitPriceCents: number; taxRate: number; }
-export interface Sale { id: string; number: string; lines: SaleLine[]; subtotalCents: number; taxCents: number; totalCents: number; currency: typeof CURRENCY; createdAt: string; discountCents?: number; paymentMethod?: PaymentMethod; cashCents?: number; cardCents?: number; transferCents?: number; cashSessionId?: string | null; customerName?: string; customerNif?: string; fiscalType?: FiscalDocumentType; operatorName?: string; operatorNif?: string; operatorPhone?: string; terminalId?: string; }
+export interface Sale { id: string; number: string; lines: SaleLine[]; subtotalCents: number; taxCents: number; totalCents: number; currency: typeof CURRENCY; createdAt: string; discountCents?: number; paymentMethod?: PaymentMethod; cashCents?: number; cardCents?: number; transferCents?: number; cashSessionId?: string | null; customerName?: string; customerNif?: string; customerAddress?: string; fiscalType?: FiscalDocumentType; operatorName?: string; operatorNif?: string; operatorPhone?: string; terminalId?: string; }
 export interface SyncMutation { id: string; operation: SyncOperation; entity: "SALE" | "PRODUCT"; payload: unknown; occurredAt: string; }
 export interface SyncRequest { deviceId: string; mutations: SyncMutation[]; lastCursor?: string; }
 export interface SyncResponse { accepted: string[]; rejected: { id: string; reason: string }[]; cursor: string; }
@@ -167,11 +167,48 @@ export class SyncEngine {
 }
 
 export interface Printer { print(receipt: Uint8Array): Promise<void>; }
-export function escPosReceipt(sale: Sale): Uint8Array {
+export interface ReceiptOptions {
+  company?: { name?: string; nif?: string; address?: string; phone?: string; logoText?: string };
+  fiscalHash?: string;
+  qrPayload?: string;
+  bank?: { name?: string; holder?: string; iban?: string };
+  validUntil?: string;
+}
+function amountWords(cents: number): string {
+  const units = ["ZERO", "UM", "DOIS", "TRÊS", "QUATRO", "CINCO", "SEIS", "SETE", "OITO", "NOVE", "DEZ", "ONZE", "DOZE", "TREZE", "CATORZE", "QUINZE", "DEZASSEIS", "DEZASSETE", "DEZOITO", "DEZANOVE"];
+  const tens = ["", "", "VINTE", "TRINTA", "QUARENTA", "CINQUENTA", "SESSENTA", "SETENTA", "OITENTA", "NOVENTA"];
+  const integer = Math.floor(Math.max(0, cents) / 100);
+  if (integer < 20) return units[integer] ?? "ZERO";
+  if (integer < 100) return `${tens[Math.floor(integer / 10)]}${integer % 10 ? ` E ${units[integer % 10]}` : ""}`;
+  return `${integer} Kz`;
+}
+function paymentLabel(method?: PaymentMethod): string {
+  return method === "CASH" ? "Dinheiro" : method === "CARD" ? "TPA / Multicaixa" : method === "TRANSFER" ? "Multicaixa Express / Transferência" : method === "CREDIT" ? "Fiado / Crédito" : "Pagamento misto";
+}
+export function escPosReceipt(sale: Sale, options: ReceiptOptions = {}): Uint8Array {
   const truncate = (value: string, size: number) => value.length > size ? `${value.slice(0, Math.max(0, size - 1))}…` : value;
-  const title = sale.fiscalType === "PROFORMA" ? "FATURA PROFORMA" : "FATURA/RECIBO";
-  const text = [`\x1b\x40`, `VENDAJA ANGOLA\n`, `${title} ${sale.number}\n`, `Atendido por: ${sale.operatorName ?? "—"}\n`, `Caixa: ${sale.terminalId ?? "01"}\n`, ...sale.lines.map((line) => `${truncate(line.productId, 20).padEnd(20)} ${String(line.quantity).padStart(3)} ${formatKwanza(line.unitPriceCents * line.quantity)}\n`), `TOTAL ${formatKwanza(sale.totalCents)}\n`, ...(sale.fiscalType === "PROFORMA" ? ["Este documento não serve de fatura / Isento de validação fiscal\n"] : ["Processado por programa certificado n.º XX/AGT/2026\n"]), `\n\x1d\x56\x00`].join("");
-  return new TextEncoder().encode(text);
+  const company = options.company ?? {};
+  const proforma = sale.fiscalType === "PROFORMA";
+  const lines = [
+    "\x1b\x40", "\x1b\x61\x01", `${company.logoText ?? ""}\n`, `${company.name ?? "VendaJá Angola"}\n`,
+    `NIF: ${company.nif ?? "—"}\n${company.address ?? "—"}\nTel: ${company.phone ?? "—"}\n`,
+    "\x1b\x61\x00", `${proforma ? "FATURA PROFORMA (NÃO VALE COMO DOCUMENTO FISCAL)" : "FATURA/RECIBO"}\n`,
+    `${sale.number}  ${new Date(sale.createdAt).toLocaleString("pt-AO")}\n`,
+    `Atendido por: ${sale.operatorName ?? "—"} | Caixa: ${sale.terminalId ?? "01"}\n`,
+    "--------------------------------\n", "Descrição          Qtd x P.Un. Total\n",
+    ...sale.lines.map((line) => `${truncate(line.productId, 17).padEnd(17)} ${line.quantity} x ${formatKwanza(line.unitPriceCents).replace(" Kz", "")} ${formatKwanza(line.unitPriceCents * line.quantity)} IVA ${Number(line.taxRate * 100).toFixed(0)}%\n`),
+    "--------------------------------\n", `TOTAL GERAL                 ${formatKwanza(sale.totalCents)}\n`,
+    `Por extenso: ${amountWords(sale.totalCents)} Kz\n`, `Pagamento: ${paymentLabel(sale.paymentMethod)}\n`,
+    `Troco: ${formatKwanza(Math.max(0, (sale.cashCents ?? 0) - sale.totalCents))}\n`,
+    ...(proforma ? [`Válido até: ${options.validUntil ?? "—"}\n`, `Banco: ${options.bank?.name ?? "—"}\nTitular: ${options.bank?.holder ?? "—"}\nIBAN: ${options.bank?.iban ?? "—"}\n`, "Este documento não serve de fatura.\n"] : [
+      "Taxa (%)       Base / Valor Líquido   Imposto\n", `14%             ${formatKwanza(sale.subtotalCents)}       ${formatKwanza(sale.taxCents)}\n`,
+      `${options.fiscalHash ?? "--------"}-Processado por programa certificado n.º XX/AGT/2026\n`, `QR AGT: ${options.qrPayload ?? ""}\n`,
+    ]),
+    `Cliente: ${sale.customerName ?? "Consumidor Final"} | NIF: ${sale.customerNif ?? "—"}\n${sale.customerAddress ?? ""}\n`,
+    "Os bens/serviços foram colocados à disposição na data da factura. Talão indispensável em caso de troca\n",
+    "\x1d\x68\x50\x1d\x77\x02\x1d\x6b\x49", `${sale.number}\x00`, "\n\n\x1d\x56\x00",
+  ].join("");
+  return new TextEncoder().encode(lines);
 }
 export function fiscalHash(sale: Sale, previousHash = ""): string {
   const input = `${previousHash}|${sale.id}|${sale.totalCents}|${sale.createdAt}`;

@@ -14,7 +14,7 @@ model User {
   phone String?
   passwordHash String
   pinHash String?
-  role String @default("operator")
+  role String @default("ROLE_CASHIER")
   refreshTokens RefreshToken[]
   auditLogs AuditLog[]
   sales Sale[] @relation("SaleOperator")

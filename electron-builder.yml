@@ -9,6 +9,14 @@ files:
 extraResources:
   - from: public.pem
     to: public.pem
+  - from: apps/backend/dist
+    to: backend/dist
+  - from: apps/backend/package.json
+    to: backend/package.json
+  - from: apps/backend/node_modules/@prisma/client
+    to: backend/node_modules/@prisma/client
+  - from: apps/backend/node_modules/.prisma
+    to: backend/node_modules/.prisma
 asar: true
 publish: []
 win:

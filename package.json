@@ -1,6 +1,6 @@
 {
   "name": "angola-commerce-platform",
-  "version": "1.2.0",
+  "version": "2.2.0",
   "private": true,
   "description": "Hybrid Angola commerce, invoicing and point-of-sale platform",
   "workspaces": [

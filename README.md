@@ -34,6 +34,18 @@ npm run android:assemble   # APK: android/app/build/outputs/apk/release
 npm run android:bundle     # AAB: android/app/build/outputs/bundle/release
 ```
 
+Offline, reproducible tablet artifacts can be built from the checked-in npm and
+Gradle caches (no signing credentials are read):
+
+```sh
+npm run android:assemble:offline  # unsigned APK
+npm run android:bundle:offline    # unsigned AAB
+```
+
+The offline commands run the web build and Capacitor Android sync first, then
+invoke Gradle with `--offline`. They fail rather than downloading a missing
+dependency. Sign the resulting artifact in a separate release environment.
+
 Set `ANDROID_HOME` (or `ANDROID_SDK_ROOT`), `JAVA_HOME`, and `ANDROID_KEYSTORE_PATH`,
 `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_PASSWORD` in the
 release environment. Configure the corresponding signing values in
@@ -57,6 +69,18 @@ Desktop installers:
 npm run desktop:dist
 # produces Windows NSIS, Linux .deb, and macOS .dmg (macOS builds require macOS)
 ```
+
+For an offline Windows installer, pre-populate the Electron/electron-builder
+caches once, then run:
+
+```sh
+npm run desktop:installer:offline
+```
+
+This produces an unsigned NSIS installer with a deterministic
+`<product>-<version>-win-<arch>.exe` name, never publishes, and never attempts
+certificate discovery. The command fails if a required builder artifact is not
+already cached.
 
 Set `CSC_LINK`/`CSC_KEY_PASSWORD` for Electron Windows/macOS signing and
 `WIN_CSC_LINK`/`WIN_CSC_KEY_PASSWORD` where separate Windows credentials are used.

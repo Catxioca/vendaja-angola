@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "../server.js";
 import { normalizeRole, requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { issueAuthorizationGrant } from "../services/grants.js";
-import { audit, hashPassword, issueTokens, persistRefreshToken, tokenHash, verifyPassword } from "../services/security.js";
+import { audit, getLoginRateLimitState, hashPassword, issueTokens, persistRefreshToken, registerFailedLogin, registerSuccessfulLogin, tokenHash, verifyPassword } from "../services/security.js";
 export const authRouter = Router();
 authRouter.post("/verify-admin-pin", requireAuth, async (req, res) => {
   const actor = (req as AuthRequest).user;
@@ -97,11 +97,28 @@ authRouter.post("/login", async (req, res) => {
   const parsed = credentials.safeParse(req.body); if (!parsed.success) { res.status(400).json({ error: "invalid_credentials" }); return; }
   const identifier = (parsed.data.identifier ?? parsed.data.email!).trim();
   const normalizedIdentifier = identifier.toLowerCase();
+  const key = `login:${normalizedIdentifier}`;
+  const rateLimit = getLoginRateLimitState(key);
+  if (rateLimit.blocked) {
+    await audit("LOGIN_BLOCKED", undefined, "USER", undefined, { identifier: normalizedIdentifier, reason: "rate_limit" });
+    res.status(429).json({ error: "too_many_attempts", retryAfterMs: rateLimit.remaining });
+    return;
+  }
   const user = await prisma.user.findFirst({ where: { OR: [{ email: normalizedIdentifier }, { username: normalizedIdentifier }] } });
   const validCredential = user && parsed.data.mode === "pin"
     ? !!user.pinHash && parsed.data.password.length === 6 && await verifyPassword(parsed.data.password, user.pinHash)
     : !!user && await verifyPassword(parsed.data.password, user.passwordHash);
-  if (!user || !validCredential) { await audit("LOGIN_FAILED", user?.id); res.status(401).json({ error: "invalid_credentials" }); return; }
+  if (!user || !validCredential) {
+    const result = registerFailedLogin(key);
+    await audit("LOGIN_FAILED", user?.id, "USER", user?.id, { identifier: normalizedIdentifier, mode: parsed.data.mode, attempts: result.attempts, rateLimited: result.blocked });
+    if (result.blocked) {
+      res.status(429).json({ error: "too_many_attempts", retryAfterMs: result.remainingMs });
+      return;
+    }
+    res.status(401).json({ error: "invalid_credentials" });
+    return;
+  }
+  registerSuccessfulLogin(key);
   const tokens = issueTokens(user); await persistRefreshToken(user.id, tokens.refreshToken); await audit("LOGIN", user.id);
   res.json({
     ...tokens,
@@ -119,8 +136,13 @@ authRouter.post("/logout", requireAuth, async (req, res) => {
 authRouter.post("/refresh", async (req, res) => {
   const parsed = z.object({ refreshToken: z.string().min(20) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_refresh_token" }); return; }
-  const row = await prisma.refreshToken.findUnique({ where: { tokenHash: tokenHash(parsed.data.refreshToken) }, include: { user: true } });
-  if (!row || row.revokedAt || row.expiresAt < new Date()) { res.status(401).json({ error: "invalid_refresh_token" }); return; }
+  const hash = tokenHash(parsed.data.refreshToken);
+  const row = await prisma.refreshToken.findUnique({ where: { tokenHash: hash }, include: { user: true } });
+  if (!row || row.revokedAt || row.expiresAt < new Date()) {
+    await audit("REFRESH_TOKEN_REJECTED", undefined, "REFRESH_TOKEN", undefined, { reason: row ? "expired_or_revoked" : "missing" });
+    res.status(401).json({ error: "invalid_refresh_token" });
+    return;
+  }
   await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
   const tokens = issueTokens(row.user); await persistRefreshToken(row.userId, tokens.refreshToken); res.json(tokens);
 });

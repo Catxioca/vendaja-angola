@@ -21,7 +21,18 @@ prisma.$use(async (params, next) => {
   return next(params.args);
 });
 const app = express();
-app.use(cors({ origin: config.CORS_ORIGIN?.split(",") ?? true }));
+const allowedOrigins = (config.CORS_ORIGIN ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.length === 0) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-admin-authorization", "x-correlation-id"],
+}));
 app.use(express.json({ limit: "1mb" }));
 app.get("/health", async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ok", service: "backend" }); }
@@ -40,8 +51,8 @@ app.use("/api/v1/cashier", localCashRouter);
 app.use("/api/v1/stock", stockRouter);
 app.use("/api/v1/hr", hrRouter);
 app.use("/api/v1/accounting", accountingRouter);
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("[http] internal error");
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[http] internal error", { path: req.path, message: err.message });
   res.status(500).json({ error: "internal_error" });
 });
 const port = config.PORT;

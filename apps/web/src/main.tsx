@@ -10,12 +10,39 @@ function Login({ onLogin }: { onLogin: () => void }) {
   return <main className="startup-loading"><form onSubmit={(e) => void submit(e)}><h1>VendaJá Angola</h1><input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required /><input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} /><button>Entrar</button>{error && <p>{error}</p>}</form></main>;
 }
 function Dashboard() {
-  console.log("[web] Dashboard render");
   const [showConfig, setShowConfig] = useState(false);
   const [online, setOnline] = useState(typeof navigator === "undefined" || navigator.onLine);
+  const [sales, setSales] = useState<Array<{ id: string; number: string; totalCents: number; status: string; createdAt: string }>>([]);
+  const [salesError, setSalesError] = useState("");
   const storage = useMemo(() => createPosStorage("angola-pos-pwa"), []);
-  useEffect(() => { const deviceId = localStorage.getItem("deviceId") ?? crypto.randomUUID(); localStorage.setItem("deviceId", deviceId); const engine = new SyncEngine(storage, { apiUrl: (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__ ?? "http://localhost:4000", token: localStorage.getItem("accessToken") ?? "", deviceId, onState: setOnline }); engine.start(); return () => engine.stop(); }, [storage]);
-  return <main><nav><b>VendaJá Angola</b><span>{online ? "● Online" : "● Offline"}　 Dashboard　 Produtos　 Vendas　 Relatórios　 <button onClick={() => setShowConfig(!showConfig)}>Configuração fiscal</button></span></nav><h1>Visão geral</h1>{showConfig && <section><h2>Configuração AGT</h2><p>Credenciais armazenadas cifradas; nunca são exibidas. A configuração requer acesso de administrador.</p><input type="file" aria-label="Certificado PFX" /><input type="password" placeholder="Passphrase do certificado" /><p><small>Validação SAF-T: estrutural até ser configurado o XSD oficial atual. Isto não constitui homologação legal.</small></p></section>}<div className="cards"><article><small>Vendas hoje</small><strong>{formatKwanza(18450000)}</strong><em>+12,4%</em></article><article><small>Documentos emitidos</small><strong>128</strong><em>Este mês</em></article><article><small>Stock baixo</small><strong>7 produtos</strong><em>Requer atenção</em></article></div><section><h2>Últimas vendas</h2><table><thead><tr><th>Documento</th><th>Data</th><th>Total</th><th>Estado</th></tr></thead><tbody>{["FT AO-2025-00128","FR AO-2025-00127","FT AO-2025-00126"].map((n, i) => <tr key={n}><td>{n}</td><td>Hoje, {10 + i}:2{i}</td><td>{formatKwanza(250000 + i * 125000)}</td><td><span className="ok">Emitido</span></td></tr>)}</tbody></table></section></main>;
+  useEffect(() => {
+    const deviceId = localStorage.getItem("deviceId") ?? crypto.randomUUID();
+    localStorage.setItem("deviceId", deviceId);
+    const engine = new SyncEngine(storage, { apiUrl: api(), token: localStorage.getItem("accessToken") ?? "", deviceId, onState: setOnline });
+    engine.start();
+    return () => engine.stop();
+  }, [storage]);
+  useEffect(() => {
+    if (!online) return;
+    const controller = new AbortController();
+    fetch(`${api()}/api/v1/sales`, {
+      headers: { authorization: `Bearer ${localStorage.getItem("accessToken") ?? ""}` },
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Não foi possível carregar as vendas (${response.status}).`);
+      const data = await response.json() as Array<{ id: string; number: string; totalCents: number; status: string; createdAt: string }>;
+      setSales(data);
+      setSalesError("");
+    }).catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setSalesError(error instanceof Error ? error.message : "Não foi possível carregar as vendas.");
+    });
+    return () => controller.abort();
+  }, [online]);
+  const today = new Date().toISOString().slice(0, 10);
+  const todaySales = sales.filter((sale) => sale.createdAt.slice(0, 10) === today && sale.status !== "CANCELLED");
+  const todayTotal = todaySales.reduce((sum, sale) => sum + sale.totalCents, 0);
+  return <main><nav><b>VendaJá Angola</b><span>{online ? "● Online" : "● Offline"}　 Dashboard　 Produtos　 Vendas　 Relatórios　 <button onClick={() => setShowConfig(!showConfig)}>Configuração fiscal</button></span></nav><h1>Visão geral</h1>{!online && <p className="offline-notice">Modo offline ativo. As vendas locais serão sincronizadas quando a ligação for restabelecida.</p>}{showConfig && <section><h2>Configuração AGT</h2><p>Credenciais armazenadas cifradas; nunca são exibidas. A configuração requer acesso de administrador.</p><input type="file" aria-label="Certificado PFX" /><input type="password" placeholder="Passphrase do certificado" /><p><small>Validação SAF-T: estrutural até ser configurado o XSD oficial atual. Isto não constitui homologação legal.</small></p></section>}<div className="cards"><article><small>Vendas hoje</small><strong>{formatKwanza(todayTotal)}</strong><em>{todaySales.length} documentos</em></article><article><small>Documentos carregados</small><strong>{sales.length}</strong><em>{online ? "Dados do servidor" : "Dados disponíveis localmente"}</em></article><article><small>Estado da sincronização</small><strong>{online ? "Online" : "Offline"}</strong><em>{online ? "Sincronização automática ativa" : "Fila local preservada"}</em></article></div><section><h2>Últimas vendas</h2>{salesError && <p className="error-message">{salesError}</p>}<table><thead><tr><th>Documento</th><th>Data</th><th>Total</th><th>Estado</th></tr></thead><tbody>{sales.slice(0, 10).map((sale) => <tr key={sale.id}><td>{sale.number}</td><td>{new Date(sale.createdAt).toLocaleString("pt-AO")}</td><td>{formatKwanza(sale.totalCents)}</td><td><span className={sale.status === "CANCELLED" ? "cancelled" : "ok"}>{sale.status === "CANCELLED" ? "Anulado" : "Emitido"}</span></td></tr>)}{!sales.length && !salesError && <tr><td colSpan={4}>Ainda não existem vendas carregadas.</td></tr>}</tbody></table></section></main>;
 }
 function Boot() {
   const [ready, setReady] = useState(false);

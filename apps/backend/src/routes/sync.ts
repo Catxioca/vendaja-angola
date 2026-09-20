@@ -97,7 +97,13 @@ syncRouter.post("/", async (req, res) => {
         validateSalePayments(calculated.totalCents, { cashCents: sale.cashCents, cardCents: sale.cardCents, transferCents: sale.transferCents }, sale.fiscalType);
         if (sale.fiscalType !== "PROFORMA" && (sale.cashCents > 0 || sale.cashSessionId)) {
           if (!sale.cashSessionId) throw new Error("cash_session_required");
-          const session = await tx.cashSession.findUnique({ where: { id: sale.cashSessionId } });
+          const lockedSessions = await tx.$queryRaw<Array<{ id: string; openedBy: string; closedAt: Date | null }>>`
+            SELECT "id", "openedBy", "closedAt"
+            FROM "CashSession"
+            WHERE "id" = ${sale.cashSessionId}
+            FOR UPDATE
+          `;
+          const session = lockedSessions[0];
           if (!session) throw new Error("cash_session_not_found");
           if (!canManageCashSession(session.openedBy, operatorId, (req as AuthRequest).user?.role)) throw new Error("cash_session_forbidden");
           if (session.closedAt) throw new Error("cash_session_closed");

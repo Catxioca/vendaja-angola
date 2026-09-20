@@ -55,14 +55,26 @@ saleRouter.post("/", async (req, res) => {
       const hash = deterministicInvoiceHash({ number, date: issuedAt, subtotalCents: calculated.subtotalCents, totalCents: calculated.totalCents, taxCents: calculated.taxCents });
       const signed = signFiscalPayload(`${number}|${issuedAt.toISOString().slice(0, 10)}|${calculated.subtotalCents}|${calculated.totalCents}|${calculated.taxCents}|${hash}`);
       const qrCode = qrPayload({ number, totalCents: calculated.totalCents, taxCents: calculated.taxCents, issuedAt, hash });
+      if (sale.fiscalType !== "PROFORMA" && sale.cashSessionId) {
+        const lockedSessions = await tx.$queryRaw<Array<{ id: string; openedBy: string; closedAt: Date | null }>>`
+          SELECT "id", "openedBy", "closedAt"
+          FROM "CashSession"
+          WHERE "id" = ${sale.cashSessionId}
+          FOR UPDATE
+        `;
+        const lockedSession = lockedSessions[0];
+        if (!lockedSession) throw new Error("cash_session_not_found");
+        if (lockedSession.closedAt) throw new Error("cash_session_closed");
+      }
       if (sale.fiscalType !== "PROFORMA") for (const item of calculated.lines) {
         const updated = await tx.product.updateMany({ where: { id: item.productId, stock: { gte: item.quantity }, active: true }, data: { stock: { decrement: item.quantity } } });
         if (updated.count !== 1) throw new Error(`insufficient_stock:${item.productId}`);
         await tx.stockMovement.create({ data: { productId: item.productId, quantity: -item.quantity, type: "SALE", reference: sale.id, operatorId } });
       }
-      return tx.sale.create({ data: { id: sale.id, number, series, subtotalCents: calculated.subtotalCents, taxCents: calculated.taxCents, totalCents: calculated.totalCents, createdAt: issuedAt, fiscalType: sale.fiscalType, operatorId, operatorName: sale.operatorName, operatorNif: sale.operatorNif, operatorPhone: sale.operatorPhone, terminalId: sale.terminalId, cashSessionId: sale.fiscalType === "PROFORMA" ? null : sale.cashSessionId ?? null, cashCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cashCents, cardCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cardCents, transferCents: sale.fiscalType === "PROFORMA" ? 0 : sale.transferCents, fiscalHash: hash, fiscalSignature: signed.signature, signatureAlgorithm: signed.algorithm, qrCode, lines: { create: calculated.lines } }, include: { lines: true } });
+      const created = await tx.sale.create({ data: { id: sale.id, number, series, subtotalCents: calculated.subtotalCents, taxCents: calculated.taxCents, totalCents: calculated.totalCents, createdAt: issuedAt, fiscalType: sale.fiscalType, operatorId, operatorName: sale.operatorName, operatorNif: sale.operatorNif, operatorPhone: sale.operatorPhone, terminalId: sale.terminalId, cashSessionId: sale.fiscalType === "PROFORMA" ? null : sale.cashSessionId ?? null, cashCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cashCents, cardCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cardCents, transferCents: sale.fiscalType === "PROFORMA" ? 0 : sale.transferCents, fiscalHash: hash, fiscalSignature: signed.signature, signatureAlgorithm: signed.algorithm, qrCode, lines: { create: calculated.lines } }, include: { lines: true } });
+      await audit("SALE_CREATED", operatorId, "SALE", created.id, { stage: "TRANSACTION" }, tx);
+      return created;
     });
-    await audit("SALE_CREATED", operatorId, "SALE", saved.id);
     res.status(201).json(saved);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -81,7 +93,13 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
       if (!existing) return { kind: "not_found" as const };
       if (existing.status === "CANCELLED") return { kind: "already_cancelled" as const, sale: existing };
       if (existing.cashSessionId) {
-        const cashSession = await tx.cashSession.findUnique({ where: { id: existing.cashSessionId } });
+        const lockedSessions = await tx.$queryRaw<Array<{ id: string; openedBy: string; closedAt: Date | null }>>`
+          SELECT "id", "openedBy", "closedAt"
+          FROM "CashSession"
+          WHERE "id" = ${existing.cashSessionId}
+          FOR UPDATE
+        `;
+        const cashSession = lockedSessions[0];
         if (!cashSession) throw new Error("cash_session_not_found");
         if (cashSession.closedAt) throw new Error("cash_session_closed");
       }
@@ -112,6 +130,7 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
       }
       const cancelled = await tx.sale.findUnique({ where: { id: saleId }, include: { lines: true } });
       if (!cancelled) throw new Error("sale_not_found_after_cancel");
+      await audit("SALE_CANCELLED", actorId, "SALE", cancelled.id, { stage: "TRANSACTION", cashSessionId: cancelled.cashSessionId }, tx);
       return { kind: "cancelled" as const, sale: cancelled };
     });
     if (result.kind === "not_found") {
@@ -124,7 +143,6 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
       res.status(200).json({ ...result.sale, diagnostics: { stage: "TRANSACTION", status: "already_cancelled" } });
       return;
     }
-    await audit("SALE_CANCELLED", actorId, "SALE", result.sale.id, { stage: "TRANSACTION", cashSessionId: result.sale.cashSessionId });
     res.json({ ...result.sale, diagnostics: { stage: "TRANSACTION", status: "cancelled" } });
   } catch (error) {
     console.error("[sale-cancel] transaction update failed", { saleId, actorId, stage: "TRANSACTION", error: error instanceof Error ? error.message : "unknown_error" });

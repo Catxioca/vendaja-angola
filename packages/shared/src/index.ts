@@ -66,9 +66,27 @@ export function createBrowserPosStorage(name = "angola-pos"): LocalPosStorage {
     const db = await open();
     await new Promise<void>((resolve, reject) => { const request = db.transaction(store, "readwrite").objectStore(store).put(value); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error); });
   }
+  async function saveSaleAndEnqueue(sale: Sale, mutation: SyncMutation): Promise<void> {
+    if (!indexed) {
+      const sales = memory<Sale>(`${name}:sales`).filter((item) => item.id !== sale.id);
+      const outbox = memory<SyncMutation>(`${name}:outbox`).filter((item) => item.id !== mutation.id);
+      sales.push(clone(sale)); outbox.push(clone(mutation));
+      memoryStore.set(`${name}:sales`, sales); memoryStore.set(`${name}:outbox`, outbox);
+      return;
+    }
+    const db = await open();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(["sales", "outbox"], "readwrite");
+      transaction.objectStore("sales").put(sale);
+      transaction.objectStore("outbox").put(mutation);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error ?? new Error("Storage transaction aborted"));
+    });
+  }
   return {
     getSales: () => all<Sale>("sales"), saveSale: (sale) => put("sales", sale),
-    saveSaleAndEnqueue: async (sale, mutation) => { await put("sales", sale); await put("outbox", mutation); },
+    saveSaleAndEnqueue,
     getCustomers: () => all<Customer>("customers"), saveCustomer: (customer) => put("customers", customer),
     getCashEntries: () => all<CashEntry>("cash"), saveCashEntry: (entry) => put("cash", entry),
     getOutbox: () => all<SyncMutation>("outbox"), enqueue: (mutation) => put("outbox", mutation),
@@ -147,23 +165,48 @@ export function createPosStorage(name = "angola-pos"): LocalPosStorage {
 export interface SyncEngineOptions { apiUrl: string; token: string; deviceId: string; intervalMs?: number; onState?: (online: boolean) => void; }
 export class SyncEngine {
   private timer?: ReturnType<typeof setInterval>;
-  private online = typeof navigator === "undefined" ? true : navigator.onLine;
+  private online = typeof navigator === "undefined" ? true : navigator.onLine !== false;
+  private flushing?: Promise<SyncResponse | undefined>;
+  private started = false;
+  private readonly handleOnline = () => this.setOnline(true);
+  private readonly handleOffline = () => this.setOnline(false);
   constructor(private readonly storage: LocalPosStorage, private readonly options: SyncEngineOptions) {}
   async flush(): Promise<SyncResponse | undefined> {
-    if (typeof navigator !== "undefined" && !navigator.onLine) return undefined;
-    const mutations = await this.storage.getOutbox(); if (!mutations.length) return undefined;
-    const response = await fetch(`${this.options.apiUrl.replace(/\/$/, "")}/api/v1/sync`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.options.token}`, "x-device-id": this.options.deviceId }, body: JSON.stringify({ deviceId: this.options.deviceId, mutations }) });
-    if (!response.ok) throw new Error(`Sync failed (${response.status})`);
-    const result = await response.json() as SyncResponse; await this.storage.acknowledge(result.accepted); return result;
+    if (this.flushing) return this.flushing;
+    this.flushing = this.flushOnce().finally(() => { this.flushing = undefined; });
+    return this.flushing;
   }
   start(): void {
-    if (typeof window === "undefined") return;
-    const set = (online: boolean) => { this.online = online; this.options.onState?.(online); if (online) void this.flush().catch(() => undefined); };
-    window.addEventListener("online", () => set(true)); window.addEventListener("offline", () => set(false));
+    if (typeof window === "undefined" || this.started) return;
+    this.started = true;
+    window.addEventListener("online", this.handleOnline); window.addEventListener("offline", this.handleOffline);
     this.timer = setInterval(() => { if (this.online) void this.flush().catch(() => undefined); }, this.options.intervalMs ?? 30000);
     void this.flush().catch(() => undefined);
   }
-  stop(): void { if (this.timer) clearInterval(this.timer); }
+  stop(): void {
+    if (!this.started) return;
+    if (this.timer) clearInterval(this.timer);
+    window.removeEventListener("online", this.handleOnline); window.removeEventListener("offline", this.handleOffline);
+    this.timer = undefined; this.started = false;
+  }
+  private setOnline(online: boolean): void {
+    this.online = online; this.options.onState?.(online);
+    if (online) void this.flush().catch(() => undefined);
+  }
+  private async flushOnce(): Promise<SyncResponse | undefined> {
+    if (!this.online || (typeof navigator !== "undefined" && navigator.onLine === false)) return undefined;
+    const mutations = await this.storage.getOutbox(); if (!mutations.length) return undefined;
+    const response = await fetch(`${this.options.apiUrl.replace(/\/$/, "")}/api/v1/sync`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${this.options.token}`, "x-device-id": this.options.deviceId },
+      body: JSON.stringify({ deviceId: this.options.deviceId, mutations }),
+    });
+    if (!response.ok) throw new Error(`Sync failed (${response.status})`);
+    const result = await response.json() as SyncResponse;
+    const sentIds = new Set(mutations.map((mutation) => mutation.id));
+    await this.storage.acknowledge(result.accepted.filter((id) => sentIds.has(id)));
+    return result;
+  }
 }
 
 export interface Printer { print(receipt: Uint8Array): Promise<void>; }

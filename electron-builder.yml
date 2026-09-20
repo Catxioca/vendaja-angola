@@ -3,8 +3,10 @@ productName: VendaJá Angola
 directories:
   output: release
   app: apps/desktop
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 files:
   - dist/**
+  - "!dist/win-unpacked/**"
   - package.json
 extraResources:
   - from: public.pem
@@ -18,9 +20,11 @@ extraResources:
   - from: apps/backend/node_modules/.prisma
     to: backend/node_modules/.prisma
 asar: true
+compression: maximum
 publish: []
 win:
   target: nsis
+  signAndEditExecutable: false
 linux:
   target: AppImage
 mac:

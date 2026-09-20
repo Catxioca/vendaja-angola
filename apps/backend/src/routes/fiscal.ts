@@ -16,12 +16,16 @@ localCashRouter.post("/open-shift", async (req, res) => {
     let attendant: typeof attendants[number] | undefined;
     for (const candidate of attendants) if (candidate.pinHash && await verifyPassword(parsed.data.pin, candidate.pinHash)) { attendant = candidate; break; }
     if (!attendant) { console.warn("[cashier/open-shift] attendant PIN mismatch"); res.status(403).json({ error: "invalid_attendant_pin", message: "PIN de atendedor inválido ou não cadastrado." }); return; }
-    const existing = await prisma.cashSession.findFirst({ where: { openedBy: attendant.id, closedAt: null }, orderBy: { openedAt: "desc" } });
-    if (existing) { res.status(409).json({ error: "cash_already_open", message: "Este atendedor já possui um turno aberto.", session: existing }); return; }
-    const session = await prisma.cashSession.create({ data: { openedBy: attendant.id, openingCents: Math.round(parsed.data.initialAmount * 100), operatorName: attendant.displayName ?? "Atendedor", operatorNif: attendant.nif ?? "", operatorPhone: attendant.phone ?? "", terminalId: parsed.data.registerNumber } });
-    await audit("CASH_OPEN", attendant.id, "CASH_SESSION", session.id, { mode: "ATTENDANT_PIN", terminalId: parsed.data.registerNumber });
+    const session = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`cash-open:${attendant.id}`}))`;
+      const existing = await tx.cashSession.findFirst({ where: { openedBy: attendant.id, closedAt: null }, orderBy: { openedAt: "desc" } });
+      if (existing) throw new Error("cash_already_open");
+      const created = await tx.cashSession.create({ data: { openedBy: attendant.id, openingCents: Math.round(parsed.data.initialAmount * 100), operatorName: attendant.displayName ?? "Atendedor", operatorNif: attendant.nif ?? "", operatorPhone: attendant.phone ?? "", terminalId: parsed.data.registerNumber } });
+      await audit("CASH_OPEN", attendant.id, "CASH_SESSION", created.id, { mode: "ATTENDANT_PIN", terminalId: parsed.data.registerNumber }, tx);
+      return created;
+    });
     res.status(200).json({ ...session, attendant: { id: attendant.id, name: attendant.displayName, nif: attendant.nif, phone: attendant.phone } });
-  } catch (error) { console.error("[cashier/open-shift] failed", error); res.status(500).json({ error: "cash_open_failed", message: "Não foi possível abrir o turno localmente." }); }
+  } catch (error) { console.error("[cashier/open-shift] failed", error); res.status(error instanceof Error && error.message === "cash_already_open" ? 409 : 500).json({ error: error instanceof Error && error.message === "cash_already_open" ? "cash_already_open" : "cash_open_failed", message: "Não foi possível abrir o turno localmente." }); }
 });
 export const fiscalRouter = Router();
 fiscalRouter.use(requireAuth);
@@ -72,15 +76,19 @@ fiscalRouter.post("/cash/open", async (req, res) => {
       res.status(403).json({ error: "invalid_pin", message: "PIN inválido." });
       return;
     }
-    const existing = await prisma.cashSession.findFirst({ where: { openedBy: userId, closedAt: null }, orderBy: { openedAt: "desc" } });
-    if (existing) { res.status(409).json({ error: "cash_already_open", message: "Já existe um turno aberto.", session: existing }); return; }
-    const session = await prisma.cashSession.create({ data: { openedBy: userId, openingCents, operatorName, operatorNif, operatorPhone, terminalId } });
-    await audit("CASH_OPEN", userId, "CASH_SESSION", session.id, { supervisorId, operatorName, operatorNif, operatorPhone, terminalId });
+    const session = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`cash-open:${userId}`}))`;
+      const existing = await tx.cashSession.findFirst({ where: { openedBy: userId, closedAt: null }, orderBy: { openedAt: "desc" } });
+      if (existing) throw new Error("cash_already_open");
+      const created = await tx.cashSession.create({ data: { openedBy: userId, openingCents, operatorName, operatorNif, operatorPhone, terminalId } });
+      await audit("CASH_OPEN", userId, "CASH_SESSION", created.id, { supervisorId, operatorName, operatorNif, operatorPhone, terminalId }, tx);
+      return created;
+    });
     res.status(200).json(session);
   } catch (error) {
     console.error("[cash/open] database or authentication failure", { userId, error });
     await audit("CASH_OPEN_FAILED", userId, "CASH_SESSION", undefined, { stage: "PERSISTENCE", reason: error instanceof Error ? error.message : "unknown_error" }).catch((auditError) => console.error("[cash/open] audit failure", auditError));
-    res.status(500).json({ error: "cash_open_failed", message: "Não foi possível abrir o turno no servidor." });
+    res.status(error instanceof Error && error.message === "cash_already_open" ? 409 : 500).json({ error: error instanceof Error && error.message === "cash_already_open" ? "cash_already_open" : "cash_open_failed", message: "Não foi possível abrir o turno no servidor." });
   }
 });
 fiscalRouter.post("/cash/:id/close", async (req, res) => {
@@ -91,7 +99,22 @@ fiscalRouter.post("/cash/:id/close", async (req, res) => {
   if (!existing) { res.status(404).json({ error: "cash_session_not_found" }); return; }
   if (!canManageCashSession(existing.openedBy, userId, role)) { res.status(403).json({ error: "cash_session_forbidden" }); return; }
   if (existing.closedAt) { res.status(409).json({ error: "cash_session_already_closed" }); return; }
-  const session = await prisma.cashSession.update({ where: { id: String(req.params.id), }, data: { closedBy: userId, closedAt: new Date(), closingCents } }); await audit("CASH_CLOSE", userId, "CASH_SESSION", session.id); res.json(session);
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.cashSession.updateMany({ where: { id: String(req.params.id), closedAt: null }, data: { closedBy: userId, closedAt: new Date(), closingCents } });
+      if (updated.count !== 1) throw new Error("cash_session_already_closed");
+      const session = await tx.cashSession.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+      await audit("CASH_CLOSE", userId, "CASH_SESSION", session.id, { stage: "TRANSACTION" }, tx);
+      return session;
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === "cash_session_already_closed") {
+      res.status(409).json({ error: "cash_session_already_closed" });
+      return;
+    }
+    throw error;
+  }
 });
 fiscalRouter.get("/cash/current", async (req, res) => {
   const userId = (req as AuthRequest).user?.id as string;
@@ -109,9 +132,22 @@ fiscalRouter.post("/cash/:id/adjustment", async (req, res) => {
   if (!canManageCashSession(existing.openedBy, userId, (req as AuthRequest).user?.role)) { res.status(403).json({ error: "cash_session_forbidden" }); return; }
   if (existing.closedAt) { res.status(409).json({ error: "cash_session_closed" }); return; }
   const field = parsed.data.type === "SANGRIA" ? "sangriaCents" : "suprimentoCents";
-  const session = await prisma.cashSession.update({ where: { id: String(req.params.id) }, data: { [field]: { increment: parsed.data.amountCents } } });
-  await audit(parsed.data.type, userId, "CASH_SESSION", session.id, { amountCents: parsed.data.amountCents });
-  res.json(session);
+  try {
+    const session = await prisma.$transaction(async (tx) => {
+      const updated = await tx.cashSession.updateMany({ where: { id: String(req.params.id), closedAt: null }, data: { [field]: { increment: parsed.data.amountCents } } });
+      if (updated.count !== 1) throw new Error("cash_session_closed");
+      const changed = await tx.cashSession.findUniqueOrThrow({ where: { id: String(req.params.id) } });
+      await audit(parsed.data.type, userId, "CASH_SESSION", changed.id, { amountCents: parsed.data.amountCents, stage: "TRANSACTION" }, tx);
+      return changed;
+    });
+    res.json(session);
+  } catch (error) {
+    if (error instanceof Error && error.message === "cash_session_closed") {
+      res.status(409).json({ error: "cash_session_closed" });
+      return;
+    }
+    throw error;
+  }
 });
 fiscalRouter.get("/saft", async (req, res) => {
   const parsed = z.object({ from: z.coerce.date(), to: z.coerce.date() }).safeParse(req.query);

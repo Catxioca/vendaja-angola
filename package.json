@@ -22,8 +22,12 @@
     "cap:ios": "npx cap open ios",
     "android:assemble": "npm run cap:sync:android && gradlew.bat -p android assembleRelease",
     "android:bundle": "npm run cap:sync:android && gradlew.bat -p android bundleRelease",
+    "android:assemble:offline": "node scripts/build-android.mjs apk",
+    "android:bundle:offline": "node scripts/build-android.mjs aab",
     "ios:open": "npm run cap:sync:ios && npx cap open ios",
     "desktop:dist": "npm run build:desktop && electron-builder --win nsis --linux deb --mac dmg",
+    "desktop:installer:offline": "node scripts/package-desktop-offline.mjs",
+    "install:offline": "npm ci --offline",
     "db:generate": "npm --workspace @angola/backend run prisma:generate",
     "db:migrate": "npm --workspace @angola/backend run prisma:migrate",
     "db:seed": "npm --workspace @angola/backend run db:seed"

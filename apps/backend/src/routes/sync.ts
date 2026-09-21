@@ -8,6 +8,7 @@ import { deterministicInvoiceHash, nextFiscalNumber, qrPayload, signFiscalPayloa
 import { equivalentSale } from "../services/sync-idempotency.js";
 import { validateSalePayments } from "../services/payment-integrity.js";
 import { canManageCashSession } from "../services/authorization.js";
+import { validateCreditSale } from "../services/credit-integrity.js";
 
 export const syncRouter = Router();
 syncRouter.use(requireAuth);
@@ -24,6 +25,9 @@ const saleSchema = z.object({
   cashCents: z.number().int().nonnegative().default(0),
   cardCents: z.number().int().nonnegative().default(0),
   transferCents: z.number().int().nonnegative().default(0),
+  paymentMethod: z.enum(["CASH", "CARD", "TRANSFER", "CREDIT"]).default("CASH"),
+  customerId: z.string().uuid().nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
   fiscalType: z.enum(["INVOICE", "INVOICE_RECEIPT", "PROFORMA"]).default("INVOICE_RECEIPT"),
   lines: z.array(z.object({
     productId: z.string(),
@@ -94,7 +98,13 @@ syncRouter.post("/", async (req, res) => {
         }
 
         const calculated = await calculateSale(tx, sale.lines.map(({ productId, quantity }) => ({ productId, quantity })), sale.discountCents);
-        validateSalePayments(calculated.totalCents, { cashCents: sale.cashCents, cardCents: sale.cardCents, transferCents: sale.transferCents }, sale.fiscalType);
+        if (sale.paymentMethod === "CREDIT") {
+          try { validateCreditSale(sale); } catch (error) { throw new SyncMutationRejected(error instanceof Error ? error.message : "invalid_credit_sale"); }
+          const locked = await tx.$queryRaw<Array<{ id: string; active: boolean; creditLimitCents: number; outstandingDebtCents: number }>>`SELECT "id","active","creditLimitCents","outstandingDebtCents" FROM "Customer" WHERE "id" = ${sale.customerId} FOR UPDATE`;
+          if (!locked[0] || !locked[0].active) throw new SyncMutationRejected("customer_inactive");
+          if (locked[0].outstandingDebtCents + calculated.totalCents > locked[0].creditLimitCents) throw new SyncMutationRejected("credit_limit_exceeded");
+          await tx.customer.update({ where: { id: locked[0].id }, data: { outstandingDebtCents: { increment: calculated.totalCents } } });
+        } else validateSalePayments(calculated.totalCents, { cashCents: sale.cashCents, cardCents: sale.cardCents, transferCents: sale.transferCents }, sale.fiscalType);
         if (sale.fiscalType !== "PROFORMA" && (sale.cashCents > 0 || sale.cashSessionId)) {
           if (!sale.cashSessionId) throw new Error("cash_session_required");
           const lockedSessions = await tx.$queryRaw<Array<{ id: string; openedBy: string; closedAt: Date | null }>>`
@@ -124,15 +134,18 @@ syncRouter.post("/", async (req, res) => {
             taxCents: calculated.taxCents,
             totalCents: calculated.totalCents,
             fiscalType: sale.fiscalType,
+            paymentMethod: sale.paymentMethod,
+            customerId: sale.customerId ?? null,
+            dueDate: sale.dueDate ? new Date(sale.dueDate) : null,
             fiscalHash: hash,
             fiscalSignature: signed.signature,
             signatureAlgorithm: signed.algorithm,
             qrCode,
             operatorId,
-            cashSessionId: sale.fiscalType === "PROFORMA" ? null : sale.cashSessionId ?? null,
-            cashCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cashCents,
-            cardCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cardCents,
-            transferCents: sale.fiscalType === "PROFORMA" ? 0 : sale.transferCents,
+            cashSessionId: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? null : sale.cashSessionId ?? null,
+            cashCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cashCents,
+            cardCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cardCents,
+            transferCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.transferCents,
             lines: { create: calculated.lines },
           },
         });

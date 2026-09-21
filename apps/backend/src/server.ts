@@ -1,7 +1,8 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./db.js";
+export { prisma };
 import { loadEnv } from "./config/env.js";
 import { authRouter } from "./routes/auth.js";
 import { productRouter } from "./routes/products.js";
@@ -11,11 +12,15 @@ import { fiscalRouter } from "./routes/fiscal.js";
 import { stockRouter } from "./routes/stock.js";
 import { hrRouter } from "./routes/hr.js";
 import { accountingRouter } from "./routes/accounting.js";
+import { customerRouter, receivableRouter } from "./routes/customers.js";
 import { localCashRouter } from "./routes/fiscal.js";
+import { payableRouter, supplierRouter, purchaseRouter } from "./routes/purchases.js";
+import { expenseRouter } from "./routes/expenses.js";
+import { reportsRouter } from "./routes/reports.js";
+import { cashflowRouter } from "./routes/cashflow.js";
 import { assertImmutableFiscalMutation } from "./services/fiscal-integrity.js";
 
 const config = loadEnv();
-export const prisma = new PrismaClient();
 prisma.$use(async (params, next) => {
   assertImmutableFiscalMutation(params.model, params.action, params.args?.data, params.args?.where);
   return next(params.args);
@@ -51,6 +56,14 @@ app.use("/api/v1/cashier", localCashRouter);
 app.use("/api/v1/stock", stockRouter);
 app.use("/api/v1/hr", hrRouter);
 app.use("/api/v1/accounting", accountingRouter);
+app.use("/api/v1/customers", customerRouter);
+app.use("/api/v1/receivables", receivableRouter);
+app.use("/api/v1/suppliers", supplierRouter);
+app.use("/api/v1/purchases", purchaseRouter);
+app.use("/api/v1/payables", payableRouter);
+app.use("/api/v1/expenses", expenseRouter);
+app.use("/api/v1/reports", reportsRouter);
+app.use("/api/v1/cashflow", cashflowRouter);
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[http] internal error", { path: req.path, message: err.message });
   res.status(500).json({ error: "internal_error" });

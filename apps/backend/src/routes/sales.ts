@@ -8,10 +8,11 @@ import { deterministicInvoiceHash, nextFiscalNumber, qrPayload, signFiscalPayloa
 import { calculateSale } from "../services/sale-calculation.js";
 import { validateSalePayments } from "../services/payment-integrity.js";
 import { canManageCashSession } from "../services/authorization.js";
+import { validateCreditSale } from "../services/credit-integrity.js";
 export const saleRouter = Router();
 saleRouter.use(requireAuth);
 const line = z.object({ productId: z.string(), quantity: z.number().int().positive(), unitPriceCents: z.number().int().nonnegative().optional(), taxRate: z.number().min(0).max(1).optional() });
-const input = z.object({ id: z.string().uuid(), number: z.string().min(1).optional(), lines: z.array(line).min(1), subtotalCents: z.number().int().nonnegative().optional(), taxCents: z.number().int().nonnegative().optional(), totalCents: z.number().int().nonnegative().optional(), discountCents: z.number().int().nonnegative().optional(), createdAt: z.string().datetime().optional(), fiscalType: z.enum(["INVOICE", "INVOICE_RECEIPT", "PROFORMA"]).default("INVOICE_RECEIPT"), cashSessionId: z.string().uuid().nullable().optional(), cashCents: z.number().int().nonnegative().default(0), cardCents: z.number().int().nonnegative().default(0), transferCents: z.number().int().nonnegative().default(0), operatorName: z.string().optional(), operatorNif: z.string().optional(), operatorPhone: z.string().optional(), terminalId: z.string().optional() });
+const input = z.object({ id: z.string().uuid(), number: z.string().min(1).optional(), lines: z.array(line).min(1), subtotalCents: z.number().int().nonnegative().optional(), taxCents: z.number().int().nonnegative().optional(), totalCents: z.number().int().nonnegative().optional(), discountCents: z.number().int().nonnegative().optional(), createdAt: z.string().datetime().optional(), fiscalType: z.enum(["INVOICE", "INVOICE_RECEIPT", "PROFORMA"]).default("INVOICE_RECEIPT"), paymentMethod: z.enum(["CASH", "CARD", "TRANSFER", "CREDIT"]).default("CASH"), customerId: z.string().uuid().nullable().optional(), dueDate: z.string().datetime().nullable().optional(), cashSessionId: z.string().uuid().nullable().optional(), cashCents: z.number().int().nonnegative().default(0), cardCents: z.number().int().nonnegative().default(0), transferCents: z.number().int().nonnegative().default(0), operatorName: z.string().optional(), operatorNif: z.string().optional(), operatorPhone: z.string().optional(), terminalId: z.string().optional() });
 saleRouter.get("/", async (_req, res) => {
   try {
     res.json(await prisma.sale.findMany({ include: { lines: true }, orderBy: { createdAt: "desc" }, take: 100 }));
@@ -34,7 +35,9 @@ saleRouter.post("/", async (req, res) => {
     return;
   }
   try {
-    validateSalePayments(calculated.totalCents, { cashCents: sale.cashCents, cardCents: sale.cardCents, transferCents: sale.transferCents }, sale.fiscalType);
+    if (sale.paymentMethod === "CREDIT") {
+      validateCreditSale(sale);
+    } else validateSalePayments(calculated.totalCents, { cashCents: sale.cashCents, cardCents: sale.cardCents, transferCents: sale.transferCents }, sale.fiscalType);
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "invalid_payment" });
     return;
@@ -43,6 +46,13 @@ saleRouter.post("/", async (req, res) => {
   const operatorId = (req as AuthRequest).user?.id;
   try {
     const saved = await prisma.$transaction(async (tx) => {
+      if (sale.paymentMethod === "CREDIT") {
+        const locked = await tx.$queryRaw<Array<{ id: string; active: boolean; creditLimitCents: number; outstandingDebtCents: number }>>`SELECT "id","active","creditLimitCents","outstandingDebtCents" FROM "Customer" WHERE "id" = ${sale.customerId} FOR UPDATE`;
+        const customer = locked[0];
+        if (!customer || !customer.active) throw new Error("customer_inactive");
+        if (customer.outstandingDebtCents + calculated.totalCents > customer.creditLimitCents) throw new Error("credit_limit_exceeded");
+        await tx.customer.update({ where: { id: customer.id }, data: { outstandingDebtCents: { increment: calculated.totalCents } } });
+      }
       if (sale.fiscalType !== "PROFORMA" && (sale.cashCents > 0 || sale.cashSessionId)) {
         if (!sale.cashSessionId) throw new Error("cash_session_required");
         const session = await tx.cashSession.findUnique({ where: { id: sale.cashSessionId } });
@@ -71,7 +81,7 @@ saleRouter.post("/", async (req, res) => {
         if (updated.count !== 1) throw new Error(`insufficient_stock:${item.productId}`);
         await tx.stockMovement.create({ data: { productId: item.productId, quantity: -item.quantity, type: "SALE", reference: sale.id, operatorId } });
       }
-      const created = await tx.sale.create({ data: { id: sale.id, number, series, subtotalCents: calculated.subtotalCents, taxCents: calculated.taxCents, totalCents: calculated.totalCents, createdAt: issuedAt, fiscalType: sale.fiscalType, operatorId, operatorName: sale.operatorName, operatorNif: sale.operatorNif, operatorPhone: sale.operatorPhone, terminalId: sale.terminalId, cashSessionId: sale.fiscalType === "PROFORMA" ? null : sale.cashSessionId ?? null, cashCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cashCents, cardCents: sale.fiscalType === "PROFORMA" ? 0 : sale.cardCents, transferCents: sale.fiscalType === "PROFORMA" ? 0 : sale.transferCents, fiscalHash: hash, fiscalSignature: signed.signature, signatureAlgorithm: signed.algorithm, qrCode, lines: { create: calculated.lines } }, include: { lines: true } });
+      const created = await tx.sale.create({ data: { id: sale.id, number, series, subtotalCents: calculated.subtotalCents, taxCents: calculated.taxCents, totalCents: calculated.totalCents, createdAt: issuedAt, fiscalType: sale.fiscalType, paymentMethod: sale.paymentMethod, customerId: sale.customerId ?? null, dueDate: sale.dueDate ? new Date(sale.dueDate) : null, operatorId, operatorName: sale.operatorName, operatorNif: sale.operatorNif, operatorPhone: sale.operatorPhone, terminalId: sale.terminalId, cashSessionId: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? null : sale.cashSessionId ?? null, cashCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cashCents, cardCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cardCents, transferCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.transferCents, fiscalHash: hash, fiscalSignature: signed.signature, signatureAlgorithm: signed.algorithm, qrCode, lines: { create: calculated.lines } }, include: { lines: true } });
       await audit("SALE_CREATED", operatorId, "SALE", created.id, { stage: "TRANSACTION" }, tx);
       return created;
     });
@@ -80,6 +90,11 @@ saleRouter.post("/", async (req, res) => {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const concurrent = await prisma.sale.findUnique({ where: { id: sale.id }, include: { lines: true } });
       if (concurrent) { res.status(200).json(concurrent); return; }
+    }
+    const code = error instanceof Error ? error.message : "";
+    if (["credit_customer_due_date_required", "credit_payment_not_allowed", "customer_inactive", "credit_limit_exceeded"].includes(code)) {
+      res.status(400).json({ error: code });
+      return;
     }
     throw error;
   }
@@ -111,6 +126,9 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
         const cancelled = await tx.sale.findUnique({ where: { id: saleId }, include: { lines: true } });
         if (cancelled?.status === "CANCELLED") return { kind: "already_cancelled" as const, sale: cancelled };
         return { kind: "not_found" as const };
+      }
+      if (existing.paymentMethod === "CREDIT" && existing.customerId) {
+        await tx.customer.update({ where: { id: existing.customerId }, data: { outstandingDebtCents: { decrement: existing.totalCents } } });
       }
       for (const item of existing.lines) {
         await tx.product.update({

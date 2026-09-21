@@ -18,7 +18,11 @@ model User {
   refreshTokens RefreshToken[]
   auditLogs AuditLog[]
   sales Sale[] @relation("SaleOperator")
+  receivablePayments ReceivablePayment[]
   stockMovements StockMovement[]
+  purchases Purchase[]
+  expenses Expense[]
+  payablePayments PayablePayment[]
   createdAt DateTime @default(now())
 }
 model Product {
@@ -44,6 +48,7 @@ model Product {
   categoryId String?
   category Category? @relation(fields: [categoryId], references: [id])
   stockMovements StockMovement[]
+  purchaseLines PurchaseLine[]
 }
 model Category {
   id String @id @default(uuid())
@@ -75,6 +80,8 @@ model Sale {
   customerNif String?
   customerId String?
   customer Customer? @relation(fields: [customerId], references: [id])
+  paymentMethod String @default("CASH")
+  dueDate DateTime?
   cancelledAt DateTime?
   cancelledBy String?
   operatorId String?
@@ -95,9 +102,32 @@ model Customer {
   nif String? @unique
   name String
   email String?
+  phone String?
   address String?
   sales Sale[]
+  receivablePayments ReceivablePayment[]
+  active Boolean @default(true)
+  creditLimitCents Int @default(0)
+  outstandingDebtCents Int @default(0)
+  updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
+}
+
+model ReceivablePayment {
+  id String @id @default(uuid())
+  customerId String
+  amountCents Int
+  paymentMethod String @default("CASH")
+  idempotencyKey String @unique
+  cashSessionId String?
+  operatorId String?
+  note String?
+  reference String?
+  receivedAt DateTime @default(now())
+  customer Customer @relation(fields: [customerId], references: [id])
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id])
+  operator User? @relation(fields: [operatorId], references: [id])
+  @@index([customerId, receivedAt])
 }
 
 model FiscalConfig {
@@ -120,11 +150,108 @@ model FiscalConfig {
 model Supplier {
   id String @id @default(uuid())
   name String
-  nif String?
+  nif String? @unique
   email String?
   phone String?
+  address String?
+  contactName String?
+  notes String?
+  code String? @unique
+  active Boolean @default(true)
   products Product[]
+  purchases Purchase[]
+  payables AccountPayable[]
+  expenses Expense[]
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Expense {
+  id String @id @default(uuid())
+  description String
+  category String
+  supplierId String?
+  documentNumber String?
+  amountCents Int
+  expenseDate DateTime @default(now())
+  paymentMethod String @default("CASH")
+  notes String?
+  status String @default("ACTIVE")
+  operatorId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+  operator User? @relation(fields: [operatorId], references: [id])
+  @@index([expenseDate, status])
+  @@index([category, expenseDate])
+  @@index([supplierId, expenseDate])
+}
+
+model Purchase {
+  id String @id @default(uuid())
+  number String @unique
+  supplierId String
+  operatorId String?
+  status String @default("DRAFT")
+  paymentMethod String @default("CASH")
+  subtotalCents Int
+  discountCents Int @default(0)
+  taxCents Int @default(0)
+  totalCents Int
+  documentNumber String?
+  purchasedAt DateTime @default(now())
+  confirmedAt DateTime?
+  notes String?
+  idempotencyKey String @unique
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  operator User? @relation(fields: [operatorId], references: [id])
+  lines PurchaseLine[]
+  payable AccountPayable?
+  @@index([supplierId, purchasedAt])
+}
+
+model PurchaseLine {
+  id String @id @default(uuid())
+  purchaseId String
+  productId String
+  quantity Int
+  unitCostCents Int
+  taxRate Decimal @db.Decimal(5,4)
+  totalCents Int
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  @@index([purchaseId])
+}
+
+model AccountPayable {
+  id String @id @default(uuid())
+  purchaseId String @unique
+  supplierId String
+  originalCents Int
+  paidCents Int @default(0)
+  dueDate DateTime
+  status String @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  payments PayablePayment[]
+  @@index([supplierId, status])
+}
+
+model PayablePayment {
+  id String @id @default(uuid())
+  payableId String
+  amountCents Int
+  paymentMethod String @default("TRANSFER")
+  idempotencyKey String @unique
+  reference String?
+  note String?
+  paidAt DateTime @default(now())
+  operatorId String?
+  payable AccountPayable @relation(fields: [payableId], references: [id])
+  operator User? @relation(fields: [operatorId], references: [id])
+  @@index([payableId, paidAt])
 }
 
 model StockMovement {
@@ -188,6 +315,7 @@ model CashSession {
   operatorPhone String?
   terminalId String?
   sales Sale[]
+  receivablePayments ReceivablePayment[]
 }
 
 model Employee {

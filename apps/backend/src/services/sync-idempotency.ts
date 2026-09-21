@@ -5,6 +5,9 @@ export type SaleIdentity = {
   cashCents?: number;
   cardCents?: number;
   transferCents?: number;
+  paymentMethod?: string;
+  customerId?: string | null;
+  dueDate?: Date | string | null;
 };
 
 export function equivalentSale(existing: SaleIdentity, requested: SaleIdentity) {
@@ -13,6 +16,9 @@ export function equivalentSale(existing: SaleIdentity, requested: SaleIdentity) 
   if ((existing.cashCents ?? 0) !== (requested.cashCents ?? 0)) return false;
   if ((existing.cardCents ?? 0) !== (requested.cardCents ?? 0)) return false;
   if ((existing.transferCents ?? 0) !== (requested.transferCents ?? 0)) return false;
+  if ((existing.paymentMethod ?? "CASH") !== (requested.paymentMethod ?? "CASH")) return false;
+  if ((existing.customerId ?? null) !== (requested.customerId ?? null)) return false;
+  if (String(existing.dueDate ?? "") !== String(requested.dueDate ?? "")) return false;
   const existingLines = existing.lines
     .map((line) => `${line.productId}:${line.quantity}`)
     .sort();

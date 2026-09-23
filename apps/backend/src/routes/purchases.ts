@@ -5,6 +5,7 @@ import { prisma } from "../server.js";
 import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { payableStatus, validatePaymentAmount } from "../services/payable-integrity.js";
+import { applyStockChange } from "../services/stock-ledger.js";
 
 export const supplierRouter = Router();
 export const purchaseRouter = Router();
@@ -59,6 +60,20 @@ supplierRouter.patch("/:id", requireRole("ADMIN"), async (req, res) => {
 supplierRouter.delete("/:id", requireRole("ADMIN"), async (req, res) => {
   try { res.json(await prisma.supplier.update({ where: { id: String(req.params.id) }, data: { active: false } })); }
   catch (error) { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") { res.status(404).json({ error: "supplier_not_found" }); return; } throw error; }
+});
+
+supplierRouter.get("/:id/prices", async (req, res) => {
+  const prices = await prisma.supplierProductPrice.findMany({ where: { supplierId: String(req.params.id), OR: [{ validTo: null }, { validTo: { gt: new Date() } }] }, include: { product: true }, orderBy: { validFrom: "desc" } });
+  res.json(prices);
+});
+
+supplierRouter.post("/:id/prices", requireRole("ADMIN"), async (req, res) => {
+  const parsed = z.object({ productId: z.string().uuid(), unitCostCents: z.number().int().nonnegative(), validFrom: z.coerce.date().optional(), validTo: z.coerce.date().optional().nullable() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_supplier_price" }); return; }
+  try {
+    const price = await prisma.supplierProductPrice.create({ data: { supplierId: String(req.params.id), ...parsed.data } });
+    res.status(201).json(price);
+  } catch { res.status(400).json({ error: "supplier_price_failed" }); }
 });
 
 const lineInput = z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), unitCostCents: z.number().int().nonnegative(), taxRate: z.number().min(0).max(1).default(0) });
@@ -137,16 +152,63 @@ purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
       const taxCents = lines.reduce((sum, line) => sum + Math.round(line.quantity * line.unitCostCents * line.taxRate), 0);
       const totalCents = subtotalCents - parsed.data.discountCents + taxCents;
       const purchase = await tx.purchase.create({ data: { number: parsed.data.number, supplierId: parsed.data.supplierId, operatorId: actorId, status: "CONFIRMED", paymentMethod: parsed.data.paymentMethod, subtotalCents, discountCents: parsed.data.discountCents, taxCents, totalCents, documentNumber: parsed.data.documentNumber ?? null, purchasedAt: parsed.data.purchasedAt, confirmedAt: new Date(), notes: parsed.data.notes ?? null, idempotencyKey: parsed.data.idempotencyKey, lines: { create: lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitCostCents: line.unitCostCents, taxRate: line.taxRate, totalCents: line.totalCents })) }, payable: parsed.data.paymentMethod === "CREDIT" ? { create: { supplierId: parsed.data.supplierId, originalCents: totalCents, dueDate: parsed.data.dueDate ?? new Date(Date.now() + 30 * 86400000) } } : undefined }, include: { lines: true, payable: true } });
-      for (const line of lines) {
-        await tx.product.update({ where: { id: line.productId }, data: { stock: { increment: line.quantity }, costCents: line.unitCostCents } });
-        await tx.stockMovement.create({ data: { productId: line.productId, quantity: line.quantity, type: "PURCHASE", supplierId: parsed.data.supplierId, reference: `PURCHASE:${purchase.id}`, operatorId: actorId } });
-      }
       await audit("PURCHASE_CONFIRMED", actorId, "PURCHASE", purchase.id, { totalCents }, tx);
       return purchase;
     });
+
     res.status(201).json(result);
   } catch (error) {
     const code = error instanceof Error ? error.message : "purchase_failed";
     res.status(code === "supplier_inactive" || code === "product_not_found" ? 409 : 400).json({ error: code });
+  }
+});
+
+const receiptInput = z.object({
+  reference: z.string().trim().min(1).max(120),
+  locationId: z.string().uuid(),
+  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive() })).min(1),
+});
+
+purchaseRouter.post("/:id/receipts", requireRole("ADMIN"), async (req, res) => {
+  const parsed = receiptInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_purchase_receipt" }); return; }
+  const purchaseId = String(req.params.id);
+  const operatorId = (req as AuthRequest).user?.id;
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const purchase = await tx.purchase.findUnique({ where: { id: purchaseId }, include: { lines: true } });
+      if (!purchase) throw new Error("purchase_not_found");
+      const existing = await tx.purchaseReceipt.findUnique({ where: { reference: parsed.data.reference }, include: { lines: true } });
+      if (existing) {
+        if (existing.purchaseId !== purchaseId) throw new Error("receipt_reference_reused");
+        const samePayload = existing.lines.length === parsed.data.lines.length
+          && existing.lines.every((line) => parsed.data.lines.some((candidate) => candidate.productId === line.productId && candidate.quantity === line.quantity));
+        if (!samePayload) throw new Error("receipt_reference_conflict");
+        return existing;
+      }
+      const ordered = new Map(purchase.lines.map((line) => [line.productId, line.quantity]));
+      const received = await tx.purchaseReceiptLine.findMany({ where: { receipt: { purchaseId } } });
+      const receivedByProduct = new Map<string, number>();
+      for (const line of received) receivedByProduct.set(line.productId, (receivedByProduct.get(line.productId) ?? 0) + line.quantity);
+      for (const line of parsed.data.lines) {
+        const remaining = (ordered.get(line.productId) ?? 0) - (receivedByProduct.get(line.productId) ?? 0);
+        if (remaining < line.quantity) throw new Error("receipt_exceeds_ordered");
+      }
+      const receipt = await tx.purchaseReceipt.create({ data: { purchaseId, reference: parsed.data.reference, operatorId, lines: { create: parsed.data.lines } }, include: { lines: true } });
+      for (const line of parsed.data.lines) {
+        const purchaseLine = purchase.lines.find((candidate) => candidate.productId === line.productId);
+        await applyStockChange(tx, { productId: line.productId, locationId: parsed.data.locationId, quantity: line.quantity, type: "PURCHASE_RECEIPT", reference: `RECEIPT:${receipt.id}`, operatorId, supplierId: purchase.supplierId });
+        await tx.product.update({ where: { id: line.productId }, data: { costCents: purchaseLine?.unitCostCents ?? undefined } });
+      }
+      const totalOrdered = purchase.lines.reduce((sum, line) => sum + line.quantity, 0);
+      const totalReceived = [...receivedByProduct.values()].reduce((sum, quantity) => sum + quantity, 0) + parsed.data.lines.reduce((sum, line) => sum + line.quantity, 0);
+      await tx.purchase.update({ where: { id: purchaseId }, data: { status: totalReceived >= totalOrdered ? "RECEIVED" : "PARTIALLY_RECEIVED" } });
+      return receipt;
+    });
+    await audit("PURCHASE_RECEIPT", operatorId, "PURCHASE_RECEIPT", result.id, { purchaseId });
+    res.status(201).json(result);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "purchase_receipt_failed";
+    res.status(code === "purchase_not_found" ? 404 : code === "receipt_exceeds_ordered" || code === "receipt_reference_conflict" ? 409 : 400).json({ error: code });
   }
 });

@@ -23,6 +23,7 @@ function readLocalProducts(): Product[] {
   try { const saved = JSON.parse(localStorage.getItem(localProductsKey) ?? "null"); if (Array.isArray(saved)) return saved as Product[]; } catch { /* use defaults */ }
   localStorage.setItem(localProductsKey, JSON.stringify(localProducts)); return localProducts;
 }
+
 function writeLocalProducts(items: Product[]) { localStorage.setItem(localProductsKey, JSON.stringify(items)); window.dispatchEvent(new CustomEvent("catalog-updated")); }
 async function request<T>(url: string, token: string, options: RequestInit = {}): Promise<T> {
   let response: Response | undefined;
@@ -60,6 +61,50 @@ function parseScannedProduct(value: string): Partial<ProductForm> {
     qrCode: raw,
     priceCents: read("price|preço|preco") ? money(read("price|preço|preco")!) : 0,
   };
+}
+
+export function StockDocumentsPanel({ api, token, admin, onError }: Props) {
+  const [tab, setTab] = useState("overview");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [locations, setLocations] = useState<Array<{ id: string; name: string }>>([]);
+  const [balances, setBalances] = useState<Array<{ product: Product; location: { name: string }; quantity: number; totalCostCents: number; averageCostCents: number }>>([]);
+  const [suggestions, setSuggestions] = useState<Array<{ name: string; currentStock: number; minStock: number; suggestedQuantity: number }>>([]);
+  const [purchases, setPurchases] = useState<Array<{ id: string; number: string; supplierId: string; lines: Array<{ productId: string; quantity: number }> }>>([]);
+  const [message, setMessage] = useState("");
+  const [form, setForm] = useState({ productId: "", quantity: "1", reference: "", locationId: "", sourceLocationId: "", destinationLocationId: "", purchaseId: "", documentType: "CUSTOMER_RETURN", series: "A", number: "", customerId: "", supplierId: "", lotNumber: "", serialNumber: "", expiresAt: "", requestNumber: "", quotationNumber: "", orderNumber: "", companyKey: "default", establishmentKey: "main" });
+  const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const load = async () => {
+    try {
+      const [catalog, warehouses, stock, reorder, purchaseList] = await Promise.all([
+        request<Product[]>(`${api}/api/v1/products`, token),
+        request<Array<{ locations: Array<{ id: string; name: string }> }>>(`${api}/api/v1/stock/warehouses`, token),
+        request<typeof balances>(`${api}/api/v1/stock/balances`, token),
+        request<typeof suggestions>(`${api}/api/v1/stock/reorder-suggestions`, token),
+        request<typeof purchases>(`${api}/api/v1/purchases`, token),
+      ]);
+      setProducts(catalog); setLocations(warehouses.flatMap((warehouse) => warehouse.locations)); setBalances(stock); setSuggestions(reorder); setPurchases(purchaseList);
+    } catch (error) { onError(error instanceof Error ? error.message : "Falha ao carregar stock e compras."); }
+  };
+  useEffect(() => { void load(); }, []);
+  const submit = async () => {
+    if (!admin) return onError("Apenas administradores podem executar esta operação.");
+    try {
+      const quantity = Number(form.quantity);
+      if (!form.productId || !form.reference && ["inventory", "transfer"].includes(tab)) throw new Error("Produto e referência são obrigatórios.");
+      let endpoint = ""; let body: unknown;
+      if (tab === "inventory") { endpoint = "/api/v1/stock/inventory-counts"; body = { locationId: form.locationId, reference: form.reference, lines: [{ productId: form.productId, countedQuantity: quantity }] }; }
+      else if (tab === "transfer") { endpoint = "/api/v1/stock/transfers"; body = { sourceLocationId: form.sourceLocationId, destinationLocationId: form.destinationLocationId, reference: form.reference, lines: [{ productId: form.productId, quantity }] }; }
+      else if (tab === "receipt") { endpoint = `/api/v1/purchases/${form.purchaseId}/receipts`; body = { reference: form.reference, locationId: form.locationId, lines: [{ productId: form.productId, quantity }] }; }
+      else if (tab === "returns") { endpoint = "/api/v1/commercial-documents"; body = { type: form.documentType, series: form.series, number: form.number || undefined, customerId: form.customerId || null, supplierId: form.supplierId || null, locationId: form.locationId, lines: [{ productId: form.productId, quantity, unitPriceCents: products.find((item) => item.id === form.productId)?.priceCents ?? 0, lotNumber: form.lotNumber || undefined, serialNumber: form.serialNumber || undefined, expiresAt: form.expiresAt || undefined }] }; }
+      else if (tab === "procurement") { endpoint = "/api/v1/procurement/requests"; body = { number: form.requestNumber, lines: [{ productId: form.productId, quantity }] }; }
+      else if (tab === "quotation") { endpoint = "/api/v1/procurement/quotations"; body = { number: form.quotationNumber, supplierId: form.supplierId, lines: [{ productId: form.productId, quantity, unitCostCents: money(form.quantity) }] }; }
+      else if (tab === "order") { endpoint = "/api/v1/procurement/orders"; body = { number: form.orderNumber, supplierId: form.supplierId, lines: [{ productId: form.productId, quantity, unitCostCents: money(form.quantity) }] }; }
+      else { endpoint = "/api/v1/commercial-documents/series"; body = { companyKey: form.companyKey, establishmentKey: form.establishmentKey, documentType: "CUSTOMER_RETURN", prefix: form.series }; }
+      await request(`${api}${endpoint}`, token, { method: "POST", body: JSON.stringify(body) }); setMessage("Operação concluída e auditada."); await load();
+    } catch (error) { onError(error instanceof Error ? error.message : "Falha na operação."); }
+  };
+  const field = (label: string, key: keyof typeof form, type = "text") => <label>{label}<input type={type} value={form[key]} onChange={(event) => update(key, event.target.value)} /></label>;
+  return <section className="panel"><h2>Stock, compras e documentos</h2><div className="modal-actions">{[["overview", "Resumo"], ["inventory", "Inventário"], ["transfer", "Transferência"], ["receipt", "Receção"], ["returns", "Devoluções"], ["procurement", "Pedido de cotação"], ["quotation", "Cotação"], ["order", "Ordem de compra"], ["series", "Séries"]].map(([key, label]) => <button key={String(key)} className={tab === key ? "checkout" : ""} onClick={() => setTab(String(key))}>{label}</button>)}</div>{message && <p className="success">{message}</p>}{tab === "overview" ? <><h3>Alertas de reposição</h3><table><thead><tr><th>Produto</th><th>Atual</th><th>Mínimo</th><th>Sugerido</th></tr></thead><tbody>{suggestions.map((item) => <tr key={item.name}><td>{item.name}</td><td>{item.currentStock}</td><td>{item.minStock}</td><td>{item.suggestedQuantity}</td></tr>)}{!suggestions.length && <tr><td colSpan={4}>Sem alertas.</td></tr>}</tbody></table><h3>Valorização por custo médio</h3><table><thead><tr><th>Produto</th><th>Localização</th><th>Quantidade</th><th>Custo médio</th><th>Valor</th></tr></thead><tbody>{balances.map((item) => <tr key={`${item.product.id}-${item.location.name}`}><td>{item.product.name}</td><td>{item.location.name}</td><td>{item.quantity}</td><td>{formatKwanza(item.averageCostCents)}</td><td>{formatKwanza(item.totalCostCents)}</td></tr>)}</tbody></table></> : <div className="card form-grid">{field("Produto", "productId")}<label>Produto<select value={form.productId} onChange={(event) => update("productId", event.target.value)}><option value="">Selecionar produto</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.sku}</option>)}</select></label>{tab === "transfer" ? <>{field("Origem", "sourceLocationId")}{field("Destino", "destinationLocationId")}</> : field("Localização", "locationId")}{field("Quantidade", "quantity", "number")}{(tab === "inventory" || tab === "transfer" || tab === "receipt") && field("Referência", "reference")}{tab === "receipt" && <label>Compra<select value={form.purchaseId} onChange={(event) => update("purchaseId", event.target.value)}><option value="">Selecionar compra</option>{purchases.map((purchase) => <option key={purchase.id} value={purchase.id}>{purchase.number}</option>)}</select></label>}{tab === "returns" && <>{field("Tipo", "documentType")}{field("Série", "series")}{field("Número (opcional)", "number")}{field("Cliente ID", "customerId")}{field("Fornecedor ID", "supplierId")}{field("Lote", "lotNumber")}{field("Número de série", "serialNumber")}{field("Validade", "expiresAt", "date")}</>}{tab === "procurement" && field("N.º pedido", "requestNumber")}{tab === "quotation" && <>{field("N.º cotação", "quotationNumber")}{field("Fornecedor ID", "supplierId")}</>}{tab === "order" && <>{field("N.º ordem", "orderNumber")}{field("Fornecedor ID", "supplierId")}</>}{tab === "series" && <>{field("Empresa", "companyKey")}{field("Estabelecimento", "establishmentKey")}{field("Prefixo", "series")}</>}<button className="checkout" disabled={!admin} onClick={() => void submit()}>Guardar e auditar</button></div>}</section>;
 }
 
 export function ProductsPanel({ api, token, admin, onError }: Props) {
@@ -172,7 +217,7 @@ export function OperationsPanel({ api, token, admin, onError }: Props) {
         if (!purchase.number || !purchase.supplierId || !validLines.length) return onError("Número, fornecedor e pelo menos um produto são obrigatórios.");
         try {
           await request(`${api}/api/v1/purchases`, token, { method: "POST", body: JSON.stringify({ ...purchase, dueDate: purchase.dueDate || undefined, lines: validLines, idempotencyKey: crypto.randomUUID() }) });
-          setPurchase({ number: "", supplierId: "", paymentMethod: "CASH", dueDate: "", documentNumber: "", notes: "" }); setLines([{ productId: "", quantity: 1, unitCostCents: 0 }]); setMessage("Compra confirmada e stock atualizado."); await load();
+          setPurchase({ number: "", supplierId: "", paymentMethod: "CASH", dueDate: "", documentNumber: "", notes: "" }); setLines([{ productId: "", quantity: 1, unitCostCents: 0 }]); setMessage("Compra confirmada. Registe a receção para movimentar o stock."); await load();
         } catch (error) { onError(error instanceof Error ? error.message : "Falha ao confirmar compra."); }
       };
       const saveExpense = async () => {

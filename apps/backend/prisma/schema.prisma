@@ -1,9 +1,89 @@
 generator client {
   provider = "prisma-client-js"
 }
+
+model DocumentSeries {
+  id String @id @default(uuid())
+  companyKey String
+  establishmentKey String
+  documentType String
+  prefix String
+  nextNumber Int @default(1)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  documents CommercialDocument[]
+  @@unique([companyKey, establishmentKey, documentType, prefix])
+}
 datasource db {
   provider = "postgresql"
   url = env("DATABASE_URL")
+}
+
+model ProcurementRequest {
+  id String @id @default(uuid())
+  number String @unique
+  status String @default("DRAFT")
+  requestedById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lines ProcurementRequestLine[]
+  quotations SupplierQuotation[]
+}
+
+model ProcurementRequestLine {
+  id String @id @default(uuid())
+  requestId String
+  productId String
+  quantity Int
+  request ProcurementRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model SupplierQuotation {
+  id String @id @default(uuid())
+  number String @unique
+  requestId String?
+  supplierId String
+  status String @default("RECEIVED")
+  createdAt DateTime @default(now())
+  request ProcurementRequest? @relation(fields: [requestId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  lines SupplierQuotationLine[]
+  orders ProcurementOrder[]
+}
+
+model SupplierQuotationLine {
+  id String @id @default(uuid())
+  quotationId String
+  productId String
+  quantity Int
+  unitCostCents Int
+  quotation SupplierQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model ProcurementOrder {
+  id String @id @default(uuid())
+  number String @unique
+  quotationId String?
+  supplierId String
+  status String @default("OPEN")
+  createdAt DateTime @default(now())
+  quotation SupplierQuotation? @relation(fields: [quotationId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  lines ProcurementOrderLine[]
+  purchases Purchase[]
+}
+
+model ProcurementOrderLine {
+  id String @id @default(uuid())
+  orderId String
+  productId String
+  quantity Int
+  unitCostCents Int
+  order ProcurementOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 }
 model User {
   id String @id @default(uuid())
@@ -21,6 +101,9 @@ model User {
   receivablePayments ReceivablePayment[]
   stockMovements StockMovement[]
   purchases Purchase[]
+  stockTransfers StockTransfer[] @relation("TransferOperator")
+  inventoryCounts InventoryCount[] @relation("InventoryOperator")
+  purchaseReceipts PurchaseReceipt[]
   expenses Expense[]
   payablePayments PayablePayment[]
   createdAt DateTime @default(now())
@@ -31,6 +114,10 @@ model Product {
   name String
   priceCents Int
   stock Int @default(0)
+  minStock Int @default(0)
+  maxStock Int?
+  reorderQuantity Int @default(0)
+  trackingMode String @default("NONE")
   taxRate Decimal @db.Decimal(5,4)
   active Boolean @default(true)
   updatedAt DateTime @updatedAt
@@ -49,6 +136,16 @@ model Product {
   category Category? @relation(fields: [categoryId], references: [id])
   stockMovements StockMovement[]
   purchaseLines PurchaseLine[]
+  stockBalances StockBalance[]
+  supplierPrices SupplierProductPrice[]
+  purchaseReceiptLines PurchaseReceiptLine[]
+  commercialDocumentLines CommercialDocumentLine[]
+  transferLines StockTransferLine[]
+  inventoryCountLines InventoryCountLine[]
+  lots StockLot[]
+  procurementRequestLines ProcurementRequestLine[]
+  quotationLines SupplierQuotationLine[]
+  procurementOrderLines ProcurementOrderLine[]
 }
 model Category {
   id String @id @default(uuid())
@@ -109,6 +206,7 @@ model Customer {
   active Boolean @default(true)
   creditLimitCents Int @default(0)
   outstandingDebtCents Int @default(0)
+  commercialDocuments CommercialDocument[]
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
 }
@@ -162,6 +260,10 @@ model Supplier {
   purchases Purchase[]
   payables AccountPayable[]
   expenses Expense[]
+  supplierPrices SupplierProductPrice[]
+  commercialDocuments CommercialDocument[]
+  supplierQuotations SupplierQuotation[]
+  procurementOrders ProcurementOrder[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -207,7 +309,10 @@ model Purchase {
   operator User? @relation(fields: [operatorId], references: [id])
   lines PurchaseLine[]
   payable AccountPayable?
+  receipts PurchaseReceipt[]
   @@index([supplierId, purchasedAt])
+  procurementOrderId String?
+  procurementOrder ProcurementOrder? @relation(fields: [procurementOrderId], references: [id])
 }
 
 model PurchaseLine {
@@ -264,9 +369,193 @@ model StockMovement {
   occurredAt DateTime @default(now())
   supplierId String?
   operatorId String?
+  locationId String?
+  lotId String?
   product Product @relation(fields: [productId], references: [id])
   operator User? @relation(fields: [operatorId], references: [id])
+  location StockLocation? @relation(fields: [locationId], references: [id])
+  lot StockLot? @relation(fields: [lotId], references: [id])
   @@index([productId, occurredAt])
+}
+
+model Warehouse {
+  id String @id @default(uuid())
+  code String @unique
+  name String
+  active Boolean @default(true)
+  locations StockLocation[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StockLocation {
+  id String @id @default(uuid())
+  warehouseId String
+  code String
+  name String
+  active Boolean @default(true)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  balances StockBalance[]
+  sourceTransfers StockTransfer[] @relation("TransferSource")
+  destinationTransfers StockTransfer[] @relation("TransferDestination")
+  inventoryCounts InventoryCount[]
+  lots StockLot[]
+  movements StockMovement[]
+  commercialDocuments CommercialDocument[]
+  @@unique([warehouseId, code])
+}
+
+model StockBalance {
+  id String @id @default(uuid())
+  productId String
+  locationId String
+  quantity Int @default(0)
+  averageCostCents Int @default(0)
+  totalCostCents Int @default(0)
+  updatedAt DateTime @updatedAt
+  product Product @relation(fields: [productId], references: [id])
+  location StockLocation @relation(fields: [locationId], references: [id])
+  @@unique([productId, locationId])
+  @@index([locationId, quantity])
+}
+
+model StockLot {
+  id String @id @default(uuid())
+  productId String
+  locationId String
+  lotNumber String?
+  serialNumber String?
+  expiresAt DateTime?
+  quantity Int @default(0)
+  unitCostCents Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product Product @relation(fields: [productId], references: [id])
+  location StockLocation @relation(fields: [locationId], references: [id])
+  movements StockMovement[]
+  @@unique([productId, locationId, lotNumber, serialNumber])
+  @@index([productId, expiresAt])
+}
+
+model StockTransfer {
+  id String @id @default(uuid())
+  sourceLocationId String
+  destinationLocationId String
+  reference String @unique
+  status String @default("COMPLETED")
+  operatorId String?
+  createdAt DateTime @default(now())
+  sourceLocation StockLocation @relation("TransferSource", fields: [sourceLocationId], references: [id])
+  destinationLocation StockLocation @relation("TransferDestination", fields: [destinationLocationId], references: [id])
+  operator User? @relation("TransferOperator", fields: [operatorId], references: [id])
+  lines StockTransferLine[]
+  @@index([createdAt])
+}
+
+model StockTransferLine {
+  id String @id @default(uuid())
+  transferId String
+  productId String
+  quantity Int
+  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  @@index([transferId])
+}
+
+model InventoryCount {
+  id String @id @default(uuid())
+  locationId String
+  status String @default("DRAFT")
+  reference String @unique
+  operatorId String?
+  countedAt DateTime?
+  createdAt DateTime @default(now())
+  location StockLocation @relation(fields: [locationId], references: [id])
+  operator User? @relation("InventoryOperator", fields: [operatorId], references: [id])
+  lines InventoryCountLine[]
+}
+
+model InventoryCountLine {
+  id String @id @default(uuid())
+  inventoryCountId String
+  productId String
+  expectedQuantity Int
+  countedQuantity Int
+  inventoryCount InventoryCount @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  @@unique([inventoryCountId, productId])
+}
+
+model SupplierProductPrice {
+  id String @id @default(uuid())
+  supplierId String
+  productId String
+  unitCostCents Int
+  validFrom DateTime @default(now())
+  validTo DateTime?
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  @@index([supplierId, productId, validFrom])
+}
+
+model PurchaseReceipt {
+  id String @id @default(uuid())
+  purchaseId String
+  reference String @unique
+  receivedAt DateTime @default(now())
+  operatorId String?
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  operator User? @relation(fields: [operatorId], references: [id])
+  lines PurchaseReceiptLine[]
+  @@index([purchaseId, receivedAt])
+}
+
+model PurchaseReceiptLine {
+  id String @id @default(uuid())
+  receiptId String
+  productId String
+  quantity Int
+  receipt PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model CommercialDocument {
+  id String @id @default(uuid())
+  type String
+  status String @default("DRAFT")
+  series String
+  number String
+  customerId String?
+  supplierId String?
+  locationId String?
+  seriesId String?
+  sourceId String?
+  subtotalCents Int @default(0)
+  discountCents Int @default(0)
+  taxCents Int @default(0)
+  totalCents Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  customer Customer? @relation(fields: [customerId], references: [id])
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+  location StockLocation? @relation(fields: [locationId], references: [id])
+  seriesConfig DocumentSeries? @relation(fields: [seriesId], references: [id])
+  lines CommercialDocumentLine[]
+  @@unique([type, series, number])
+  @@index([type, createdAt])
+}
+
+model CommercialDocumentLine {
+  id String @id @default(uuid())
+  documentId String
+  productId String
+  quantity Int
+  unitPriceCents Int
+  discountCents Int @default(0)
+  taxRate Decimal @db.Decimal(5,4)
+  totalCents Int
+  document CommercialDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 }
 
 model RefreshToken {

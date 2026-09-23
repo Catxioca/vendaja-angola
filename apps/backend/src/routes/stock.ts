@@ -4,10 +4,122 @@ import { z } from "zod";
 import { prisma } from "../server.js";
 import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
+import { applyStockChange, transferStock } from "../services/stock-ledger.js";
 
 export const stockRouter = Router();
 stockRouter.use(requireAuth);
 stockRouter.use(requireModuleAccess("STOCK"));
+
+const locationInput = z.object({ warehouseId: z.string().uuid(), code: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(120) });
+const warehouseInput = z.object({ code: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(120) });
+const transferInput = z.object({
+  sourceLocationId: z.string().uuid(),
+  destinationLocationId: z.string().uuid(),
+  reference: z.string().trim().min(1).max(120),
+  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive() })).min(1),
+});
+const inventoryInput = z.object({
+  locationId: z.string().uuid(),
+  reference: z.string().trim().min(1).max(120),
+  lines: z.array(z.object({ productId: z.string().uuid(), countedQuantity: z.number().int().nonnegative() })).min(1),
+}).superRefine((value, context) => {
+  if (new Set(value.lines.map((line) => line.productId)).size !== value.lines.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["lines"], message: "duplicate_product" });
+  }
+});
+
+stockRouter.get("/warehouses", async (_req, res) => {
+  res.json(await prisma.warehouse.findMany({ where: { active: true }, include: { locations: { where: { active: true }, include: { _count: { select: { balances: true } } } } }, orderBy: { name: "asc" } }));
+});
+
+stockRouter.post("/warehouses", requireRole("ADMIN"), async (req, res) => {
+  const parsed = warehouseInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_warehouse" }); return; }
+  try {
+    const warehouse = await prisma.warehouse.create({ data: parsed.data });
+    await audit("WAREHOUSE_CREATED", (req as AuthRequest).user?.id, "WAREHOUSE", warehouse.id);
+    res.status(201).json(warehouse);
+  } catch { res.status(409).json({ error: "warehouse_code_exists" }); }
+});
+
+stockRouter.post("/locations", requireRole("ADMIN"), async (req, res) => {
+  const parsed = locationInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_stock_location" }); return; }
+  try {
+    const location = await prisma.stockLocation.create({ data: parsed.data });
+    await audit("STOCK_LOCATION_CREATED", (req as AuthRequest).user?.id, "STOCK_LOCATION", location.id);
+    res.status(201).json(location);
+  } catch { res.status(409).json({ error: "stock_location_exists" }); }
+});
+
+stockRouter.get("/balances", async (req, res) => {
+  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : undefined;
+  res.json(await prisma.stockBalance.findMany({ where: locationId ? { locationId } : undefined, include: { product: true, location: { include: { warehouse: true } } }, orderBy: { updatedAt: "desc" }, take: 500 }));
+});
+
+stockRouter.get("/reorder-suggestions", async (_req, res) => {
+  const products = await prisma.product.findMany({ where: { active: true, minStock: { gt: 0 } }, include: { stockBalances: true }, orderBy: { name: "asc" } });
+  res.json(products.filter((product) => product.stock <= product.minStock).map((product) => ({
+    productId: product.id, sku: product.sku, name: product.name, currentStock: product.stock,
+    minStock: product.minStock, maxStock: product.maxStock, suggestedQuantity: product.reorderQuantity || Math.max(0, (product.maxStock ?? product.minStock) - product.stock),
+    locations: product.stockBalances,
+  })));
+});
+
+stockRouter.post("/transfers", requireRole("ADMIN"), async (req, res) => {
+  const parsed = transferInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_stock_transfer" }); return; }
+  try {
+    const result = await prisma.$transaction(async (tx) => transferStock(tx, { ...parsed.data, operatorId: (req as AuthRequest).user?.id }));
+    await audit("STOCK_TRANSFER", (req as AuthRequest).user?.id, "STOCK_TRANSFER", result.id, { reference: result.reference });
+    res.status(201).json(result);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "stock_transfer_failed";
+    res.status(code === "insufficient_stock" ? 409 : 400).json({ error: code });
+  }
+});
+
+stockRouter.post("/inventory-counts", requireRole("ADMIN"), async (req, res) => {
+  const parsed = inventoryInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_inventory_count" }); return; }
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.inventoryCount.findUnique({ where: { reference: parsed.data.reference }, include: { lines: true } });
+      if (existing) {
+        const samePayload = existing.locationId === parsed.data.locationId
+          && existing.lines.length === parsed.data.lines.length
+          && existing.lines.every((line) => parsed.data.lines.some((candidate) => candidate.productId === line.productId && candidate.countedQuantity === line.countedQuantity));
+        if (!samePayload) throw new Error("inventory_reference_conflict");
+        return existing;
+      }
+      const balances = await tx.stockBalance.findMany({ where: { locationId: parsed.data.locationId, productId: { in: parsed.data.lines.map((line) => line.productId) } } });
+      const expected = new Map(balances.map((balance) => [balance.productId, balance.quantity]));
+      const count = await tx.inventoryCount.create({
+        data: {
+          locationId: parsed.data.locationId,
+          reference: parsed.data.reference,
+          status: "COMPLETED",
+          countedAt: new Date(),
+          operatorId: (req as AuthRequest).user?.id,
+          lines: { create: parsed.data.lines.map((line) => ({ productId: line.productId, countedQuantity: line.countedQuantity, expectedQuantity: expected.get(line.productId) ?? 0 })) },
+        },
+        include: { lines: true },
+      });
+      for (const line of parsed.data.lines) {
+        const delta = line.countedQuantity - (expected.get(line.productId) ?? 0);
+        if (delta !== 0) {
+          await applyStockChange(tx, { productId: line.productId, locationId: parsed.data.locationId, quantity: delta, type: "INVENTORY_ADJUSTMENT", reference: `INVENTORY:${count.id}`, operatorId: (req as AuthRequest).user?.id });
+        }
+      }
+      return count;
+    });
+    await audit("INVENTORY_COUNT_COMPLETED", (req as AuthRequest).user?.id, "INVENTORY_COUNT", result.id);
+    res.status(201).json(result);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "inventory_count_failed";
+    res.status(code === "insufficient_stock" || code === "inventory_reference_conflict" ? 409 : 400).json({ error: code });
+  }
+});
 
 stockRouter.get("/movements", async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500);

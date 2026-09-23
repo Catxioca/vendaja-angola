@@ -18,6 +18,8 @@ import { payableRouter, supplierRouter, purchaseRouter } from "./routes/purchase
 import { expenseRouter } from "./routes/expenses.js";
 import { reportsRouter } from "./routes/reports.js";
 import { cashflowRouter } from "./routes/cashflow.js";
+import { commercialDocumentRouter } from "./routes/commercial-documents.js";
+import { procurementRouter } from "./routes/procurement.js";
 import { assertImmutableFiscalMutation } from "./services/fiscal-integrity.js";
 
 const config = loadEnv();
@@ -64,6 +66,8 @@ app.use("/api/v1/payables", payableRouter);
 app.use("/api/v1/expenses", expenseRouter);
 app.use("/api/v1/reports", reportsRouter);
 app.use("/api/v1/cashflow", cashflowRouter);
+app.use("/api/v1/commercial-documents", commercialDocumentRouter);
+app.use("/api/v1/procurement", procurementRouter);
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[http] internal error", { path: req.path, message: err.message });
   res.status(500).json({ error: "internal_error" });

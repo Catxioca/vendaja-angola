@@ -81,6 +81,42 @@ npm run desktop:installer:offline
 
 The desktop build explicitly compiles the shared package, runs Prisma Client generation, compiles the backend, creates `apps/backend/dist/bundle.js` for Electron, and then builds the renderer. Web, typecheck, and test scripts also build the shared package first, so a clean checkout does not depend on ignored package output. A clean checkout therefore does not depend on a manually copied backend bundle. `npm run lint` performs repository safety checks for tracked secrets and reproducible-install metadata; `npm test` runs workspace tests.
 
+## Stock, purchases, and commercial documents
+
+Stock is recorded through the location-aware ledger at `/api/v1/stock`. Warehouses and
+locations are explicit, balances are locked during each transaction, negative balances
+are rejected, and every movement retains its origin, reference, operator, and date.
+`POST /api/v1/stock/transfers` performs the source and destination movements in one
+transaction. `POST /api/v1/stock/inventory-counts` records a physical count and applies
+the difference through the same ledger; its reference is idempotent and conflicting
+replays are rejected.
+
+Creating a purchase does not change stock. Only
+`POST /api/v1/purchases/:id/receipts` does so, allowing partial and repeated receipts
+without exceeding the ordered quantity. Supplier-specific prices are available through
+`/api/v1/suppliers/:id/prices`. Commercial, non-fiscal documents are available through
+`/api/v1/commercial-documents` for quotes, customer orders, delivery notes, customer
+returns, and credit/debit notes; line and document discounts are persisted. Fiscal
+invoicing and AGT validation remain in the existing fiscal module and are not replaced
+by these documents.
+
+The migration
+`apps/backend/prisma/migrations/20260923150000_stock_purchases_documents/migration.sql`
+is versioned but is not applied automatically by the desktop installer. Stock
+replenishment thresholds and suggestions are stored per product, and tracked products
+require lots or serial numbers; expired lots and insufficient lot quantities are
+rejected. Inventory valuation uses weighted average cost per location:
+`totalCostCents / quantity`, with outgoing movements valued at the current average.
+Delivery notes reduce stock, customer returns increase it, and supplier returns reduce
+it. Document series allocate numbers transactionally and validate the document type.
+Procurement requests, supplier quotations, and purchase orders are separate audited
+entities; receiving remains the only purchase operation that increases stock.
+
+The PostgreSQL integration test is available as `npm --workspace @angola/backend run
+test:integration` and requires `TEST_DATABASE_URL` pointing to a disposable database.
+Without that variable the test is intentionally skipped, so local unit tests never
+contact an external service.
+
 This produces an unsigned NSIS installer with a deterministic
 `<product>-<version>-win-<arch>.exe` name, never publishes, and never attempts
 certificate discovery. The command fails if a required builder artifact is not

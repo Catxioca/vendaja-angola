@@ -15,3 +15,5 @@ licenca-*.key
 **/private*.pem
 **/*-private.pem
 **/*private*.pem
+**/*.pem
+apps/desktop/license.json

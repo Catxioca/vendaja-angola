@@ -14,6 +14,9 @@ const lineInput = z.object({
   unitPriceCents: z.number().int().nonnegative(),
   discountCents: z.number().int().nonnegative().default(0),
   taxRate: z.number().min(0).max(1).default(0),
+  lotNumber: z.string().trim().max(120).optional(),
+  serialNumber: z.string().trim().max(120).optional(),
+  expiresAt: z.coerce.date().optional(),
 });
 const documentInput = z.object({
   type: z.enum(["QUOTE", "CUSTOMER_ORDER", "DELIVERY_NOTE", "CUSTOMER_RETURN", "SUPPLIER_RETURN", "CREDIT_NOTE", "DEBIT_NOTE"]),
@@ -103,6 +106,9 @@ commercialDocumentRouter.post("/", requireRole("ADMIN"), async (req, res) => {
             reference: `COMMERCIAL_DOCUMENT:${document.id}`,
             operatorId: (req as AuthRequest).user?.id,
             supplierId: parsed.data.supplierId ?? undefined,
+            lotNumber: line.lotNumber,
+            serialNumber: line.serialNumber,
+            expiresAt: line.expiresAt,
           });
         }
       }

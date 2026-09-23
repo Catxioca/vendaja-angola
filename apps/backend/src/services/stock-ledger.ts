@@ -26,11 +26,12 @@ export type StockChange = {
 };
 
 async function ensureBalance(tx: Tx, productId: string, locationId: string) {
-  return tx.stockBalance.upsert({
-    where: { productId_locationId: { productId, locationId } },
-    create: { productId, locationId, quantity: 0 },
-    update: {},
-  });
+  await tx.$executeRaw`
+    INSERT INTO "StockBalance" ("id", "productId", "locationId", "quantity", "averageCostCents", "totalCostCents", "updatedAt")
+    VALUES (${randomUUID()}, ${productId}, ${locationId}, 0, 0, 0, NOW())
+    ON CONFLICT ("productId", "locationId") DO NOTHING
+  `;
+  return tx.stockBalance.findUniqueOrThrow({ where: { productId_locationId: { productId, locationId } } });
 }
 
 export async function applyStockChange(tx: Tx, change: StockChange) {

@@ -79,6 +79,7 @@ supplierRouter.post("/:id/prices", requireRole("ADMIN"), async (req, res) => {
 const lineInput = z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), unitCostCents: z.number().int().nonnegative(), taxRate: z.number().min(0).max(1).default(0) });
 const purchaseInput = z.object({
   idempotencyKey: z.string().min(1).max(200), number: z.string().min(1).max(80), supplierId: z.string().uuid(),
+  procurementOrderId: z.string().uuid().optional().nullable(),
   lines: z.array(lineInput).min(1), discountCents: z.number().int().nonnegative().default(0),
   paymentMethod: z.enum(["CASH", "TRANSFER", "CREDIT"]).default("CASH"), dueDate: z.coerce.date().optional(),
   documentNumber: z.string().max(100).optional().nullable(), purchasedAt: z.coerce.date().optional(), notes: z.string().max(1000).optional().nullable(),
@@ -151,7 +152,7 @@ purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
       const subtotalCents = lines.reduce((sum, line) => sum + line.quantity * line.unitCostCents, 0);
       const taxCents = lines.reduce((sum, line) => sum + Math.round(line.quantity * line.unitCostCents * line.taxRate), 0);
       const totalCents = subtotalCents - parsed.data.discountCents + taxCents;
-      const purchase = await tx.purchase.create({ data: { number: parsed.data.number, supplierId: parsed.data.supplierId, operatorId: actorId, status: "CONFIRMED", paymentMethod: parsed.data.paymentMethod, subtotalCents, discountCents: parsed.data.discountCents, taxCents, totalCents, documentNumber: parsed.data.documentNumber ?? null, purchasedAt: parsed.data.purchasedAt, confirmedAt: new Date(), notes: parsed.data.notes ?? null, idempotencyKey: parsed.data.idempotencyKey, lines: { create: lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitCostCents: line.unitCostCents, taxRate: line.taxRate, totalCents: line.totalCents })) }, payable: parsed.data.paymentMethod === "CREDIT" ? { create: { supplierId: parsed.data.supplierId, originalCents: totalCents, dueDate: parsed.data.dueDate ?? new Date(Date.now() + 30 * 86400000) } } : undefined }, include: { lines: true, payable: true } });
+      const purchase = await tx.purchase.create({ data: { number: parsed.data.number, supplierId: parsed.data.supplierId, procurementOrderId: parsed.data.procurementOrderId ?? null, operatorId: actorId, status: "CONFIRMED", paymentMethod: parsed.data.paymentMethod, subtotalCents, discountCents: parsed.data.discountCents, taxCents, totalCents, documentNumber: parsed.data.documentNumber ?? null, purchasedAt: parsed.data.purchasedAt, confirmedAt: new Date(), notes: parsed.data.notes ?? null, idempotencyKey: parsed.data.idempotencyKey, lines: { create: lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitCostCents: line.unitCostCents, taxRate: line.taxRate, totalCents: line.totalCents })) }, payable: parsed.data.paymentMethod === "CREDIT" ? { create: { supplierId: parsed.data.supplierId, originalCents: totalCents, dueDate: parsed.data.dueDate ?? new Date(Date.now() + 30 * 86400000) } } : undefined }, include: { lines: true, payable: true } });
       await audit("PURCHASE_CONFIRMED", actorId, "PURCHASE", purchase.id, { totalCents }, tx);
       return purchase;
     });
@@ -166,7 +167,7 @@ purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
 const receiptInput = z.object({
   reference: z.string().trim().min(1).max(120),
   locationId: z.string().uuid(),
-  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive() })).min(1),
+  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), lotNumber: z.string().trim().max(120).optional(), serialNumber: z.string().trim().max(120).optional(), expiresAt: z.coerce.date().optional() })).min(1),
 });
 
 purchaseRouter.post("/:id/receipts", requireRole("ADMIN"), async (req, res) => {
@@ -197,7 +198,7 @@ purchaseRouter.post("/:id/receipts", requireRole("ADMIN"), async (req, res) => {
       const receipt = await tx.purchaseReceipt.create({ data: { purchaseId, reference: parsed.data.reference, operatorId, lines: { create: parsed.data.lines } }, include: { lines: true } });
       for (const line of parsed.data.lines) {
         const purchaseLine = purchase.lines.find((candidate) => candidate.productId === line.productId);
-        await applyStockChange(tx, { productId: line.productId, locationId: parsed.data.locationId, quantity: line.quantity, type: "PURCHASE_RECEIPT", reference: `RECEIPT:${receipt.id}`, operatorId, supplierId: purchase.supplierId });
+        await applyStockChange(tx, { productId: line.productId, locationId: parsed.data.locationId, quantity: line.quantity, type: "PURCHASE_RECEIPT", reference: `RECEIPT:${receipt.id}`, operatorId, supplierId: purchase.supplierId, lotNumber: line.lotNumber, serialNumber: line.serialNumber, expiresAt: line.expiresAt });
         await tx.product.update({ where: { id: line.productId }, data: { costCents: purchaseLine?.unitCostCents ?? undefined } });
       }
       const totalOrdered = purchase.lines.reduce((sum, line) => sum + line.quantity, 0);

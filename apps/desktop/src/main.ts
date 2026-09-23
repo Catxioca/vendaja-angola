@@ -11,6 +11,10 @@ const backendEntry = () => app.isPackaged
   ? path.join(process.resourcesPath, "backend", "dist", "bundle.js")
   : path.resolve(here, "../../backend/dist/bundle.js");
 function startLocalBackend(): void {
+  if (process.env.VENDAJA_START_LOCAL_BACKEND !== "true" || !process.env.DATABASE_URL) {
+    console.info("[desktop] local backend disabled; using offline storage and configured server mode");
+    return;
+  }
   const entry = backendEntry();
   const env = { ...process.env, PORT: process.env.PORT ?? "4000", NODE_ENV: process.env.NODE_ENV ?? "production" };
   backendProcess = spawn(process.execPath, [entry], { cwd: path.dirname(entry), env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });

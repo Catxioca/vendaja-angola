@@ -162,7 +162,15 @@ export function createPosStorage(name = "angola-pos"): LocalPosStorage {
     : createBrowserPosStorage(name);
 }
 
-export interface SyncEngineOptions { apiUrl: string; token: string; deviceId: string; intervalMs?: number; onState?: (online: boolean) => void; }
+export interface SyncEngineOptions {
+  apiUrl: string;
+  token: string;
+  deviceId: string;
+  intervalMs?: number;
+  onState?: (online: boolean) => void;
+  onResult?: (result: SyncResponse) => void;
+  onError?: (error: Error) => void;
+}
 export class SyncEngine {
   private timer?: ReturnType<typeof setInterval>;
   private online = typeof navigator === "undefined" ? true : navigator.onLine !== false;
@@ -180,8 +188,8 @@ export class SyncEngine {
     if (typeof window === "undefined" || this.started) return;
     this.started = true;
     window.addEventListener("online", this.handleOnline); window.addEventListener("offline", this.handleOffline);
-    this.timer = setInterval(() => { if (this.online) void this.flush().catch(() => undefined); }, this.options.intervalMs ?? 30000);
-    void this.flush().catch(() => undefined);
+    this.timer = setInterval(() => { if (this.online) void this.flush().catch((error: unknown) => this.notifyError(error)); }, this.options.intervalMs ?? 30000);
+    void this.flush().catch((error: unknown) => this.notifyError(error));
   }
   stop(): void {
     if (!this.started) return;
@@ -191,7 +199,10 @@ export class SyncEngine {
   }
   private setOnline(online: boolean): void {
     this.online = online; this.options.onState?.(online);
-    if (online) void this.flush().catch(() => undefined);
+    if (online) void this.flush().catch((error: unknown) => this.notifyError(error));
+  }
+  private notifyError(error: unknown): void {
+    this.options.onError?.(error instanceof Error ? error : new Error(String(error)));
   }
   private async flushOnce(): Promise<SyncResponse | undefined> {
     if (!this.online || (typeof navigator !== "undefined" && navigator.onLine === false)) return undefined;
@@ -205,6 +216,7 @@ export class SyncEngine {
     const result = await response.json() as SyncResponse;
     const sentIds = new Set(mutations.map((mutation) => mutation.id));
     await this.storage.acknowledge(result.accepted.filter((id) => sentIds.has(id)));
+    this.options.onResult?.(result);
     return result;
   }
 }

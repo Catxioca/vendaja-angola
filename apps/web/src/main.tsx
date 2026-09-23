@@ -3,6 +3,14 @@ import { createRoot } from "react-dom/client";
 import { createPosStorage, SyncEngine, formatKwanza } from "@angola/shared";
 import { ErrorBoundary } from "./ErrorBoundary";
 import "./style.css";
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("./sw.js").catch((error: unknown) => {
+      console.warn("[pwa] service worker unavailable", error);
+    });
+  });
+}
 const api = () => (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__ ?? (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "http://localhost:4000";
 function Login({ onLogin }: { onLogin: () => void }) {
   const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState("");

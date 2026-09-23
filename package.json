@@ -9,12 +9,13 @@
   ],
   "scripts": {
     "build": "npm run build -ws --if-present",
-    "typecheck": "npm run typecheck -ws --if-present",
+    "typecheck": "npm run build:shared && npm run typecheck -ws --if-present",
     "dev:backend": "npm --workspace @angola/backend run dev",
     "dev:web": "npm --workspace @angola/web run dev",
     "dev:desktop": "npm --workspace @angola/desktop run dev",
-    "build:web": "npm --workspace @angola/web run build",
-    "build:desktop": "npm --workspace @angola/desktop run build",
+    "build:shared": "npm --workspace @angola/shared run build",
+    "build:web": "npm run build:shared && npm --workspace @angola/web run build",
+    "build:desktop": "npm run build:shared && npm run db:generate && npm --workspace @angola/backend run build && npm --workspace @angola/desktop run build",
     "cap:sync": "npx cap sync",
     "cap:sync:android": "npx cap sync android",
     "cap:sync:ios": "npx cap sync ios",
@@ -29,6 +30,8 @@
     "desktop:installer:offline": "node scripts/package-desktop-offline.mjs",
     "install:offline": "npm ci --offline",
     "db:generate": "npm --workspace @angola/backend run prisma:generate",
+    "lint": "node scripts/lint.mjs",
+    "test": "npm run build:shared && npm test --workspaces --if-present",
     "db:migrate": "npm --workspace @angola/backend run prisma:migrate",
     "db:seed": "npm --workspace @angola/backend run db:seed"
     ,"generate-license": "node scripts/generate-license.mjs"

@@ -10,7 +10,9 @@ Secrets submitted to `/api/v1/fiscal/config` are encrypted at rest with `FISCAL_
 
 ## Offline-first POS
 
-The desktop renderer and PWA use the shared `@angola/shared` storage API. Sales, customers, cash movements, and the sync outbox are stored in IndexedDB (with a memory fallback for non-browser runtimes), then flushed to `/api/v1/sync` when connectivity returns. Set `VITE_API_URL` and store the bearer token in `localStorage.accessToken`; a stable `localStorage.deviceId` is generated automatically.
+The desktop renderer and PWA use the shared `@angola/shared` storage API. Sales, customers, cash movements, and the sync outbox are stored in IndexedDB (with a memory fallback for non-browser runtimes), then flushed to `/api/v1/sync` when connectivity returns. Set `VITE_API_URL` and store the bearer token in `localStorage.accessToken`; a stable `localStorage.deviceId` is generated automatically. The Electron app does not start PostgreSQL in offline mode: the local backend is started only when `VENDAJA_START_LOCAL_BACKEND=true` and `DATABASE_URL` is configured. The PostgreSQL backend remains a server-mode dependency; it is never silently created or migrated by the desktop installer.
+
+The web build includes a manifest and a service worker that caches only same-origin application assets. API responses, bearer tokens, and secrets are deliberately excluded from the cache. The outbox is persisted transactionally in IndexedDB/Capacitor SQLite, survives restarts, and reports rejected mutations through the sync result callback for explicit conflict handling.
 
 Build the PWA with `npm run build:web`, the Electron renderer with `npm run build:desktop`, or sync the generated PWA into Capacitor with `npm run cap:sync`. Native Android/iOS projects need the usual Capacitor platform installation/sync on the build machine. Receipt bytes are ESC/POS-compatible; use `NetworkPrinter`, `WebBluetoothPrinter`, or `ElectronPrinter` adapters supplied by the shared package. Fiscal hash/QR helpers are offline hooks and do not replace AGT certification.
 
@@ -76,6 +78,8 @@ caches once, then run:
 ```sh
 npm run desktop:installer:offline
 ```
+
+The desktop build explicitly compiles the shared package, runs Prisma Client generation, compiles the backend, creates `apps/backend/dist/bundle.js` for Electron, and then builds the renderer. Web, typecheck, and test scripts also build the shared package first, so a clean checkout does not depend on ignored package output. A clean checkout therefore does not depend on a manually copied backend bundle. `npm run lint` performs repository safety checks for tracked secrets and reproducible-install metadata; `npm test` runs workspace tests.
 
 This produces an unsigned NSIS installer with a deterministic
 `<product>-<version>-win-<arch>.exe` name, never publishes, and never attempts

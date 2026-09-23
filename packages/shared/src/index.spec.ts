@@ -33,3 +33,28 @@ test("sends bearer credentials and only acknowledges sent mutations", async () =
     globalThis.fetch = originalFetch;
   }
 });
+
+test("reports rejected mutations and keeps them for explicit retry", async () => {
+  const storage = createBrowserPosStorage(`test-${crypto.randomUUID()}`);
+  await storage.enqueue(mutation);
+  const originalFetch = globalThis.fetch;
+  let rejected: string[] = [];
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    accepted: [],
+    rejected: [{ id: "mutation-1", reason: "Conflict" }],
+    cursor: "2",
+  }), { status: 200 });
+  try {
+    const result = await new SyncEngine(storage, {
+      apiUrl: "https://api.example/",
+      token: "token",
+      deviceId: "device",
+      onResult: (response) => { rejected = response.rejected.map((item) => item.id); },
+    }).flush();
+    assert.deepEqual(result?.rejected, [{ id: "mutation-1", reason: "Conflict" }]);
+    assert.deepEqual(rejected, ["mutation-1"]);
+    assert.deepEqual(await storage.getOutbox(), [mutation]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

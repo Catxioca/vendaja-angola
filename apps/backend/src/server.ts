@@ -23,6 +23,7 @@ import { procurementRouter } from "./routes/procurement.js";
 import { assertImmutableFiscalMutation } from "./services/fiscal-integrity.js";
 import { platformRouter } from "./routes/platform.js";
 import { openapiRouter } from "./routes/openapi.js";
+import { correlationId, countMetric, logJson, metricsSnapshot } from "./services/observability.js";
 
 const config = loadEnv();
 prisma.$use(async (params, next) => {
@@ -30,17 +31,37 @@ prisma.$use(async (params, next) => {
   return next(params.args);
 });
 const app = express();
+app.set("trust proxy", config.TRUST_PROXY);
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  const id = correlationId(req.header("x-correlation-id"));
+  res.setHeader("x-correlation-id", id);
+  const started = Date.now();
+  res.on("finish", () => {
+    countMetric(`http_requests_total{method="${req.method}",path="${req.path}",status="${res.statusCode}"}`);
+    logJson(res.statusCode >= 500 ? "error" : "info", "http_request", { correlationId: id, method: req.method, path: req.path, status: res.statusCode, durationMs: Date.now() - started });
+  });
+  next();
+});
+app.use((_req, res, next) => {
+  res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
 const allowedOrigins = (config.CORS_ORIGIN ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.length === 0) return callback(null, true);
+    if (allowedOrigins.length === 0 && config.NODE_ENV !== "production") return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-admin-authorization", "x-correlation-id"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-admin-authorization", "x-correlation-id", "x-company-id", "x-branch-id"],
 }));
 app.use(express.json({ limit: "1mb" }));
 app.get("/health", async (_req, res) => {
@@ -50,6 +71,9 @@ app.get("/health", async (_req, res) => {
 app.get("/api/health", async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ok", service: "backend" }); }
   catch { res.status(503).json({ status: "unavailable" }); }
+});
+app.get("/metrics", (_req, res) => {
+  res.type("application/json").json(metricsSnapshot());
 });
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/products", productRouter);
@@ -73,8 +97,9 @@ app.use("/api/v1/procurement", procurementRouter);
 app.use("/api/v1/platform", platformRouter);
 app.use("/api/v1", openapiRouter);
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("[http] internal error", { path: req.path, message: err.message });
-  res.status(500).json({ error: "internal_error" });
+  const id = res.getHeader("x-correlation-id");
+  logJson("error", "http_error", { correlationId: id, path: req.path, message: err.message });
+  res.status(500).json({ error: "internal_error", correlationId: id });
 });
 const port = config.PORT;
 if (process.env.NODE_ENV !== "test") app.listen(port, () => console.log(`API listening on ${port}`));

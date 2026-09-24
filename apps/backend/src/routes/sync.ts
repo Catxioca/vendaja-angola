@@ -9,9 +9,11 @@ import { equivalentSale } from "../services/sync-idempotency.js";
 import { validateSalePayments } from "../services/payment-integrity.js";
 import { canManageCashSession } from "../services/authorization.js";
 import { validateCreditSale } from "../services/credit-integrity.js";
+import { distributedRateLimit } from "../middleware/rate-limit.js";
 
 export const syncRouter = Router();
 syncRouter.use(requireAuth, requireCompanyContext);
+syncRouter.use(distributedRateLimit({ name: "sync", limit: 120, windowMs: 60_000 }));
 
 const mutation = z.object({ id: z.string(), operation: z.enum(["CREATE", "UPDATE"]), entity: z.enum(["SALE", "PRODUCT"]), payload: z.unknown(), occurredAt: z.string().datetime() });
 const saleSchema = z.object({

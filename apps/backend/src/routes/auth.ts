@@ -5,7 +5,9 @@ import { prisma } from "../server.js";
 import { normalizeRole, requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { issueAuthorizationGrant } from "../services/grants.js";
 import { audit, getLoginRateLimitState, hashPassword, issueTokens, persistRefreshToken, registerFailedLogin, registerSuccessfulLogin, tokenHash, verifyPassword } from "../services/security.js";
+import { distributedRateLimit } from "../middleware/rate-limit.js";
 export const authRouter = Router();
+authRouter.use(distributedRateLimit({ name: "auth", limit: 30, windowMs: 60_000 }));
 authRouter.post("/verify-admin-pin", requireAuth, async (req, res) => {
   const actor = (req as AuthRequest).user;
   const parsed = z.object({ credential: z.string().min(1), mode: z.enum(["password", "pin"]).default("pin") }).safeParse(req.body);

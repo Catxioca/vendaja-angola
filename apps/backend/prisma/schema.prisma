@@ -20,6 +20,14 @@ datasource db {
   url = env("DATABASE_URL")
 }
 
+model RateLimitBucket {
+  key String @id
+  windowStart DateTime
+  count Int @default(0)
+  expiresAt DateTime
+  @@index([expiresAt])
+}
+
 model ProcurementRequest {
   id String @id @default(uuid())
   number String @unique

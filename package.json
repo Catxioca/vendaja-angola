@@ -34,7 +34,10 @@
     "test": "npm run build:shared && npm test --workspaces --if-present",
     "db:migrate": "npm --workspace @angola/backend run prisma:migrate",
     "db:seed": "npm --workspace @angola/backend run db:seed"
-    ,"generate-license": "node scripts/generate-license.mjs"
+    ,"generate-license": "node scripts/generate-license.mjs",
+    "db:backup": "node scripts/db-backup.mjs",
+    "db:restore": "node scripts/db-restore.mjs",
+    "e2e:smoke": "node scripts/e2e-smoke.mjs"
   },
   "engines": {
     "node": ">=20"

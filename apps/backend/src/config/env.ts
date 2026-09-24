@@ -18,6 +18,7 @@ const rawEnvSchema = z.object({
   COMPANY_NIF: z.string().trim().min(1),
   COMPANY_NAME: z.string().trim().min(1),
   CORS_ORIGIN: z.string().trim().min(1).optional(),
+  TRUST_PROXY: z.coerce.boolean().default(false),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   SAFT_AO_XSD_PATH: z.string().trim().min(1).optional(),
   ADMIN_INITIAL_EMAIL: z.string().email().optional(),
@@ -31,7 +32,7 @@ export type AppEnv = z.infer<typeof rawEnvSchema>;
 
 function productionRequirements() {
   const missing: string[] = [];
-  for (const name of ["DATABASE_URL", "JWT_SECRET", "FISCAL_CONFIG_KEY", "COMPANY_NIF", "COMPANY_NAME"] as const) {
+  for (const name of ["DATABASE_URL", "JWT_SECRET", "FISCAL_CONFIG_KEY", "COMPANY_NIF", "COMPANY_NAME", "CORS_ORIGIN"] as const) {
     if (!process.env[name]?.trim()) missing.push(name);
   }
   return missing;

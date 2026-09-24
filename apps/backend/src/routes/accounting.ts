@@ -175,6 +175,40 @@ accountingRouter.get("/entries", async (_req, res) => {
     res.json({ from: from.toISOString(), to: to.toISOString(), balanceSheet: rows.filter((row) => ["ASSET", "LIABILITY", "EQUITY"].includes(row.type)), incomeStatement: rows.filter((row) => ["REVENUE", "EXPENSE"].includes(row.type)), totals: { assetsCents: result(["ASSET"]), liabilitiesCents: -result(["LIABILITY"]), equityCents: -result(["EQUITY"]), revenueCents: -result(["REVENUE"]), expensesCents: result(["EXPENSE"]) } });
   });
 
+  accountingRouter.get("/receivables", async (_req, res) => {
+    const customers = await prisma.customer.findMany({ where: { outstandingDebtCents: { gt: 0 } }, select: { id: true, name: true, nif: true, outstandingDebtCents: true, creditLimitCents: true }, orderBy: { outstandingDebtCents: "desc" } });
+    res.json({ rows: customers, totalOpenCents: customers.reduce((sum, customer) => sum + customer.outstandingDebtCents, 0) });
+  });
+
+  accountingRouter.get("/payables", async (_req, res) => {
+    const payables = await prisma.accountPayable.findMany({ where: { status: { not: "PAID" } }, include: { supplier: { select: { id: true, name: true, nif: true } }, purchase: { select: { id: true, number: true } } }, orderBy: { dueDate: "asc" } });
+    res.json({ rows: payables, totalOpenCents: payables.reduce((sum, payable) => sum + payable.originalCents - payable.paidCents, 0) });
+  });
+
+  accountingRouter.get("/tax-summary", async (req, res) => {
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date(0);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date();
+    const [sales, purchases] = await Promise.all([
+      prisma.sale.aggregate({ where: { createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { taxCents: true, subtotalCents: true } }),
+      prisma.purchase.aggregate({ where: { purchasedAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { taxCents: true, subtotalCents: true } }),
+    ]);
+    const outputCents = sales._sum.taxCents ?? 0;
+    const inputCents = purchases._sum.taxCents ?? 0;
+    res.json({ from: from.toISOString(), to: to.toISOString(), outputCents, inputCents, payableCents: outputCents - inputCents });
+  });
+
+  accountingRouter.get("/reconciliation", async (req, res) => {
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date(0);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date();
+    const [sales, receivables, purchases, payables] = await Promise.all([
+      prisma.sale.aggregate({ where: { createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { totalCents: true } }),
+      prisma.receivablePayment.aggregate({ where: { receivedAt: { gte: from, lte: to } }, _sum: { amountCents: true } }),
+      prisma.purchase.aggregate({ where: { purchasedAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { totalCents: true } }),
+      prisma.payablePayment.aggregate({ where: { paidAt: { gte: from, lte: to } }, _sum: { amountCents: true } }),
+    ]);
+    res.json({ from: from.toISOString(), to: to.toISOString(), salesCents: sales._sum.totalCents ?? 0, receivedCents: receivables._sum.amountCents ?? 0, purchasesCents: purchases._sum.totalCents ?? 0, paidCents: payables._sum.amountCents ?? 0 });
+  });
+
 
 accountingRouter.post("/entries", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
   const parsed = journalEntrySchema.safeParse(req.body);

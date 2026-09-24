@@ -43,6 +43,7 @@ async function post(db: Db, input: { sourceType: string; sourceId: string; date:
   const debit = input.lines.reduce((sum, line) => sum + line.debitCents, 0);
   const credit = input.lines.reduce((sum, line) => sum + line.creditCents, 0);
   if (debit <= 0 || debit !== credit) throw new Error("journal_not_balanced");
+  await ensureAccountingPeriod(db, input.date);
   const period = await openPeriod(db, input.date);
   const resolved = await Promise.all(input.lines.map(async (line) => ({ ...line, accountId: (await account(db, line.code)).id })));
   return db.journal.create({

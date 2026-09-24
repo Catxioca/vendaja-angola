@@ -121,6 +121,7 @@ model Company {
   cashRegisters CashRegister[]
   bankAccounts BankAccount[]
   paymentTerminals PaymentTerminal[]
+  auditLogs AuditLog[]
   createdAt DateTime @default(now())
 }
 
@@ -134,6 +135,7 @@ model Branch {
   memberships CompanyMembership[]
   warehouses Warehouse[]
   cashRegisters CashRegister[]
+  auditLogs AuditLog[]
   @@unique([companyId, code])
 }
 
@@ -176,8 +178,10 @@ model PosShift {
   declaredCents Int?
   differenceCents Int?
   status String @default("OPEN")
+  expectedCents Int?
   cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
   @@index([cashRegisterId, status])
+  paymentTransactions PaymentTransaction[]
 }
 
 model BankAccount {
@@ -215,6 +219,7 @@ model BankStatementLine {
   amountCents Int
   reconciledAt DateTime?
   reconciledBy String?
+  reconciliationReference String?
   statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
 }
 
@@ -239,8 +244,12 @@ model PaymentTransaction {
   amountCents Int
   status String @default("PENDING")
   operation String @default("SALE")
+  shiftId String?
+  saleId String?
   createdAt DateTime @default(now())
   terminal PaymentTerminal @relation(fields: [terminalId], references: [id], onDelete: Cascade)
+  shift PosShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  @@index([shiftId, status])
   @@index([terminalId, createdAt])
 }
 
@@ -732,6 +741,8 @@ model AuditLog {
   companyId String?
   branchId String?
   user User? @relation(fields: [userId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
   @@index([createdAt])
 }
 

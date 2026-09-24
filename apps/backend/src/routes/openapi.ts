@@ -14,8 +14,10 @@ openapiRouter.get("/openapi.json", (_req, res) => {
       "/platform/cash-registers/{id}/shifts": { post: { summary: "Abrir turno", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }], responses: { "201": { description: "Turno aberto" } } } },
       "/platform/shifts/{id}/close": { post: { summary: "Fechar turno e calcular divergência", responses: { "200": { description: "Turno fechado" } } } },
       "/platform/bank-accounts": { get: { summary: "Contas bancárias do contexto", responses: { "200": { description: "Contas" } } } },
+      "/platform/bank-statement-lines/{id}/reconcile": { post: { summary: "Reconciliar linha de extrato", responses: { "200": { description: "Linha reconciliada" } } } },
       "/platform/bank-accounts/{id}/statements": { post: { summary: "Importar extrato idempotente", responses: { "201": { description: "Extrato" } } } },
       "/platform/payment-terminals/{id}/transactions": { post: { summary: "Criar transação de terminal idempotente", responses: { "201": { description: "Transação pendente" } } } },
+      "/platform/payment-transactions/{id}": { patch: { summary: "Atualizar estado de pagamento", responses: { "200": { description: "Transação atualizada" } } } },
       "/platform/reprints": { post: { summary: "Registar reimpressão autorizada", responses: { "201": { description: "Registo de auditoria" } } } },
     },
   });

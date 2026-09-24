@@ -66,3 +66,15 @@ export async function audit(
 ) {
   return client.auditLog.create({ data: { action, userId, entity, entityId, metadata: metadata as object | undefined } });
 }
+
+export async function auditInContext(
+  action: string,
+  context: { companyId: string; branchId: string | null },
+  userId: string,
+  entity?: string,
+  entityId?: string,
+  metadata?: unknown,
+  client: Pick<Prisma.TransactionClient, "auditLog"> | typeof prisma = prisma,
+) {
+  return client.auditLog.create({ data: { action, userId, entity, entityId, companyId: context.companyId, branchId: context.branchId, metadata: metadata as object | undefined } });
+}

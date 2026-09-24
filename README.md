@@ -16,6 +16,25 @@ The web build includes a manifest and a service worker that caches only same-ori
 
 Build the PWA with `npm run build:web`, the Electron renderer with `npm run build:desktop`, or sync the generated PWA into Capacitor with `npm run cap:sync`. Native Android/iOS projects need the usual Capacitor platform installation/sync on the build machine. Receipt bytes are ESC/POS-compatible; use `NetworkPrinter`, `WebBluetoothPrinter`, or `ElectronPrinter` adapters supplied by the shared package. Fiscal hash/QR helpers are offline hooks and do not replace AGT certification.
 
+## Multiempresa, POS e integrações
+
+As operações de plataforma estão expostas somente em `/api/v1/platform` e são
+descritas em `/api/v1/openapi.json`. O cliente deve enviar `x-company-id` e,
+quando aplicável, `x-branch-id` depois de consultar `/api/v1/platform/context`.
+Esses headers apenas selecionam uma associação `CompanyMembership` ativa para o
+utilizador autenticado; nunca concedem acesso. Mutations de sincronização são
+segregadas por empresa, filial, utilizador e dispositivo.
+
+Turnos de caixa têm abertura/fecho concorrente seguro, valor esperado,
+declaração e divergência auditável. Extratos bancários são importados por hash
+idempotente e as linhas podem ser reconciliadas com uma referência operacional.
+Transações de TPA suportam idempotência, estados de autorização/captura/refundo
+e ligação opcional a turno/venda; adaptadores reais de hardware e homologação
+do terminal devem ser fornecidos pelo integrador. Reimpressões exigem
+permissão administrativa, documento existente e motivo, preservando o documento
+fiscal original. A migration é aditiva e não renumera nem altera documentos
+emitidos.
+
 ## Deployment
 
 Install and validate dependencies:

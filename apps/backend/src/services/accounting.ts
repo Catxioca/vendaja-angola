@@ -23,7 +23,18 @@ async function account(db: Db, code: string) {
 
 async function openPeriod(db: Db, date: Date) {
   const period = await db.accountingPeriod.findFirst({ where: { startsAt: { lte: date }, endsAt: { gte: date }, status: "OPEN" } });
-  if (!period) throw new Error("accounting_period_closed_or_missing");
+  if (!period) {
+    const existing = await db.accountingPeriod.findFirst({ where: { startsAt: { lte: date }, endsAt: { gte: date } } });
+    if (existing?.status === "CLOSED") throw new Error("accounting_period_closed_or_missing");
+    if (existing) return db.accountingPeriod.update({ where: { id: existing.id }, data: { status: "OPEN" } });
+    const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    return db.accountingPeriod.upsert({
+      where: { startsAt_endsAt: { startsAt: start, endsAt: end } },
+      create: { name: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`, startsAt: start, endsAt: end, status: "OPEN" },
+      update: {},
+    });
+  }
   return period;
 }
 

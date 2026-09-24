@@ -48,7 +48,7 @@ jobs:
       - name: Run production smoke checks
         shell: bash
         run: |
-          export NODE_ENV=test JWT_SECRET="ci-jwt-secret-012345678901234567890123" FISCAL_CONFIG_KEY="ci-fiscal-key-012345678901234567890123" COMPANY_NIF="000000000" COMPANY_NAME="CI"
+          export NODE_ENV=production JWT_SECRET="ci-jwt-secret-012345678901234567890123" FISCAL_CONFIG_KEY="ci-fiscal-key-012345678901234567890123" COMPANY_NIF="000000000" COMPANY_NAME="CI" CORS_ORIGIN="http://127.0.0.1:4173"
           node apps/backend/dist/bundle.js > "$RUNNER_TEMP/vendaja-backend.log" 2>&1 &
           backend_pid=$!
           npm --workspace @angola/web run preview -- --host 127.0.0.1 > "$RUNNER_TEMP/vendaja-web.log" 2>&1 &

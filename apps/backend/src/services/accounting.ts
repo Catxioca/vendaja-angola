@@ -32,7 +32,7 @@ export async function ensureAccountingPeriod(db: Db, date = new Date()) {
   const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
   return db.accountingPeriod.upsert({
     where: { startsAt_endsAt: { startsAt: start, endsAt: end } },
-    create: { name: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`, startsAt: start, endsAt: end },
+    create: { name: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`, startsAt: start, endsAt: end, status: "OPEN" },
     update: {},
   });
 }

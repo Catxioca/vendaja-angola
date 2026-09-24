@@ -27,6 +27,12 @@ integridade e confirma que um ficheiro inexistente falha sem sucesso falso.
 A CI executa este teste contra o serviço PostgreSQL efémero; em produção o
 mesmo procedimento deve ser executado mensalmente com uma cópia cifrada.
 
+`npm run db:upgrade:rollback:smoke` executa o procedimento completo numa base
+descartável: cria um dump, restaura uma cópia de upgrade, aplica
+`prisma migrate deploy`, restaura uma segunda cópia para rollback por
+artefacto/cutover e compara marcadores de integridade nas duas bases. A CI
+executa este teste sem tocar na base de origem.
+
 Nunca restaure sobre produção sem uma janela aprovada, snapshot anterior e
 verificação do hash do dump. O restauro deve ser seguido por `prisma migrate
 deploy` e uma verificação de saúde.
@@ -64,8 +70,8 @@ backup numa base nova e faça cutover controlado quando necessário.
 O rollback foi desenhado como rollback de artefacto, não downgrade destrutivo:
 o dump da versão anterior é restaurado numa base nova, `prisma migrate deploy`
 é executado nessa base e o smoke/readiness é repetido antes do cutover. A CI
-valida a parte de upgrade/restauro em PostgreSQL descartável e falha qualquer
-restauro de backup inexistente.
+valida o upgrade/restauro e a recuperação por cutover em PostgreSQL descartável
+e falha qualquer restauro de backup inexistente.
 
 `npm run e2e:critical` é executado na CI com dados semeados e valida login,
 criação de venda com atualização de stock, contexto multiempresa, abertura e

@@ -1,8 +1,18 @@
-const CACHE = "vendaja-shell-v1";
+const CACHE = "vendaja-shell-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await cache.addAll(SHELL);
+    const index = await fetch("./index.html");
+    const html = await index.text();
+    const assets = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+      .map((match) => match[1])
+      .filter((asset) => asset && !asset.startsWith("http") && !asset.includes("/api/"));
+    await cache.addAll(assets);
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (event) => {

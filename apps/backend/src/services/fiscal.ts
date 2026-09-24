@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import type { Prisma } from "@prisma/client";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { getEnv } from "../config/env.js";
 
 function encryptionKey() {

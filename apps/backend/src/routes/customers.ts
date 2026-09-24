@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { canManageCashSession } from "../services/authorization.js";

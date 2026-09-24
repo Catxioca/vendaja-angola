@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Router, type Response } from "express";
 import { z } from "zod";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { requireAuth, requireCompanyContext, type AuthRequest } from "../middleware/auth.js";
 import { auditInContext } from "../services/security.js";
 

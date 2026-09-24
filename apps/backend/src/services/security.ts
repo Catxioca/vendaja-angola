@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { Prisma } from "@prisma/client";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { getEnv } from "../config/env.js";
 export { issueAuthorizationGrant, verifyAuthorizationGrant } from "./grants.js";
 

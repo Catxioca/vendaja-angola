@@ -3,7 +3,7 @@ import { getEnv } from "../config/env.js";
 import { z } from "zod";
 import QRCode from "qrcode";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { audit, verifyPassword } from "../services/security.js";
 import { encryptFiscalSecret, exportSaftAo, qrPayload, validateSaftXml } from "../services/fiscal.js";
 import { canManageCashSession } from "../services/authorization.js";

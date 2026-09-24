@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, requireCompanyContext, type AuthRequest } from "../middleware/auth.js";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { calculateSale } from "../services/sale-calculation.js";
 import { deterministicInvoiceHash, nextFiscalNumber, qrPayload, signFiscalPayload } from "../services/fiscal.js";
 import { equivalentSale } from "../services/sync-idempotency.js";

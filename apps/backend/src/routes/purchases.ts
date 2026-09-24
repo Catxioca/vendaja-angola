@@ -2,7 +2,7 @@ import { Router } from "express";
 import { ensureAccountingPeriod, postPurchaseAccounting, postPayablePaymentAccounting } from "../services/accounting.js";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { payableStatus, validatePaymentAmount } from "../services/payable-integrity.js";

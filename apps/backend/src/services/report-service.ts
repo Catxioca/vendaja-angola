@@ -1,4 +1,4 @@
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { average, groupByDay, sum } from "./report-aggregation.js";
 import { cashflowReport } from "./cashflow-service.js";
 export { average, groupByDay, sum } from "./report-aggregation.js";

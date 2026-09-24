@@ -2,7 +2,7 @@ import { Router } from "express";
 import { ensureAccountingPeriod, postSaleAccounting, reverseJournal } from "../services/accounting.js";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { requireAdminOrGrant, requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { deterministicInvoiceHash, nextFiscalNumber, qrPayload, signFiscalPayload } from "../services/fiscal.js";

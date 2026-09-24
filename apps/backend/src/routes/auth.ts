@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { z } from "zod";
-import { prisma } from "../server.js";
+import { prisma } from "../db.js";
 import { normalizeRole, requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { issueAuthorizationGrant } from "../services/grants.js";
 import { audit, getLoginRateLimitState, hashPassword, issueTokens, persistRefreshToken, registerFailedLogin, registerSuccessfulLogin, tokenHash, verifyPassword } from "../services/security.js";

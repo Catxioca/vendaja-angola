@@ -6,6 +6,7 @@ import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { canManageCashSession } from "../services/authorization.js";
 import { receivableStatus } from "../services/credit-integrity.js";
+import { ensureAccountingPeriod, postReceivablePaymentAccounting } from "../services/accounting.js";
 
 export const customerRouter = Router();
 customerRouter.use(requireAuth);
@@ -109,6 +110,8 @@ customerRouter.post("/:id/payments", async (req, res) => {
         if (!canManageCashSession(session.openedBy, actorId, (req as AuthRequest).user?.role)) throw new Error("cash_session_forbidden");
       }
       const payment = await tx.receivablePayment.create({ data: { customerId, amountCents: parsed.data.amountCents, paymentMethod: parsed.data.paymentMethod, idempotencyKey: parsed.data.idempotencyKey, cashSessionId: parsed.data.cashSessionId ?? null, operatorId: actorId, reference: parsed.data.reference ?? null, note: parsed.data.note, receivedAt: parsed.data.receivedAt } });
+      await ensureAccountingPeriod(tx, payment.receivedAt);
+      await postReceivablePaymentAccounting(tx, payment);
       const customer = await tx.customer.update({ where: { id: customerId }, data: { outstandingDebtCents: { decrement: parsed.data.amountCents } } });
       await audit("RECEIVABLE_PAYMENT", actorId, "RECEIVABLE_PAYMENT", payment.id, { customerId, amountCents: payment.amountCents }, tx);
       return { payment, customer, replay: false };

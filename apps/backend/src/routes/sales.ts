@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ensureAccountingPeriod, postSaleAccounting, reverseJournal } from "../services/accounting.js";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../server.js";
@@ -82,6 +83,12 @@ saleRouter.post("/", async (req, res) => {
         await tx.stockMovement.create({ data: { productId: item.productId, quantity: -item.quantity, type: "SALE", reference: sale.id, operatorId } });
       }
       const created = await tx.sale.create({ data: { id: sale.id, number, series, subtotalCents: calculated.subtotalCents, taxCents: calculated.taxCents, totalCents: calculated.totalCents, createdAt: issuedAt, fiscalType: sale.fiscalType, paymentMethod: sale.paymentMethod, customerId: sale.customerId ?? null, dueDate: sale.dueDate ? new Date(sale.dueDate) : null, operatorId, operatorName: sale.operatorName, operatorNif: sale.operatorNif, operatorPhone: sale.operatorPhone, terminalId: sale.terminalId, cashSessionId: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? null : sale.cashSessionId ?? null, cashCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cashCents, cardCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cardCents, transferCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.transferCents, fiscalHash: hash, fiscalSignature: signed.signature, signatureAlgorithm: signed.algorithm, qrCode, lines: { create: calculated.lines } }, include: { lines: true } });
+      if (sale.fiscalType !== "PROFORMA") {
+        await ensureAccountingPeriod(tx, issuedAt);
+        const costLines = await tx.saleLine.findMany({ where: { saleId: created.id }, include: { product: { select: { costCents: true } } } });
+        const costCents = costLines.reduce((total, line) => total + line.quantity * line.product.costCents, 0);
+        await postSaleAccounting(tx, { ...created, costCents });
+      }
       await audit("SALE_CREATED", operatorId, "SALE", created.id, { stage: "TRANSACTION" }, tx);
       return created;
     });
@@ -148,6 +155,8 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
       }
       const cancelled = await tx.sale.findUnique({ where: { id: saleId }, include: { lines: true } });
       if (!cancelled) throw new Error("sale_not_found_after_cancel");
+      const journals = await tx.journal.findMany({ where: { sourceId: saleId, sourceType: { in: ["SALE", "SALE_COGS"] } } });
+      for (const journal of journals) await reverseJournal(tx, journal.id, new Date());
       await audit("SALE_CANCELLED", actorId, "SALE", cancelled.id, { stage: "TRANSACTION", cashSessionId: cancelled.cashSessionId }, tx);
       return { kind: "cancelled" as const, sale: cancelled };
     });

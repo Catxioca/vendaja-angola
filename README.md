@@ -132,3 +132,16 @@ Linux packages can be signed separately with the distribution repository tooling
 0 high, 0 critical) after pinning Prisma 6.12.0 and upgrading Electron to 44.3.0.
 Re-run the command after dependency changes; audit advisories can change independently
 of application code.
+# Contabilidade integrada
+
+O módulo contabilístico usa partidas dobradas em `Journal`/`JournalLine` e mantém
+`JournalEntry` para compatibilidade com dados históricos. Vendas, compras e
+despesas confirmadas geram lançamentos idempotentes por `sourceType`/`sourceId`.
+Os períodos são criados mensalmente quando necessário e impedem lançamentos
+posteriores ao fecho. O endpoint `/api/v1/accounting/financial-statements`
+expõe balancete, balanço e demonstração de resultados por intervalo.
+
+As regras de IVA são configuráveis em `TaxRule`; as contas padrão são apenas uma
+base operacional e devem ser revistas pelo contabilista da empresa. A integração
+com AGT/SAF-T continua dependente do XSD oficial e de homologação externa; este
+software não declara conformidade fiscal sem essa validação.

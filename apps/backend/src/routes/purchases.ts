@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ensureAccountingPeriod, postPurchaseAccounting, postPayablePaymentAccounting } from "../services/accounting.js";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../server.js";
@@ -136,6 +137,8 @@ purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
             const balanceCents = locked[0].originalCents - locked[0].paidCents;
             validatePaymentAmount(locked[0].originalCents, locked[0].paidCents, parsed.data.amountCents);
             const payment = await tx.payablePayment.create({ data: { payableId, amountCents: parsed.data.amountCents, paymentMethod: parsed.data.paymentMethod, idempotencyKey: parsed.data.idempotencyKey, reference: parsed.data.reference ?? null, note: parsed.data.note ?? null, paidAt: parsed.data.paidAt, operatorId: actorId } });
+            await ensureAccountingPeriod(tx, payment.paidAt);
+            await postPayablePaymentAccounting(tx, payment);
             const paidCents = locked[0].paidCents + parsed.data.amountCents;
             const status = payableStatus(locked[0].originalCents, paidCents, locked[0].dueDate);
             const payable = await tx.accountPayable.update({ where: { id: payableId }, data: { paidCents, status } });
@@ -153,6 +156,8 @@ purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
       const taxCents = lines.reduce((sum, line) => sum + Math.round(line.quantity * line.unitCostCents * line.taxRate), 0);
       const totalCents = subtotalCents - parsed.data.discountCents + taxCents;
       const purchase = await tx.purchase.create({ data: { number: parsed.data.number, supplierId: parsed.data.supplierId, procurementOrderId: parsed.data.procurementOrderId ?? null, operatorId: actorId, status: "CONFIRMED", paymentMethod: parsed.data.paymentMethod, subtotalCents, discountCents: parsed.data.discountCents, taxCents, totalCents, documentNumber: parsed.data.documentNumber ?? null, purchasedAt: parsed.data.purchasedAt, confirmedAt: new Date(), notes: parsed.data.notes ?? null, idempotencyKey: parsed.data.idempotencyKey, lines: { create: lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitCostCents: line.unitCostCents, taxRate: line.taxRate, totalCents: line.totalCents })) }, payable: parsed.data.paymentMethod === "CREDIT" ? { create: { supplierId: parsed.data.supplierId, originalCents: totalCents, dueDate: parsed.data.dueDate ?? new Date(Date.now() + 30 * 86400000) } } : undefined }, include: { lines: true, payable: true } });
+      await ensureAccountingPeriod(tx, purchase.purchasedAt);
+      await postPurchaseAccounting(tx, purchase);
       await audit("PURCHASE_CONFIRMED", actorId, "PURCHASE", purchase.id, { totalCents }, tx);
       return purchase;
     });

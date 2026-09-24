@@ -665,6 +665,8 @@ model Account {
   debitEntries JournalEntry[] @relation("DebitAccount")
   creditEntries JournalEntry[] @relation("CreditAccount")
   journalLines JournalLine[]
+  outputTaxRules TaxRule[] @relation("TaxOutputAccount")
+  inputTaxRules TaxRule[] @relation("TaxInputAccount")
 }
 
 model JournalEntry {
@@ -696,8 +698,41 @@ model Journal {
   sourceId String?
   createdBy String?
   createdAt DateTime @default(now())
+  status String @default("POSTED")
+  periodId String?
+  period AccountingPeriod? @relation(fields: [periodId], references: [id])
   lines JournalLine[]
   @@index([entryDate])
+  @@index([periodId])
+  @@unique([sourceType, sourceId])
+}
+
+model AccountingPeriod {
+  id String @id @default(uuid())
+  name String
+  startsAt DateTime
+  endsAt DateTime
+  status String @default("OPEN")
+  closedAt DateTime?
+  closedBy String?
+  journals Journal[]
+  createdAt DateTime @default(now())
+  @@unique([startsAt, endsAt])
+  @@index([status, startsAt, endsAt])
+}
+
+model TaxRule {
+  id String @id @default(uuid())
+  code String @unique
+  name String
+  rate Decimal @db.Decimal(5,4)
+  exemptionCode String?
+  outputAccountId String?
+  inputAccountId String?
+  active Boolean @default(true)
+  outputAccount Account? @relation("TaxOutputAccount", fields: [outputAccountId], references: [id])
+  inputAccount Account? @relation("TaxInputAccount", fields: [inputAccountId], references: [id])
+  createdAt DateTime @default(now())
 }
 
 model JournalLine {

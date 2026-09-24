@@ -5,6 +5,7 @@ import { prisma } from "../server.js";
 import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { expenseCategories, expensePaymentMethods } from "../services/expense-validation.js";
+import { ensureAccountingPeriod, postExpenseAccounting } from "../services/accounting.js";
 
 export const expenseRouter = Router();
 expenseRouter.use(requireAuth, requireModuleAccess("ACCOUNTING"));
@@ -54,7 +55,12 @@ expenseRouter.post("/", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), a
   try {
     const supplier = parsed.data.supplierId ? await prisma.supplier.findUnique({ where: { id: parsed.data.supplierId } }) : null;
     if (parsed.data.supplierId && !supplier) { res.status(404).json({ error: "supplier_not_found" }); return; }
-    const expense = await prisma.expense.create({ data: { ...parsed.data, operatorId: (req as AuthRequest).user?.id ?? null } });
+    const expense = await prisma.$transaction(async (tx) => {
+      const created = await tx.expense.create({ data: { ...parsed.data, operatorId: (req as AuthRequest).user?.id ?? null } });
+      await ensureAccountingPeriod(tx, created.expenseDate);
+      await postExpenseAccounting(tx, created);
+      return created;
+    });
     await audit("EXPENSE_CREATED", (req as AuthRequest).user?.id, "EXPENSE", expense.id, { amountCents: expense.amountCents });
     res.status(201).json(expense);
   } catch (error) {

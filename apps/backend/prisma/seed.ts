@@ -36,6 +36,14 @@ async function main() {
   });
   for (const name of categories) await prisma.category.upsert({ where: { name }, update: {}, create: { name } });
   for (const exemption of exemptions) await prisma.fiscalExemption.upsert({ where: { code: exemption.code }, update: { reason: exemption.reason, active: true }, create: exemption });
+  const now = new Date();
+  const startsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const endsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  await prisma.accountingPeriod.upsert({
+    where: { startsAt_endsAt: { startsAt, endsAt } },
+    update: { status: "OPEN" },
+    create: { name: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`, startsAt, endsAt, status: "OPEN" },
+  });
 
   const category = await prisma.category.findUniqueOrThrow({ where: { name: "Bebidas" } });
   const bakery = await prisma.category.findUniqueOrThrow({ where: { name: "Padaria" } });

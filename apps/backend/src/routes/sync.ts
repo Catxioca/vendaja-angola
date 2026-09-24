@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireCompanyContext, type AuthRequest } from "../middleware/auth.js";
 import { prisma } from "../server.js";
 import { calculateSale } from "../services/sale-calculation.js";
 import { deterministicInvoiceHash, nextFiscalNumber, qrPayload, signFiscalPayload } from "../services/fiscal.js";
@@ -11,7 +11,7 @@ import { canManageCashSession } from "../services/authorization.js";
 import { validateCreditSale } from "../services/credit-integrity.js";
 
 export const syncRouter = Router();
-syncRouter.use(requireAuth);
+syncRouter.use(requireAuth, requireCompanyContext);
 
 const mutation = z.object({ id: z.string(), operation: z.enum(["CREATE", "UPDATE"]), entity: z.enum(["SALE", "PRODUCT"]), payload: z.unknown(), occurredAt: z.string().datetime() });
 const saleSchema = z.object({
@@ -47,6 +47,8 @@ async function recordMutation(
   item: z.infer<typeof mutation>,
   deviceId: string,
   saleId: string,
+  context: NonNullable<AuthRequest["context"]>,
+  userId: string,
 ) {
   await prisma.syncMutation.create({
     data: {
@@ -56,11 +58,16 @@ async function recordMutation(
       operation: item.operation,
       occurredAt: new Date(item.occurredAt),
       saleId,
+      companyId: context.companyId,
+      branchId: context.branchId,
+      userId,
     },
   });
 }
 
 syncRouter.post("/", async (req, res) => {
+  const auth = req as AuthRequest;
+  if (!auth.user?.id || !auth.context) { res.status(403).json({ error: "company_context_required" }); return; }
   const parsed = z.object({ deviceId: z.string().min(1), mutations: z.array(mutation), lastCursor: z.string().optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_sync", details: parsed.error.flatten() }); return; }
 
@@ -84,6 +91,7 @@ syncRouter.post("/", async (req, res) => {
       await prisma.$transaction(async (tx) => {
         const existingMutation = await tx.syncMutation.findUnique({ where: { id: item.id } });
         if (existingMutation) {
+          if (existingMutation.companyId !== auth.context?.companyId || existingMutation.branchId !== auth.context?.branchId || existingMutation.userId !== auth.user?.id || existingMutation.deviceId !== parsed.data.deviceId) throw new SyncMutationRejected("mutation_context_mismatch");
           if (existingMutation.saleId !== sale.id) throw new SyncMutationRejected("mutation_sale_mismatch");
           return;
         }
@@ -92,7 +100,7 @@ syncRouter.post("/", async (req, res) => {
         if (existingSale) {
           if (!equivalentSale(existingSale, sale)) throw new SyncMutationRejected("sale_payload_mismatch");
           await tx.syncMutation.create({
-            data: { id: item.id, deviceId: parsed.data.deviceId, entity: item.entity, operation: item.operation, occurredAt: new Date(item.occurredAt), saleId: sale.id },
+            data: { id: item.id, deviceId: parsed.data.deviceId, entity: item.entity, operation: item.operation, occurredAt: new Date(item.occurredAt), saleId: sale.id, companyId: auth.context?.companyId, branchId: auth.context?.branchId, userId: auth.user?.id },
           });
           return;
         }
@@ -174,7 +182,7 @@ syncRouter.post("/", async (req, res) => {
         const concurrentSale = await prisma.sale.findUnique({ where: { id: sale.id }, include: { lines: { select: { productId: true, quantity: true } } } });
         if (concurrentSale && equivalentSale(concurrentSale, sale)) {
           try {
-            await recordMutation(item, parsed.data.deviceId, sale.id);
+            await recordMutation(item, parsed.data.deviceId, sale.id, auth.context, auth.user.id);
             accepted.push(item.id);
           } catch (recordError) {
             if (recordError instanceof Prisma.PrismaClientKnownRequestError && recordError.code === "P2002") accepted.push(item.id);

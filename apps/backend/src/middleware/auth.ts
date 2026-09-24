@@ -2,12 +2,25 @@ import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { verifyAuthorizationGrant } from "../services/grants.js";
 import { getEnv } from "../config/env.js";
-export interface AuthRequest extends Express.Request { user?: { id: string; role: string } }
+export interface AuthRequest extends Express.Request { user?: { id: string; role: string }; context?: { companyId: string; branchId: string | null; membershipId: string; role: string } }
 export const requireAuth: RequestHandler = (req, res, next) => {
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) { res.status(401).json({ error: "missing_token", message: "Sessão não encontrada. Por favor, faça login novamente." }); return; }
   try { (req as AuthRequest).user = jwt.verify(token, getEnv().JWT_SECRET) as { id: string; role: string }; next(); }
   catch (error) { console.warn("[auth] rejected bearer token", { path: req.path, reason: error instanceof Error ? error.message : "invalid_token" }); res.status(401).json({ error: "invalid_token", message: "Sessão expirada. Por favor, faça login novamente." }); }
+};
+export const requireCompanyContext: RequestHandler = async (req, res, next) => {
+  const auth = req as AuthRequest;
+  const companyId = req.header("x-company-id");
+  const branchId = req.header("x-branch-id") ?? null;
+  if (!companyId) { res.status(400).json({ error: "company_context_required" }); return; }
+  try {
+    const { prisma } = await import("../db.js");
+    const membership = await prisma.companyMembership.findFirst({ where: { userId: auth.user?.id, companyId, branchId, active: true }, select: { id: true, companyId: true, branchId: true, role: true } });
+    if (!membership) { res.status(403).json({ error: "company_context_forbidden" }); return; }
+    auth.context = { companyId: membership.companyId, branchId: membership.branchId, membershipId: membership.id, role: membership.role };
+    next();
+  } catch (error) { next(error); }
 };
 export const requireRole = (...roles: string[]): RequestHandler => (req, res, next) => {
   const role = normalizeRole((req as AuthRequest).user?.role);

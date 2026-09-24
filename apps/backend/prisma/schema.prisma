@@ -107,6 +107,153 @@ model User {
   expenses Expense[]
   payablePayments PayablePayment[]
   createdAt DateTime @default(now())
+  memberships CompanyMembership[]
+}
+
+model Company {
+  id String @id @default(uuid())
+  legalName String
+  nif String? @unique
+  active Boolean @default(true)
+  branches Branch[]
+  memberships CompanyMembership[]
+  warehouses Warehouse[]
+  cashRegisters CashRegister[]
+  bankAccounts BankAccount[]
+  paymentTerminals PaymentTerminal[]
+  createdAt DateTime @default(now())
+}
+
+model Branch {
+  id String @id @default(uuid())
+  companyId String
+  code String
+  name String
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  memberships CompanyMembership[]
+  warehouses Warehouse[]
+  cashRegisters CashRegister[]
+  @@unique([companyId, code])
+}
+
+model CompanyMembership {
+  id String @id @default(uuid())
+  userId String
+  companyId String
+  branchId String?
+  role String
+  modules String[] @default([])
+  active Boolean @default(true)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  @@unique([userId, companyId, branchId])
+  @@index([companyId, branchId, active])
+}
+
+model CashRegister {
+  id String @id @default(uuid())
+  companyId String
+  branchId String
+  code String
+  name String
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  shifts PosShift[]
+  @@unique([branchId, code])
+}
+
+model PosShift {
+  id String @id @default(uuid())
+  cashRegisterId String
+  operatorId String
+  openedAt DateTime @default(now())
+  openingCents Int
+  closedAt DateTime?
+  closingCents Int?
+  declaredCents Int?
+  differenceCents Int?
+  status String @default("OPEN")
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  @@index([cashRegisterId, status])
+}
+
+model BankAccount {
+  id String @id @default(uuid())
+  companyId String
+  branchId String?
+  name String
+  iban String?
+  currency String @default("AOA")
+  openingBalanceCents Int @default(0)
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  statements BankStatement[]
+  @@unique([companyId, iban])
+}
+
+model BankStatement {
+  id String @id @default(uuid())
+  bankAccountId String
+  referenceHash String @unique
+  statementDate DateTime
+  openingBalanceCents Int
+  closingBalanceCents Int
+  importedAt DateTime @default(now())
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  lines BankStatementLine[]
+}
+
+model BankStatementLine {
+  id String @id @default(uuid())
+  statementId String
+  lineHash String @unique
+  occurredAt DateTime
+  description String
+  amountCents Int
+  reconciledAt DateTime?
+  reconciledBy String?
+  statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+}
+
+model PaymentTerminal {
+  id String @id @default(uuid())
+  companyId String
+  branchId String?
+  code String
+  provider String
+  config Json?
+  active Boolean @default(true)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions PaymentTransaction[]
+  @@unique([companyId, code])
+}
+
+model PaymentTransaction {
+  id String @id @default(uuid())
+  terminalId String
+  idempotencyKey String @unique
+  externalReference String?
+  amountCents Int
+  status String @default("PENDING")
+  operation String @default("SALE")
+  createdAt DateTime @default(now())
+  terminal PaymentTerminal @relation(fields: [terminalId], references: [id], onDelete: Cascade)
+  @@index([terminalId, createdAt])
+}
+
+model ReprintLog {
+  id String @id @default(uuid())
+  companyId String
+  branchId String?
+  documentType String
+  documentId String
+  reason String
+  userId String
+  createdAt DateTime @default(now())
+  @@index([companyId, documentType, documentId])
 }
 model Product {
   id String @id @default(uuid())
@@ -380,12 +527,17 @@ model StockMovement {
 
 model Warehouse {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   code String @unique
   name String
   active Boolean @default(true)
   locations StockLocation[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  @@index([companyId, branchId])
 }
 
 model StockLocation {
@@ -577,6 +729,8 @@ model AuditLog {
   userId String?
   metadata Json?
   createdAt DateTime @default(now())
+  companyId String?
+  branchId String?
   user User? @relation(fields: [userId], references: [id])
   @@index([createdAt])
 }
@@ -769,5 +923,9 @@ model SyncMutation {
   saleId String?
   sale Sale? @relation(fields: [saleId], references: [id])
   createdAt DateTime @default(now())
+  companyId String?
+  branchId String?
+  userId String?
   @@index([deviceId, occurredAt])
+  @@index([companyId, branchId, userId])
 }

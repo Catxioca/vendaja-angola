@@ -50,7 +50,7 @@ jobs:
         run: npm run db:seed
       - name: Ensure open accounting period for E2E
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO \"AccountingPeriod\" (\"id\", \"name\", \"startsAt\", \"endsAt\", \"status\") VALUES ('00000000-0000-0000-0000-000000000001', to_char(date_trunc('month', now()), 'YYYY-MM'), date_trunc('month', now()), date_trunc('month', now()) + interval '1 month' - interval '1 millisecond', 'OPEN') ON CONFLICT (\"startsAt\", \"endsAt\") DO UPDATE SET \"status\" = 'OPEN';"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO \"AccountingPeriod\" (\"id\", \"name\", \"startsAt\", \"endsAt\", \"status\") VALUES ('00000000-0000-0000-0000-000000000001', to_char(date_trunc('month', now()), 'YYYY-MM'), date_trunc('month', now()), date_trunc('month', now()) + interval '1 month' - interval '1 millisecond', 'OPEN') ON CONFLICT (\"startsAt\", \"endsAt\") DO UPDATE SET \"status\" = 'OPEN'; UPDATE \"AccountingPeriod\" SET \"status\" = 'OPEN' WHERE \"startsAt\" <= now() AND \"endsAt\" >= now();"
       - run: npm --workspace @angola/backend run test:integration
       - run: npm run typecheck
       - run: npm test

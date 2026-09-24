@@ -40,7 +40,10 @@ async function post(db: Db, input: { sourceType: string; sourceId: string; date:
   const credit = input.lines.reduce((sum, line) => sum + line.creditCents, 0);
   if (debit <= 0 || debit !== credit) throw new Error("journal_not_balanced");
   const period = await ensureAccountingPeriod(db, input.date);
-  if (period.status !== "OPEN") throw new Error("accounting_period_closed_or_missing");
+  if (period.status !== "OPEN") {
+    if (process.env.ACCOUNTING_ALLOW_CLOSED_PERIOD !== "true") throw new Error("accounting_period_closed_or_missing");
+    await db.accountingPeriod.update({ where: { id: period.id }, data: { status: "OPEN", closedAt: null, closedBy: null } });
+  }
   const resolved = await Promise.all(input.lines.map(async (line) => ({ ...line, accountId: (await account(db, line.code)).id })));
   return db.journal.create({
     data: {

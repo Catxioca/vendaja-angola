@@ -39,6 +39,15 @@ jobs:
       - run: npm run db:generate
       - run: npm --workspace @angola/backend run prisma:validate
       - run: npm --workspace @angola/backend exec prisma migrate deploy -- --schema=prisma/schema.prisma
+      - name: Validate backup and restore
+        env:
+          BACKUP_PATH: ${{ runner.temp }}/vendaja-validation.dump
+        run: npm run db:backup:smoke
+      - name: Seed E2E database
+        env:
+          ADMIN_INITIAL_PASSWORD: ci-admin-password-0123456789
+          ADMIN_INITIAL_EMAIL: admin@angolacommerce.local
+        run: npm run db:seed
       - run: npm --workspace @angola/backend run test:integration
       - run: npm run typecheck
       - run: npm test
@@ -49,6 +58,7 @@ jobs:
         shell: bash
         run: |
           export NODE_ENV=production JWT_SECRET="ci-jwt-secret-012345678901234567890123" FISCAL_CONFIG_KEY="ci-fiscal-key-012345678901234567890123" COMPANY_NIF="000000000" COMPANY_NAME="CI" CORS_ORIGIN="http://127.0.0.1:4173"
+          export ADMIN_INITIAL_PASSWORD="ci-admin-password-0123456789" ADMIN_INITIAL_EMAIL="admin@angolacommerce.local"
           node apps/backend/dist/bundle.js > "$RUNNER_TEMP/vendaja-backend.log" 2>&1 &
           backend_pid=$!
           npm --workspace @angola/web exec vite -- preview --host 127.0.0.1 > "$RUNNER_TEMP/vendaja-web.log" 2>&1 &
@@ -59,4 +69,5 @@ jobs:
             sleep 1
           done
           E2E_WEB_URL=http://127.0.0.1:4173 npm run e2e:smoke
+          npm run e2e:critical
       - run: git diff --check

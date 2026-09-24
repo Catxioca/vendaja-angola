@@ -21,6 +21,12 @@ $env:ALLOW_DESTRUCTIVE_RESTORE="true"
 npm run db:restore
 ```
 
+A validação automatizada `npm run db:backup:smoke` cria uma base de destino
+descartável, faz `pg_dump`, restaura com `pg_restore`, compara um marcador de
+integridade e confirma que um ficheiro inexistente falha sem sucesso falso.
+A CI executa este teste contra o serviço PostgreSQL efémero; em produção o
+mesmo procedimento deve ser executado mensalmente com uma cópia cifrada.
+
 Nunca restaure sobre produção sem uma janela aprovada, snapshot anterior e
 verificação do hash do dump. O restauro deve ser seguido por `prisma migrate
 deploy` e uma verificação de saúde.
@@ -28,9 +34,16 @@ deploy` e uma verificação de saúde.
 ## Observabilidade e resposta a incidentes
 
 `/health` e `/api/health` verificam a ligação PostgreSQL. `/metrics` expõe
-contadores JSON para o coletor interno; logs são JSON com `correlationId`,
+`/ready` é o readiness check usado antes de encaminhar tráfego. `/metrics`
+expõe contadores JSON para o coletor interno; logs são JSON com `correlationId`,
 rota, estado e duração. Alertar para health 503, erros HTTP 5xx, bloqueios de
 rate limit, falhas de backup e crescimento de latência.
+
+O consumidor de métricas deve recolher `/metrics` a cada 15--30 segundos e
+alertar, no mínimo, para `http_requests_total` 5xx, `rate_limit_blocked_total`,
+health/readiness 503 e ausência de backup válido na janela de retenção. O
+formato JSON é intencional para o adapter interno; a conversão para Prometheus
+ou OpenTelemetry deve ocorrer no gateway, sem expor métricas publicamente.
 
 Em incidente: preservar logs e o correlation ID, bloquear credenciais afetadas,
 revogar refresh tokens, isolar o tenant afetado, tirar backup antes de corrigir,
@@ -48,6 +61,18 @@ backup numa base nova e faça cutover controlado quando necessário.
 6. Em falha, voltar ao artefacto anterior; preservar a migration e corrigir
    forward, salvo procedimento de recuperação validado pelo DBA.
 
+O rollback foi desenhado como rollback de artefacto, não downgrade destrutivo:
+o dump da versão anterior é restaurado numa base nova, `prisma migrate deploy`
+é executado nessa base e o smoke/readiness é repetido antes do cutover. A CI
+valida a parte de upgrade/restauro em PostgreSQL descartável e falha qualquer
+restauro de backup inexistente.
+
+`npm run e2e:critical` é executado na CI com dados semeados e valida login,
+criação de venda com atualização de stock, contexto multiempresa, abertura e
+fecho de caixa POS, sincronização e recuperação de pedido inválido. Não usa
+TPA, AGT ou serviços externos reais; esses adaptadores precisam de homologação
+no piloto.
+
 ## Checklist de piloto
 
 - Empresa, filiais, utilizadores, permissões e séries confirmados.
@@ -57,3 +82,11 @@ backup numa base nova e faça cutover controlado quando necessário.
 - Fecho de caixa, devolução, reimpressão, offline e sincronização testados.
 - Responsável de suporte, janela de incidente e contacto do fornecedor definidos.
 - Exportação de dados e procedimento de encerramento da empresa aprovados.
+
+Os tokens de sessão continuam em `localStorage` por compatibilidade com o
+desktop/PWA offline. Isto é um risco XSS residual: a CSP, a ausência de
+segredos no service worker/cache, o escaping React, a expiração curta do
+access token, refresh-token rotation/revogação e o rate limit reduzem o
+impacto, mas não substituem a migração futura para um broker de sessão com
+cookies `HttpOnly`, `Secure` e `SameSite`. Nunca usar `localStorage` para
+segredos de longa duração.

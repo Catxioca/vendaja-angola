@@ -21,26 +21,11 @@ async function account(db: Db, code: string) {
   return db.account.upsert({ where: { code }, create: definition, update: {} });
 }
 
-async function openPeriod(db: Db, date: Date) {
-  const period = await db.accountingPeriod.findFirst({ where: { startsAt: { lte: date }, endsAt: { gte: date }, status: "OPEN" } });
-  if (!period) {
-    const existing = await db.accountingPeriod.findFirst({ where: { startsAt: { lte: date }, endsAt: { gte: date } } });
-    if (existing?.status === "CLOSED") throw new Error("accounting_period_closed_or_missing");
-    if (existing) return db.accountingPeriod.update({ where: { id: existing.id }, data: { status: "OPEN" } });
-    const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-    const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
-    return db.accountingPeriod.upsert({
-      where: { startsAt_endsAt: { startsAt: start, endsAt: end } },
-      create: { name: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`, startsAt: start, endsAt: end, status: "OPEN" },
-      update: {},
-    });
-  }
-  return period;
-}
-
 export async function ensureAccountingPeriod(db: Db, date = new Date()) {
   const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
   const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  const existing = await db.accountingPeriod.findUnique({ where: { startsAt_endsAt: { startsAt: start, endsAt: end } } });
+  if (existing) return existing;
   return db.accountingPeriod.upsert({
     where: { startsAt_endsAt: { startsAt: start, endsAt: end } },
     create: { name: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`, startsAt: start, endsAt: end, status: "OPEN" },
@@ -54,8 +39,8 @@ async function post(db: Db, input: { sourceType: string; sourceId: string; date:
   const debit = input.lines.reduce((sum, line) => sum + line.debitCents, 0);
   const credit = input.lines.reduce((sum, line) => sum + line.creditCents, 0);
   if (debit <= 0 || debit !== credit) throw new Error("journal_not_balanced");
-  const ensuredPeriod = await ensureAccountingPeriod(db, input.date);
-  const period = ensuredPeriod.status === "OPEN" ? ensuredPeriod : await openPeriod(db, input.date);
+  const period = await ensureAccountingPeriod(db, input.date);
+  if (period.status !== "OPEN") throw new Error("accounting_period_closed_or_missing");
   const resolved = await Promise.all(input.lines.map(async (line) => ({ ...line, accountId: (await account(db, line.code)).id })));
   return db.journal.create({
     data: {

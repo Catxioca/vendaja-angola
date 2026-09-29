@@ -2,16 +2,16 @@ import { Router, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { canManageCashSession } from "../services/authorization.js";
 import { receivableStatus } from "../services/credit-integrity.js";
 import { ensureAccountingPeriod, postReceivablePaymentAccounting } from "../services/accounting.js";
 
 export const customerRouter = Router();
-customerRouter.use(requireAuth);
+customerRouter.use(requireAuth, requireCompanyContext);
 export const receivableRouter = Router();
-receivableRouter.use(requireAuth);
+receivableRouter.use(requireAuth, requireCompanyContext);
 const customerInput = z.object({
   name: z.string().trim().min(1).max(200), nif: z.string().trim().max(40).optional().nullable(),
   email: z.string().email().optional().nullable(), phone: z.string().trim().max(40).optional().nullable(), address: z.string().max(300).optional().nullable(),
@@ -19,16 +19,18 @@ const customerInput = z.object({
 });
 
 customerRouter.get("/", async (req, res) => {
+  const tenant = companyContext(req);
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const customers = await prisma.customer.findMany({
-    where: q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { nif: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }] } : undefined,
+    where: { companyId: tenant.companyId, branchId: tenant.branchId, ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { nif: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }] } : {}) },
     orderBy: { name: "asc" }, take: 100,
   });
   res.json(customers);
 });
-async function listReceivables(_req: Request, res: Response) {
+async function listReceivables(req: Request, res: Response) {
+  const tenant = companyContext(req);
   const customers = await prisma.customer.findMany({
-    where: { outstandingDebtCents: { gt: 0 } },
+    where: { outstandingDebtCents: { gt: 0 }, companyId: tenant.companyId, branchId: tenant.branchId },
     include: { sales: { where: { paymentMethod: "CREDIT", status: { not: "CANCELLED" } }, orderBy: { createdAt: "asc" } }, receivablePayments: { orderBy: { receivedAt: "desc" }, take: 100 } },
     orderBy: { updatedAt: "asc" },
   });
@@ -47,13 +49,15 @@ customerRouter.post("/", async (req, res) => {
   const parsed = customerInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_customer", details: parsed.error.flatten() }); return; }
   try {
-    const customer = await prisma.customer.create({ data: parsed.data });
+    const tenant = companyContext(req);
+    const customer = await prisma.customer.create({ data: { ...parsed.data, companyId: tenant.companyId, branchId: tenant.branchId } });
     await audit("CUSTOMER_CREATED", (req as AuthRequest).user?.id, "CUSTOMER", customer.id);
     res.status(201).json(customer);
   } catch (error) { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") { res.status(409).json({ error: "customer_nif_exists" }); return; } throw error; }
 });
 customerRouter.get("/:id", async (req, res) => {
-  const customer = await prisma.customer.findUnique({ where: { id: String(req.params.id) }, include: { sales: { orderBy: { createdAt: "desc" }, take: 100 }, receivablePayments: { orderBy: { receivedAt: "desc" }, take: 100 } } });
+  const tenant = companyContext(req);
+  const customer = await prisma.customer.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId }, include: { sales: { orderBy: { createdAt: "desc" }, take: 100 }, receivablePayments: { orderBy: { receivedAt: "desc" }, take: 100 } } });
   if (!customer) { res.status(404).json({ error: "customer_not_found" }); return; }
   res.json(customer);
 });
@@ -61,8 +65,9 @@ customerRouter.patch("/:id", async (req, res) => {
   const parsed = customerInput.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_customer", details: parsed.error.flatten() }); return; }
   try {
+    const tenant = companyContext(req);
     const customer = await prisma.$transaction(async (tx) => {
-      const current = await tx.customer.findUnique({ where: { id: String(req.params.id) }, select: { id: true, outstandingDebtCents: true } });
+      const current = await tx.customer.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId }, select: { id: true, outstandingDebtCents: true } });
       if (!current) throw new Error("customer_not_found");
       if (parsed.data.creditLimitCents !== undefined && parsed.data.creditLimitCents < current.outstandingDebtCents) throw new Error("credit_limit_below_outstanding");
       return tx.customer.update({ where: { id: current.id }, data: parsed.data });
@@ -78,7 +83,10 @@ customerRouter.patch("/:id", async (req, res) => {
 });
 customerRouter.delete("/:id", async (req, res) => {
   try {
-    const customer = await prisma.customer.update({ where: { id: String(req.params.id) }, data: { active: false } });
+    const tenant = companyContext(req);
+    const current = await prisma.customer.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId }, select: { id: true } });
+    if (!current) { res.status(404).json({ error: "customer_not_found" }); return; }
+    const customer = await prisma.customer.update({ where: { id: current.id }, data: { active: false } });
     await audit("CUSTOMER_DEACTIVATED", (req as AuthRequest).user?.id, "CUSTOMER", customer.id);
     res.json(customer);
   } catch (error) { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") { res.status(404).json({ error: "customer_not_found" }); return; } throw error; }
@@ -92,15 +100,16 @@ customerRouter.post("/:id/payments", async (req, res) => {
   const parsed = paymentInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_receivable_payment", details: parsed.error.flatten() }); return; }
   const customerId = String(req.params.id), actorId = (req as AuthRequest).user?.id;
+  const tenant = companyContext(req);
   try {
     const result = await prisma.$transaction(async (tx) => {
       const existing = await tx.receivablePayment.findUnique({ where: { idempotencyKey: parsed.data.idempotencyKey } });
       if (existing) {
         if (existing.customerId !== customerId) throw new Error("idempotency_key_reused");
-        return { payment: existing, customer: await tx.customer.findUniqueOrThrow({ where: { id: customerId } }), replay: true };
+        return { payment: existing, customer: await tx.customer.findFirstOrThrow({ where: { id: customerId, companyId: tenant.companyId, branchId: tenant.branchId } }), replay: true };
       }
       if (!parsed.data.cashSessionId) throw new Error("cash_session_required");
-      const locked = await tx.$queryRaw<Array<{ id: string; outstandingDebtCents: number }>>`SELECT "id", "outstandingDebtCents" FROM "Customer" WHERE "id" = ${customerId} FOR UPDATE`;
+      const locked = await tx.$queryRaw<Array<{ id: string; outstandingDebtCents: number }>>`SELECT "id", "outstandingDebtCents" FROM "Customer" WHERE "id" = ${customerId} AND "companyId" = ${tenant.companyId} AND "branchId" IS NOT DISTINCT FROM ${tenant.branchId} FOR UPDATE`;
       if (!locked[0]) throw new Error("customer_not_found");
       if (parsed.data.amountCents > locked[0].outstandingDebtCents) throw new Error("payment_exceeds_outstanding");
       if (parsed.data.cashSessionId) {
@@ -110,8 +119,8 @@ customerRouter.post("/:id/payments", async (req, res) => {
         if (!canManageCashSession(session.openedBy, actorId, (req as AuthRequest).user?.role)) throw new Error("cash_session_forbidden");
       }
       const payment = await tx.receivablePayment.create({ data: { customerId, amountCents: parsed.data.amountCents, paymentMethod: parsed.data.paymentMethod, idempotencyKey: parsed.data.idempotencyKey, cashSessionId: parsed.data.cashSessionId ?? null, operatorId: actorId, reference: parsed.data.reference ?? null, note: parsed.data.note, receivedAt: parsed.data.receivedAt } });
-      await ensureAccountingPeriod(tx, payment.receivedAt);
-      await postReceivablePaymentAccounting(tx, payment);
+      await ensureAccountingPeriod(tx, tenant, payment.receivedAt);
+      await postReceivablePaymentAccounting(tx, tenant, payment);
       const customer = await tx.customer.update({ where: { id: customerId }, data: { outstandingDebtCents: { decrement: parsed.data.amountCents } } });
       await audit("RECEIVABLE_PAYMENT", actorId, "RECEIVABLE_PAYMENT", payment.id, { customerId, amountCents: payment.amountCents }, tx);
       return { payment, customer, replay: false };

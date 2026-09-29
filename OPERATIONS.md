@@ -2,11 +2,21 @@
 
 ## Instalação
 
-1. Instale Node.js 20+, PostgreSQL 16+ e as ferramentas `pg_dump`/`pg_restore`.
+1. No servidor central, instale Node.js 20+, PostgreSQL 16+ e as ferramentas
+   `pg_dump`/`pg_restore`. O Desktop não inicia PostgreSQL local
+   automaticamente.
 2. Execute `npm ci`, copie `.env.example` para `.env` e preencha segredos aleatórios.
-3. Em produção, defina `NODE_ENV=production`, `CORS_ORIGIN` explícito e `TRUST_PROXY` apenas quando existir um proxy confiável.
+3. No servidor, defina `DATABASE_URL`, `JWT_SECRET`, `FISCAL_CONFIG_KEY`,
+   `COMPANY_NIF`, `COMPANY_NAME`, `CORS_ORIGIN` explícito e `TRUST_PROXY`
+   apenas quando existir um proxy confiável. Nunca embuta esses valores no
+   instalador.
 4. Execute `npm run db:generate` e `npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma`.
-5. Execute `npm run typecheck`, `npm test`, `npm run build:web` e `npm run build:desktop`.
+5. Instale o Desktop por máquina. No primeiro arranque, o administrador deve
+   informar a URL HTTPS do backend central e o `terminalId`, clicar em
+   **Testar ligação** e guardar. A mesma tela fica disponível em
+   **Definições**, protegida pela credencial de administrador. O teste consulta
+   somente `/health` e não envia tokens.
+6. Execute `npm run typecheck`, `npm test`, `npm run build:web` e `npm run build:desktop`.
 
 ## Backup, restauro e retenção
 

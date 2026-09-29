@@ -1,6 +1,6 @@
 {
   "name": "angola-commerce-platform",
-  "version": "2.2.1",
+  "version": "2.2.2-rc.3",
   "private": true,
   "description": "Hybrid Angola commerce, invoicing and point-of-sale platform",
   "workspaces": [
@@ -33,14 +33,15 @@
     "lint": "node scripts/lint.mjs",
     "test": "npm run build:shared && npm test --workspaces --if-present",
     "db:migrate": "npm --workspace @angola/backend run prisma:migrate",
-    "db:seed": "npm --workspace @angola/backend run db:seed"
-    ,"generate-license": "node scripts/generate-license.mjs",
+    "db:seed": "npm --workspace @angola/backend run db:seed",
+    "generate-license": "node scripts/generate-license.mjs",
     "db:backup": "node scripts/db-backup.mjs",
     "db:restore": "node scripts/db-restore.mjs",
     "db:backup:smoke": "node scripts/backup-restore-smoke.mjs",
     "db:upgrade:rollback:smoke": "node scripts/upgrade-rollback-smoke.mjs",
     "e2e:critical": "node scripts/e2e-critical.mjs",
-    "e2e:smoke": "node scripts/e2e-smoke.mjs"
+    "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "release:verify": "node scripts/verify-release.mjs"
   },
   "engines": {
     "node": ">=20"

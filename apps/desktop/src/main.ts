@@ -5,10 +5,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readServerConfigFile, testServerConnection, writeServerConfigFile, type ServerConfig } from "./server-config.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 let backendProcess: ChildProcess | null = null;
 const backendEntry = () => app.isPackaged
-  ? path.join(process.resourcesPath, "backend", "dist", "bundle.js")
+  ? path.join(process.resourcesPath, "backend", "bundle.js")
   : path.resolve(here, "../../backend/dist/bundle.js");
 function startLocalBackend(): void {
   if (process.env.VENDAJA_START_LOCAL_BACKEND !== "true" || !process.env.DATABASE_URL) {
@@ -17,7 +18,10 @@ function startLocalBackend(): void {
   }
   const entry = backendEntry();
   const env = { ...process.env, PORT: process.env.PORT ?? "4000", NODE_ENV: process.env.NODE_ENV ?? "production" };
-  backendProcess = spawn(process.execPath, [entry], { cwd: path.dirname(entry), env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  const nodePath = app.isPackaged
+    ? [path.join(process.resourcesPath, "backend", "vendor"), process.env.NODE_PATH].filter(Boolean).join(path.delimiter)
+    : process.env.NODE_PATH;
+  backendProcess = spawn(process.execPath, [entry], { cwd: path.dirname(entry), env: { ...env, ...(nodePath ? { NODE_PATH: nodePath } : {}), ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   backendProcess.stdout?.on("data", (chunk) => console.log(`[backend] ${String(chunk).trim()}`));
   backendProcess.stderr?.on("data", (chunk) => console.error(`[backend] ${String(chunk).trim()}`));
   backendProcess.on("error", (error) => console.error("[desktop] backend start failed", error));
@@ -26,6 +30,13 @@ function startLocalBackend(): void {
 type LicensePayload = { version: number; licenseId: string; nif: string; hardwareId: string; startsAt: string; expiresAt: string; modules: string[] };
 type LicenseStatus = { valid: boolean; reason?: string; hardwareId: string; expiresAt?: string; nif?: string; modules?: string[] };
 const licenseStatePath = () => path.join(app.getPath("userData"), "license-state.json");
+const serverConfigPath = () => path.join(app.getPath("userData"), "server-config.json");
+async function readServerConfig(): Promise<ServerConfig | null> {
+  return readServerConfigFile(serverConfigPath(), process.env.VENDAJA_ALLOW_PILOT_HTTP === "true");
+}
+async function saveServerConfig(config: ServerConfig): Promise<ServerConfig> {
+  return writeServerConfigFile(serverConfigPath(), config, process.env.VENDAJA_ALLOW_PILOT_HTTP === "true");
+}
 const publicKeyPath = () => app.isPackaged
   ? path.join(process.resourcesPath, "public.pem")
   : path.resolve(here, "../../public.pem");
@@ -85,6 +96,9 @@ ipcMain.handle("save-invoice-pdf", async (event, documentTitle: string) => {
   return { saved: true, filePath: result.filePath };
 });
 ipcMain.handle("get-license-status", () => validateLicense());
+ipcMain.handle("get-server-config", () => readServerConfig());
+ipcMain.handle("save-server-config", (_event, config: ServerConfig) => saveServerConfig(config));
+  ipcMain.handle("test-server-connection", (_event, apiUrl: string) => testServerConnection(apiUrl, process.env.VENDAJA_ALLOW_PILOT_HTTP === "true"));
 ipcMain.handle("activate-license", async (_event, token: string) => {
   const status = await validateLicense(token);
   if (!status.valid) return status;

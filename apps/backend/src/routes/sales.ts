@@ -3,7 +3,7 @@ import { ensureAccountingPeriod, postSaleAccounting, reverseJournal } from "../s
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
-import { requireAdminOrGrant, requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAdminOrGrant, requireAuth, requireCompanyContext, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { deterministicInvoiceHash, nextFiscalNumber, qrPayload, signFiscalPayload } from "../services/fiscal.js";
 import { calculateSale } from "../services/sale-calculation.js";
@@ -11,12 +11,13 @@ import { validateSalePayments } from "../services/payment-integrity.js";
 import { canManageCashSession } from "../services/authorization.js";
 import { validateCreditSale } from "../services/credit-integrity.js";
 export const saleRouter = Router();
-saleRouter.use(requireAuth);
+saleRouter.use(requireAuth, requireCompanyContext);
 const line = z.object({ productId: z.string(), quantity: z.number().int().positive(), unitPriceCents: z.number().int().nonnegative().optional(), taxRate: z.number().min(0).max(1).optional() });
 const input = z.object({ id: z.string().uuid(), number: z.string().min(1).optional(), lines: z.array(line).min(1), subtotalCents: z.number().int().nonnegative().optional(), taxCents: z.number().int().nonnegative().optional(), totalCents: z.number().int().nonnegative().optional(), discountCents: z.number().int().nonnegative().optional(), createdAt: z.string().datetime().optional(), fiscalType: z.enum(["INVOICE", "INVOICE_RECEIPT", "PROFORMA"]).default("INVOICE_RECEIPT"), paymentMethod: z.enum(["CASH", "CARD", "TRANSFER", "CREDIT"]).default("CASH"), customerId: z.string().uuid().nullable().optional(), dueDate: z.string().datetime().nullable().optional(), cashSessionId: z.string().uuid().nullable().optional(), cashCents: z.number().int().nonnegative().default(0), cardCents: z.number().int().nonnegative().default(0), transferCents: z.number().int().nonnegative().default(0), operatorName: z.string().optional(), operatorNif: z.string().optional(), operatorPhone: z.string().optional(), terminalId: z.string().optional() });
-saleRouter.get("/", async (_req, res) => {
+saleRouter.get("/", async (req, res) => {
   try {
-    res.json(await prisma.sale.findMany({ include: { lines: true }, orderBy: { createdAt: "desc" }, take: 100 }));
+    const tenant = companyContext(req);
+    res.json(await prisma.sale.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: true }, orderBy: { createdAt: "desc" }, take: 100 }));
   } catch (error) {
     console.error("[sales-list] unavailable", error);
     res.json([]);
@@ -26,11 +27,12 @@ saleRouter.post("/", async (req, res) => {
   const parsed = input.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_sale", details: parsed.error.flatten() }); return; }
   const sale = parsed.data;
-  const existing = await prisma.sale.findUnique({ where: { id: sale.id }, include: { lines: true } });
+  const tenant = companyContext(req);
+  const existing = await prisma.sale.findFirst({ where: { id: sale.id, companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: true } });
   if (existing) { res.status(200).json(existing); return; }
   let calculated;
   try {
-    calculated = await calculateSale(prisma, sale.lines.map(({ productId, quantity }) => ({ productId, quantity })), sale.discountCents);
+    calculated = await calculateSale(prisma, sale.lines.map(({ productId, quantity }) => ({ productId, quantity })), sale.discountCents, tenant);
   } catch (error) {
     res.status(400).json({ error: "invalid_sale_values", message: error instanceof Error ? error.message : "Os valores da venda são inválidos." });
     return;
@@ -56,13 +58,13 @@ saleRouter.post("/", async (req, res) => {
       }
       if (sale.fiscalType !== "PROFORMA" && (sale.cashCents > 0 || sale.cashSessionId)) {
         if (!sale.cashSessionId) throw new Error("cash_session_required");
-        const session = await tx.cashSession.findUnique({ where: { id: sale.cashSessionId } });
+        const session = await tx.cashSession.findFirst({ where: { id: sale.cashSessionId, companyId: tenant.companyId, branchId: tenant.branchId } });
         if (!session) throw new Error("cash_session_not_found");
         if (!canManageCashSession(session.openedBy, operatorId, (req as AuthRequest).user?.role)) throw new Error("cash_session_forbidden");
         if (session.closedAt) throw new Error("cash_session_closed");
       }
-      const series = (await tx.fiscalConfig.findUnique({ where: { id: "default" }, select: { invoiceSeries: true } }))?.invoiceSeries ?? "A";
-      const number = await nextFiscalNumber(sale.fiscalType, series, tx);
+      const series = (await tx.fiscalConfig.findUnique({ where: { companyId: tenant.companyId }, select: { invoiceSeries: true } }))?.invoiceSeries ?? "A";
+      const number = await nextFiscalNumber({ documentType: sale.fiscalType, series, issuedAt, tenant }, tx);
       const hash = deterministicInvoiceHash({ number, date: issuedAt, subtotalCents: calculated.subtotalCents, totalCents: calculated.totalCents, taxCents: calculated.taxCents });
       const signed = signFiscalPayload(`${number}|${issuedAt.toISOString().slice(0, 10)}|${calculated.subtotalCents}|${calculated.totalCents}|${calculated.taxCents}|${hash}`);
       const qrCode = qrPayload({ number, totalCents: calculated.totalCents, taxCents: calculated.taxCents, issuedAt, hash });
@@ -78,16 +80,16 @@ saleRouter.post("/", async (req, res) => {
         if (lockedSession.closedAt) throw new Error("cash_session_closed");
       }
       if (sale.fiscalType !== "PROFORMA") for (const item of calculated.lines) {
-        const updated = await tx.product.updateMany({ where: { id: item.productId, stock: { gte: item.quantity }, active: true }, data: { stock: { decrement: item.quantity } } });
+        const updated = await tx.product.updateMany({ where: { id: item.productId, companyId: tenant.companyId, branchId: tenant.branchId, stock: { gte: item.quantity }, active: true }, data: { stock: { decrement: item.quantity } } });
         if (updated.count !== 1) throw new Error(`insufficient_stock:${item.productId}`);
         await tx.stockMovement.create({ data: { productId: item.productId, quantity: -item.quantity, type: "SALE", reference: sale.id, operatorId } });
       }
-      const created = await tx.sale.create({ data: { id: sale.id, number, series, subtotalCents: calculated.subtotalCents, taxCents: calculated.taxCents, totalCents: calculated.totalCents, createdAt: issuedAt, fiscalType: sale.fiscalType, paymentMethod: sale.paymentMethod, customerId: sale.customerId ?? null, dueDate: sale.dueDate ? new Date(sale.dueDate) : null, operatorId, operatorName: sale.operatorName, operatorNif: sale.operatorNif, operatorPhone: sale.operatorPhone, terminalId: sale.terminalId, cashSessionId: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? null : sale.cashSessionId ?? null, cashCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cashCents, cardCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cardCents, transferCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.transferCents, fiscalHash: hash, fiscalSignature: signed.signature, signatureAlgorithm: signed.algorithm, qrCode, lines: { create: calculated.lines } }, include: { lines: true } });
+      const created = await tx.sale.create({ data: { id: sale.id, companyId: tenant.companyId, branchId: tenant.branchId, number, series, subtotalCents: calculated.subtotalCents, taxCents: calculated.taxCents, totalCents: calculated.totalCents, createdAt: issuedAt, fiscalType: sale.fiscalType, paymentMethod: sale.paymentMethod, customerId: sale.customerId ?? null, dueDate: sale.dueDate ? new Date(sale.dueDate) : null, operatorId, operatorName: sale.operatorName, operatorNif: sale.operatorNif, operatorPhone: sale.operatorPhone, terminalId: sale.terminalId, cashSessionId: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? null : sale.cashSessionId ?? null, cashCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cashCents, cardCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.cardCents, transferCents: sale.fiscalType === "PROFORMA" || sale.paymentMethod === "CREDIT" ? 0 : sale.transferCents, fiscalHash: hash, fiscalSignature: signed.signature, signatureAlgorithm: signed.algorithm, qrCode, lines: { create: calculated.lines } }, include: { lines: true } });
       if (sale.fiscalType !== "PROFORMA") {
-        await ensureAccountingPeriod(tx, issuedAt);
+        await ensureAccountingPeriod(tx, tenant, issuedAt);
         const costLines = await tx.saleLine.findMany({ where: { saleId: created.id }, include: { product: { select: { costCents: true } } } });
         const costCents = costLines.reduce((total, line) => total + line.quantity * line.product.costCents, 0);
-        await postSaleAccounting(tx, { ...created, costCents });
+        await postSaleAccounting(tx, tenant, { ...created, costCents });
       }
       await audit("SALE_CREATED", operatorId, "SALE", created.id, { stage: "TRANSACTION" }, tx);
       return created;
@@ -95,7 +97,7 @@ saleRouter.post("/", async (req, res) => {
     res.status(201).json(saved);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const concurrent = await prisma.sale.findUnique({ where: { id: sale.id }, include: { lines: true } });
+      const concurrent = await prisma.sale.findFirst({ where: { id: sale.id, companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: true } });
       if (concurrent) { res.status(200).json(concurrent); return; }
     }
     const code = error instanceof Error ? error.message : "";
@@ -108,10 +110,11 @@ saleRouter.post("/", async (req, res) => {
 });
 saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req, res) => {
   const saleId = String(req.params.id);
+  const tenant = companyContext(req);
   const actorId = (req as AuthRequest).user?.id;
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const existing = await tx.sale.findUnique({ where: { id: saleId }, include: { lines: true } });
+      const existing = await tx.sale.findFirst({ where: { id: saleId, companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: true } });
       if (!existing) return { kind: "not_found" as const };
       if (existing.status === "CANCELLED") return { kind: "already_cancelled" as const, sale: existing };
       if (existing.cashSessionId) {
@@ -126,11 +129,11 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
         if (cashSession.closedAt) throw new Error("cash_session_closed");
       }
       const claimed = await tx.sale.updateMany({
-        where: { id: saleId, status: { not: "CANCELLED" } },
+        where: { id: saleId, companyId: tenant.companyId, branchId: tenant.branchId, status: { not: "CANCELLED" } },
         data: { status: "CANCELLED", cancelledAt: new Date(), cancelledBy: actorId },
       });
       if (claimed.count !== 1) {
-        const cancelled = await tx.sale.findUnique({ where: { id: saleId }, include: { lines: true } });
+        const cancelled = await tx.sale.findFirst({ where: { id: saleId, companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: true } });
         if (cancelled?.status === "CANCELLED") return { kind: "already_cancelled" as const, sale: cancelled };
         return { kind: "not_found" as const };
       }
@@ -153,10 +156,10 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
           },
         });
       }
-      const cancelled = await tx.sale.findUnique({ where: { id: saleId }, include: { lines: true } });
+      const cancelled = await tx.sale.findFirst({ where: { id: saleId, companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: true } });
       if (!cancelled) throw new Error("sale_not_found_after_cancel");
       const journals = await tx.journal.findMany({ where: { sourceId: saleId, sourceType: { in: ["SALE", "SALE_COGS"] } } });
-      for (const journal of journals) await reverseJournal(tx, journal.id, new Date());
+      for (const journal of journals) await reverseJournal(tx, tenant, journal.id, new Date());
       await audit("SALE_CANCELLED", actorId, "SALE", cancelled.id, { stage: "TRANSACTION", cashSessionId: cancelled.cashSessionId }, tx);
       return { kind: "cancelled" as const, sale: cancelled };
     });

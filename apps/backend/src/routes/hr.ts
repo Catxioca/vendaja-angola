@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 
 const employeeSchema = z.object({
@@ -65,11 +65,12 @@ function calculatePayroll(employee: { baseSalaryCents: number; foodAllowanceCent
 }
 
 export const hrRouter = Router();
-hrRouter.use(requireAuth);
+hrRouter.use(requireAuth, requireCompanyContext);
 hrRouter.use(requireModuleAccess("HR"));
 
-hrRouter.get("/employees", async (_req, res) => {
-  const employees = await prisma.employee.findMany({ orderBy: { fullName: "asc" } });
+hrRouter.get("/employees", async (req, res) => {
+  const tenant = companyContext(req);
+  const employees = await prisma.employee.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId }, orderBy: { fullName: "asc" } });
   res.json(employees);
 });
 
@@ -80,7 +81,8 @@ hrRouter.post("/employees", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR"), async
     return;
   }
 
-  const employee = await prisma.employee.create({ data: parsed.data });
+  const tenant = companyContext(req);
+  const employee = await prisma.employee.create({ data: { ...parsed.data, companyId: tenant.companyId, branchId: tenant.branchId } });
   await audit("EMPLOYEE_CREATED", (req as AuthRequest).user?.id, "EMPLOYEE", employee.id, parsed.data);
   res.status(201).json(employee);
 });
@@ -92,16 +94,21 @@ hrRouter.patch("/employees/:id", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR"), 
     return;
   }
 
+  const tenant = companyContext(req);
+  const current = await prisma.employee.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId }, select: { id: true } });
+  if (!current) { res.status(404).json({ error: "employee_not_found" }); return; }
   const employee = await prisma.employee.update({
-    where: { id: String(req.params.id) },
+    where: { id: current.id },
     data: parsed.data,
   });
   await audit("EMPLOYEE_UPDATED", (req as AuthRequest).user?.id, "EMPLOYEE", employee.id, parsed.data);
   res.json(employee);
 });
 
-hrRouter.get("/payrolls", async (_req, res) => {
+hrRouter.get("/payrolls", async (req, res) => {
+  const tenant = companyContext(req);
   const rows = await prisma.payroll.findMany({
+    where: { companyId: tenant.companyId, branchId: tenant.branchId },
     orderBy: { createdAt: "desc" },
     include: { employee: true },
   });
@@ -115,7 +122,8 @@ hrRouter.post("/payrolls/compute", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR")
     return;
   }
 
-  const employee = await prisma.employee.findUnique({ where: { id: parsed.data.employeeId } });
+  const tenant = companyContext(req);
+  const employee = await prisma.employee.findFirst({ where: { id: parsed.data.employeeId, companyId: tenant.companyId, branchId: tenant.branchId } });
   if (!employee) {
     res.status(404).json({ error: "employee_not_found" });
     return;
@@ -129,6 +137,8 @@ hrRouter.post("/payrolls/compute", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR")
       taxableAllowancesCents: values.taxableAllowancesCents, grossSalaryCents: values.grossSalaryCents, inssEmployeeCents: values.inssEmployeeCents, inssEmployerCents: values.inssEmployerCents, irtCents: values.irtCents, netSalaryCents: values.netSalaryCents, status: "APPROVED", payDate: new Date(),
     },
     create: {
+      companyId: tenant.companyId,
+      branchId: tenant.branchId,
       employeeId: employee.id,
       month: parsed.data.month,
       salaryBaseCents: employee.baseSalaryCents,
@@ -153,11 +163,12 @@ hrRouter.post("/payrolls/compute", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR")
 hrRouter.post("/payrolls/process-month", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_HR"), async (req, res) => {
   const parsed = z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_payroll_month" }); return; }
-  const employees = await prisma.employee.findMany({ where: { active: true } });
+  const tenant = companyContext(req);
+  const employees = await prisma.employee.findMany({ where: { active: true, companyId: tenant.companyId, branchId: tenant.branchId } });
   const results = [];
   for (const employee of employees) {
     const values = calculatePayroll(employee);
-    const row = await prisma.payroll.upsert({ where: { employeeId_month: { employeeId: employee.id, month: parsed.data.month } }, update: { taxableAllowancesCents: values.taxableAllowancesCents, grossSalaryCents: values.grossSalaryCents, inssEmployeeCents: values.inssEmployeeCents, inssEmployerCents: values.inssEmployerCents, irtCents: values.irtCents, netSalaryCents: values.netSalaryCents, status: "APPROVED", payDate: new Date() }, create: { employeeId: employee.id, month: parsed.data.month, salaryBaseCents: employee.baseSalaryCents, foodAllowanceCents: employee.foodAllowanceCents, transportAllowanceCents: employee.transportAllowanceCents, housingAllowanceCents: employee.housingAllowanceCents, otherAllowancesCents: employee.otherAllowancesCents, taxableAllowancesCents: values.taxableAllowancesCents, grossSalaryCents: values.grossSalaryCents, inssEmployeeCents: values.inssEmployeeCents, inssEmployerCents: values.inssEmployerCents, irtCents: values.irtCents, netSalaryCents: values.netSalaryCents, status: "APPROVED", payDate: new Date() } });
+    const row = await prisma.payroll.upsert({ where: { employeeId_month: { employeeId: employee.id, month: parsed.data.month } }, update: { taxableAllowancesCents: values.taxableAllowancesCents, grossSalaryCents: values.grossSalaryCents, inssEmployeeCents: values.inssEmployeeCents, inssEmployerCents: values.inssEmployerCents, irtCents: values.irtCents, netSalaryCents: values.netSalaryCents, status: "APPROVED", payDate: new Date() }, create: { companyId: tenant.companyId, branchId: tenant.branchId, employeeId: employee.id, month: parsed.data.month, salaryBaseCents: employee.baseSalaryCents, foodAllowanceCents: employee.foodAllowanceCents, transportAllowanceCents: employee.transportAllowanceCents, housingAllowanceCents: employee.housingAllowanceCents, otherAllowancesCents: employee.otherAllowancesCents, taxableAllowancesCents: values.taxableAllowancesCents, grossSalaryCents: values.grossSalaryCents, inssEmployeeCents: values.inssEmployeeCents, inssEmployerCents: values.inssEmployerCents, irtCents: values.irtCents, netSalaryCents: values.netSalaryCents, status: "APPROVED", payDate: new Date() } });
     results.push(row);
   }
   await audit("PAYROLL_MONTH_PROCESSED", (req as AuthRequest).user?.id, "PAYROLL", parsed.data.month, { count: results.length });
@@ -166,12 +177,14 @@ hrRouter.post("/payrolls/process-month", requireRole("ADMIN", "ROLE_ADMIN", "ROL
 
 hrRouter.get("/payrolls/report", async (req, res) => {
   const month = String(req.query.month ?? new Date().toISOString().slice(0, 7));
-  const rows = await prisma.payroll.findMany({ where: { month }, include: { employee: true }, orderBy: { employee: { fullName: "asc" } } });
+  const tenant = companyContext(req);
+  const rows = await prisma.payroll.findMany({ where: { month, companyId: tenant.companyId, branchId: tenant.branchId }, include: { employee: true }, orderBy: { employee: { fullName: "asc" } } });
   res.json({ month, count: rows.length, totals: { grossSalaryCents: rows.reduce((n, r) => n + r.grossSalaryCents, 0), inssEmployeeCents: rows.reduce((n, r) => n + r.inssEmployeeCents, 0), inssEmployerCents: rows.reduce((n, r) => n + r.inssEmployerCents, 0), irtCents: rows.reduce((n, r) => n + r.irtCents, 0), netSalaryCents: rows.reduce((n, r) => n + r.netSalaryCents, 0) }, rows });
 });
 
 hrRouter.get("/payrolls/:id/payslip", async (req, res) => {
-  const item = await prisma.payroll.findUnique({ where: { id: String(req.params.id) }, include: { employee: true } });
+  const tenant = companyContext(req);
+  const item = await prisma.payroll.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId }, include: { employee: true } });
   if (!item) {
     res.status(404).json({ error: "payroll_not_found" });
     return;

@@ -143,7 +143,10 @@ platformRouter.post("/reprints", async (req, res) => {
   const parsed = z.object({ documentType: z.string().min(1), documentId: z.string().uuid(), reason: z.string().min(3) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_reprint" }); return; }
   if (!requireAdmin(req as AuthRequest, res)) return;
-  const document = parsed.data.documentType === "SALE" ? await prisma.sale.findFirst({ where: { id: parsed.data.documentId } }) : await prisma.commercialDocument.findFirst({ where: { id: parsed.data.documentId } });
+  const tenant = context(req as AuthRequest);
+  const document = parsed.data.documentType === "SALE"
+    ? await prisma.sale.findFirst({ where: { id: parsed.data.documentId, companyId: tenant.companyId, branchId: tenant.branchId } })
+    : await prisma.commercialDocument.findFirst({ where: { id: parsed.data.documentId, companyId: tenant.companyId, branchId: tenant.branchId } });
   if (!document) { res.status(404).json({ error: "document_not_found" }); return; }
   const log = await prisma.reprintLog.create({ data: { ...parsed.data, companyId: context(req as AuthRequest).companyId, branchId: context(req as AuthRequest).branchId, userId: actor(req as AuthRequest) } });
   await auditInContext("DOCUMENT_REPRINTED", context(req as AuthRequest), actor(req as AuthRequest), parsed.data.documentType, parsed.data.documentId, { reason: parsed.data.reason });

@@ -14,8 +14,23 @@ if ("serviceWorker" in navigator) {
 const api = () => (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__ ?? (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "http://localhost:4000";
 function Login({ onLogin }: { onLogin: () => void }) {
   const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState("");
-  async function submit(event: FormEvent) { event.preventDefault(); const response = await fetch(`${api()}/api/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier, password }) }); const data = await response.json(); if (!response.ok) { setError("Credenciais inválidas."); return; } localStorage.setItem("accessToken", data.accessToken); localStorage.setItem("refreshToken", data.refreshToken); localStorage.setItem("posUser", JSON.stringify(data.user)); onLogin(); }
-  return <main className="startup-loading"><form onSubmit={(e) => void submit(e)}><h1>VendaJá Angola</h1><input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required /><input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} /><button>Entrar</button>{error && <p>{error}</p>}</form></main>;
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    try {
+      const response = await fetch(`${api()}/api/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier, password }) });
+      if (response.status === 401 || response.status === 403) { setError("Credenciais inválidas."); return; }
+      if (!response.ok) { setError(`O servidor não está disponível para iniciar sessão (HTTP ${response.status}). Tente novamente mais tarde.`); return; }
+      const data = await response.json();
+      localStorage.setItem("accessToken", data.accessToken);
+      localStorage.setItem("refreshToken", data.refreshToken);
+      localStorage.setItem("posUser", JSON.stringify(data.user));
+      onLogin();
+    } catch {
+      setError("Não foi possível contactar o servidor. Verifique a ligação ao backend; o início de sessão requer ligação ativa.");
+    }
+  }
+  return <main className="startup-loading"><form onSubmit={(e) => void submit(e)}><h1>VendaJá Angola</h1><input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required /><input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} /><button>Entrar</button>{error && <p role="alert">{error}</p>}</form></main>;
 }
 function CompanyContextSelector() {
   const [contexts, setContexts] = useState<Array<{ companyId: string; branchId: string | null; company: { legalName: string }; branch?: { name: string } | null }>>([]);

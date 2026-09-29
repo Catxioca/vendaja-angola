@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { ensureAccountingPeriod, reverseJournal } from "../services/accounting.js";
 
@@ -51,7 +51,7 @@ async function ensureBaseAccounts() {
 }
 
 export const accountingRouter = Router();
-accountingRouter.use(requireAuth);
+accountingRouter.use(requireAuth, requireCompanyContext);
 accountingRouter.use(requireModuleAccess("ACCOUNTING"));
 
 accountingRouter.get("/chart", async (_req, res) => {
@@ -60,8 +60,10 @@ accountingRouter.get("/chart", async (_req, res) => {
   res.json(accounts);
 });
 
-accountingRouter.get("/entries", async (_req, res) => {
+accountingRouter.get("/entries", async (req, res) => {
+  const tenant = companyContext(req);
   const entries = await prisma.journalEntry.findMany({
+    where: { companyId: tenant.companyId, branchId: tenant.branchId },
     orderBy: { entryDate: "desc" },
     include: { debitAccount: true, creditAccount: true },
   });
@@ -78,12 +80,14 @@ accountingRouter.get("/entries", async (_req, res) => {
     const accounts = await prisma.account.findMany({ where: { code: { in: parsed.data.lines.map((l) => l.accountCode) } } });
     const byCode = new Map(accounts.map((a) => [a.code, a]));
     if (accounts.length !== new Set(parsed.data.lines.map((l) => l.accountCode)).size) { res.status(404).json({ error: "account_not_found" }); return; }
+    const tenant = companyContext(req);
     const entryDate = parsed.data.entryDate ?? new Date();
-    await ensureAccountingPeriod(prisma, entryDate);
-    const period = await prisma.accountingPeriod.findFirst({ where: { startsAt: { lte: entryDate }, endsAt: { gte: entryDate }, status: "OPEN" } });
+    await ensureAccountingPeriod(prisma, tenant, entryDate);
+    const period = await prisma.accountingPeriod.findFirst({ where: { companyId: tenant.companyId, branchId: tenant.branchId, startsAt: { lte: entryDate }, endsAt: { gte: entryDate }, status: "OPEN" } });
     if (!period) { res.status(409).json({ error: "accounting_period_closed" }); return; }
     const journal = await prisma.journal.create({
       data: {
+        companyId: tenant.companyId, branchId: tenant.branchId,
         description: parsed.data.description, entryDate,
         journalType: parsed.data.journalType, documentType: parsed.data.documentType,
         documentNumber: parsed.data.documentNumber ?? null, createdBy: (req as AuthRequest).user?.id,
@@ -95,13 +99,14 @@ accountingRouter.get("/entries", async (_req, res) => {
     await audit("JOURNAL_CREATED", (req as AuthRequest).user?.id, "JOURNAL", journal.id, { debitCents: debit, creditCents: credit });
     res.status(201).json(journal);
   });
-  accountingRouter.get("/journals", async (_req, res) => {
-    res.json(await prisma.journal.findMany({ orderBy: { entryDate: "desc" }, include: { lines: { include: { account: true } } } }));
+  accountingRouter.get("/journals", async (req, res) => {
+    const tenant = companyContext(req);
+    res.json(await prisma.journal.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId }, orderBy: { entryDate: "desc" }, include: { lines: { include: { account: true } } } }));
   });
 
   accountingRouter.post("/journals/:id/reverse", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
     try {
-      const reversal = await reverseJournal(prisma, String(req.params.id));
+      const reversal = await reverseJournal(prisma, companyContext(req), String(req.params.id));
       await audit("JOURNAL_REVERSED", (req as AuthRequest).user?.id, "JOURNAL", String(req.params.id), { reversalId: reversal.id });
       res.status(201).json(reversal);
     } catch (error) {
@@ -132,18 +137,21 @@ accountingRouter.get("/entries", async (_req, res) => {
     res.json({ documentType: "DRN", generatedAt: new Date().toISOString(), accounts: trial });
   });
 
-  accountingRouter.get("/periods", async (_req, res) => {
-    res.json(await prisma.accountingPeriod.findMany({ orderBy: { startsAt: "desc" } }));
+  accountingRouter.get("/periods", async (req, res) => {
+    const tenant = companyContext(req);
+    res.json(await prisma.accountingPeriod.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId }, orderBy: { startsAt: "desc" } }));
   });
 
   accountingRouter.post("/periods", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
     const parsed = z.object({ name: z.string().min(1), startsAt: z.coerce.date(), endsAt: z.coerce.date() }).safeParse(req.body);
     if (!parsed.success || parsed.data.endsAt <= parsed.data.startsAt) { res.status(400).json({ error: "invalid_accounting_period" }); return; }
-    res.status(201).json(await prisma.accountingPeriod.create({ data: parsed.data }));
+    const tenant = companyContext(req);
+    res.status(201).json(await prisma.accountingPeriod.create({ data: { ...parsed.data, companyId: tenant.companyId, branchId: tenant.branchId } }));
   });
 
   accountingRouter.post("/periods/:id/close", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
-    const period = await prisma.accountingPeriod.findUnique({ where: { id: String(req.params.id) } });
+    const tenant = companyContext(req);
+    const period = await prisma.accountingPeriod.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId } });
     if (!period) { res.status(404).json({ error: "period_not_found" }); return; }
     if (period.status === "CLOSED") { res.json(period); return; }
     const updated = await prisma.accountingPeriod.update({ where: { id: period.id }, data: { status: "CLOSED", closedAt: new Date(), closedBy: (req as AuthRequest).user?.id ?? null } });
@@ -151,14 +159,16 @@ accountingRouter.get("/entries", async (_req, res) => {
     res.json(updated);
   });
 
-  accountingRouter.get("/tax-rules", async (_req, res) => {
-    res.json(await prisma.taxRule.findMany({ where: { active: true }, include: { outputAccount: true, inputAccount: true }, orderBy: { code: "asc" } }));
+  accountingRouter.get("/tax-rules", async (req, res) => {
+    const tenant = companyContext(req);
+    res.json(await prisma.taxRule.findMany({ where: { active: true, companyId: tenant.companyId, branchId: tenant.branchId }, include: { outputAccount: true, inputAccount: true }, orderBy: { code: "asc" } }));
   });
 
   accountingRouter.post("/tax-rules", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
     const parsed = z.object({ code: z.string().min(1), name: z.string().min(1), rate: z.coerce.number().min(0).max(1), exemptionCode: z.string().optional(), outputAccountId: z.string().optional(), inputAccountId: z.string().optional() }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "invalid_tax_rule", details: parsed.error.flatten() }); return; }
-    res.status(201).json(await prisma.taxRule.create({ data: parsed.data }));
+    const tenant = companyContext(req);
+    res.status(201).json(await prisma.taxRule.create({ data: { ...parsed.data, companyId: tenant.companyId, branchId: tenant.branchId } }));
   });
 
   accountingRouter.get("/financial-statements", async (req, res) => {
@@ -226,8 +236,11 @@ accountingRouter.post("/entries", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOU
     return;
   }
 
+  const tenant = companyContext(req);
   const entry = await prisma.journalEntry.create({
     data: {
+      companyId: tenant.companyId,
+      branchId: tenant.branchId,
       description: parsed.data.description,
       entryDate: parsed.data.entryDate ?? new Date(),
       debitAccountId: debit.id,
@@ -247,9 +260,10 @@ accountingRouter.post("/entries", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOU
   res.status(201).json(entry);
 });
 
-accountingRouter.get("/summary", async (_req, res) => {
+accountingRouter.get("/summary", async (req, res) => {
   await ensureBaseAccounts();
-  const entries = await prisma.journalEntry.findMany({ include: { debitAccount: true, creditAccount: true } });
+  const tenant = companyContext(req);
+  const entries = await prisma.journalEntry.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId }, include: { debitAccount: true, creditAccount: true } });
   const totals: { debits: number; credits: number } = entries.reduce((acc, entry) => {
     acc.debits += entry.amountCents;
     acc.credits += entry.amountCents;

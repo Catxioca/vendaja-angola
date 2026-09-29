@@ -3,6 +3,7 @@
 **/.env
 !.env.example
 **/dist/
+apps/desktop/build/
 release/
 scripts-license-private.pem
 private.pem

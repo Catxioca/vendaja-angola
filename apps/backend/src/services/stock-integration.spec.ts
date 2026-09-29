@@ -54,20 +54,21 @@ test("allocates document series numbers without duplicates", async () => {
 test("posts balanced idempotent accounting journals and blocks closed periods", async () => {
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl! } } });
   const date = new Date();
+  const tenant = { companyId: `integration-${randomUUID()}`, branchId: null };
   const sale = { id: randomUUID(), createdAt: date, totalCents: 1140, subtotalCents: 1000, taxCents: 140, paymentMethod: "CASH", customerId: null, number: `IT-${randomUUID()}` };
   await prisma.$transaction(async (tx) => {
-    await ensureAccountingPeriod(tx, date);
-    const first = await postSaleAccounting(tx, sale);
-    const replay = await postSaleAccounting(tx, sale);
+    await ensureAccountingPeriod(tx, tenant, date);
+    const first = await postSaleAccounting(tx, tenant, sale);
+    const replay = await postSaleAccounting(tx, tenant, sale);
     if (first.id !== replay.id) throw new Error("accounting_idempotency_mismatch");
   });
-  const journal = await prisma.journal.findUniqueOrThrow({ where: { sourceType_sourceId: { sourceType: "SALE", sourceId: sale.id } }, include: { lines: true } });
+  const journal = await prisma.journal.findUniqueOrThrow({ where: { companyId_sourceType_sourceId: { companyId: tenant.companyId, sourceType: "SALE", sourceId: sale.id } }, include: { lines: true } });
   const debit = journal.lines.reduce((sum, line) => sum + line.debitCents, 0);
   const credit = journal.lines.reduce((sum, line) => sum + line.creditCents, 0);
   if (debit !== 1140 || credit !== 1140) throw new Error("accounting_balance_mismatch");
   await prisma.accountingPeriod.update({ where: { id: journal.periodId! }, data: { status: "CLOSED" } });
   let blocked = false;
-  try { await prisma.$transaction((tx) => postSaleAccounting(tx, { ...sale, id: randomUUID() })); } catch (error) { blocked = error instanceof Error && error.message === "accounting_period_closed_or_missing"; }
+  try { await prisma.$transaction((tx) => postSaleAccounting(tx, tenant, { ...sale, id: randomUUID() })); } catch (error) { blocked = error instanceof Error && error.message === "accounting_period_closed_or_missing"; }
   if (!blocked) throw new Error("closed_period_not_enforced");
   await prisma.$disconnect();
 });

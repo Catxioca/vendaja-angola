@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -47,8 +47,9 @@ const run = (command, args) => {
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
 
-// Do not let a partial previous build influence the installer contents.
-rmSync(join("release", "win-unpacked"), { recursive: true, force: true });
+// Do not let a previous version or partial build influence the installer contents.
+rmSync("release", { recursive: true, force: true });
+mkdirSync("release", { recursive: true });
 // Older local builds may have written the builder output under the app directory.
 // Exclude and remove it so it cannot be copied into the next asar.
 rmSync(join("apps", "desktop", "dist", "win-unpacked"), { recursive: true, force: true });

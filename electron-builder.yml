@@ -5,26 +5,28 @@ directories:
   app: apps/desktop
 artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 files:
-  - dist/**
-  - "!dist/win-unpacked/**"
+  - build/**
+  - "!node_modules/**"
   - package.json
 extraResources:
   - from: public.pem
     to: public.pem
-  - from: apps/backend/dist
-    to: backend/dist
+  - from: apps/backend/dist/bundle.js
+    to: backend/bundle.js
   - from: apps/backend/package.json
     to: backend/package.json
-  - from: node_modules/@prisma/client
-    to: backend/node_modules/@prisma/client
-  - from: node_modules/.prisma
-    to: backend/node_modules/.prisma
+  - from: apps/backend/node_modules/@prisma/client
+    to: backend/vendor/@prisma/client
+  - from: apps/backend/node_modules/.prisma
+    to: backend/vendor/.prisma
 asar: true
 compression: maximum
 publish: []
 win:
   target: nsis
   signAndEditExecutable: false
+nsis:
+  perMachine: true
 linux:
   target: AppImage
 mac:

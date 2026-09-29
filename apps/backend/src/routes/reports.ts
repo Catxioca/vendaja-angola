@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { requireAuth, requireModuleAccess } from "../middleware/auth.js";
+import { requireAuth, requireCompanyContext, requireModuleAccess } from "../middleware/auth.js";
 import { dashboardSummary, expensesReport, financialSummary, payablesReport, productsReport, purchasesReport, receivablesReport, salesReport, stockReport, type ReportFilters } from "../services/report-service.js";
 import { cashflowReport } from "../services/cashflow-service.js";
 
 export const reportsRouter = Router();
-reportsRouter.use(requireAuth, requireModuleAccess("DASHBOARD"));
+reportsRouter.use(requireAuth, requireCompanyContext, requireModuleAccess("DASHBOARD"));
 function parseFilters(query: Record<string, unknown>): ReportFilters {
   const date = (value: unknown, end = false) => {
     if (typeof value !== "string") return undefined;

@@ -11,17 +11,30 @@ export const requireAuth: RequestHandler = (req, res, next) => {
 };
 export const requireCompanyContext: RequestHandler = async (req, res, next) => {
   const auth = req as AuthRequest;
-  const companyId = req.header("x-company-id");
-  const branchId = req.header("x-branch-id") ?? null;
-  if (!companyId) { res.status(400).json({ error: "company_context_required" }); return; }
+  const requestedCompanyId = req.header("x-company-id") ?? undefined;
+  const requestedBranchId = req.header("x-branch-id") ?? undefined;
+  if (!auth.user?.id) { res.status(401).json({ error: "missing_token" }); return; }
   try {
     const { prisma } = await import("../db.js");
-    const membership = await prisma.companyMembership.findFirst({ where: { userId: auth.user?.id, companyId, branchId, active: true }, select: { id: true, companyId: true, branchId: true, role: true } });
-    if (!membership) { res.status(403).json({ error: "company_context_forbidden" }); return; }
+    const memberships = await prisma.companyMembership.findMany({
+      where: { userId: auth.user.id, active: true, ...(requestedCompanyId ? { companyId: requestedCompanyId } : {}), ...(requestedBranchId ? { branchId: requestedBranchId } : {}) },
+      select: { id: true, companyId: true, branchId: true, role: true },
+      take: 2,
+    });
+    if (!memberships.length) { res.status(403).json({ error: "company_context_forbidden" }); return; }
+    if (memberships.length > 1) { res.status(400).json({ error: "company_context_required", message: "Selecione explicitamente a empresa e filial ativas." }); return; }
+    const membership = memberships[0]!;
     auth.context = { companyId: membership.companyId, branchId: membership.branchId, membershipId: membership.id, role: membership.role };
     next();
   } catch (error) { next(error); }
 };
+
+/** Returns the server-authorized tenant scope. Never derive it from request body or URL. */
+export function companyContext(req: Express.Request): NonNullable<AuthRequest["context"]> {
+  const context = (req as AuthRequest).context;
+  if (!context) throw new Error("company_context_required");
+  return context;
+}
 export const requireRole = (...roles: string[]): RequestHandler => (req, res, next) => {
   const role = normalizeRole((req as AuthRequest).user?.role);
   if (!roles.map(normalizeRole).includes(role)) { res.status(403).json({ error: "forbidden", message: "Não tem permissão para esta operação." }); return; }

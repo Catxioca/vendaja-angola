@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { applyStockChange } from "../services/stock-ledger.js";
 
 export const commercialDocumentRouter = Router();
-commercialDocumentRouter.use(requireAuth, requireModuleAccess("STOCK"));
+commercialDocumentRouter.use(requireAuth, requireCompanyContext, requireModuleAccess("STOCK"));
 
 const lineInput = z.object({
   productId: z.string().uuid(),
@@ -39,23 +39,25 @@ const documentInput = z.object({
 
 commercialDocumentRouter.get("/", async (req, res) => {
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
-  res.json(await prisma.commercialDocument.findMany({ where: type ? { type } : undefined, include: { lines: { include: { product: true } }, customer: true, supplier: true, location: true }, orderBy: { createdAt: "desc" }, take: 200 }));
+  const tenant = companyContext(req);
+  res.json(await prisma.commercialDocument.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId, ...(type ? { type } : {}) }, include: { lines: { include: { product: true } }, customer: true, supplier: true, location: true }, orderBy: { createdAt: "desc" }, take: 200 }));
 });
 
 commercialDocumentRouter.post("/series", requireRole("ADMIN"), async (req, res) => {
   const parsed = z.object({ companyKey: z.string().trim().min(1).max(80), establishmentKey: z.string().trim().min(1).max(80), documentType: z.string().trim().min(1).max(40), prefix: z.string().trim().min(1).max(20), nextNumber: z.number().int().positive().optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_document_series" }); return; }
-  try { const series = await prisma.documentSeries.create({ data: parsed.data }); await audit("DOCUMENT_SERIES_CREATED", (req as AuthRequest).user?.id, "DOCUMENT_SERIES", series.id); res.status(201).json(series); }
+  try { const tenant = companyContext(req); const series = await prisma.documentSeries.create({ data: { ...parsed.data, companyKey: tenant.companyId, establishmentKey: tenant.branchId ?? parsed.data.establishmentKey } }); await audit("DOCUMENT_SERIES_CREATED", (req as AuthRequest).user?.id, "DOCUMENT_SERIES", series.id); res.status(201).json(series); }
   catch { res.status(409).json({ error: "document_series_exists" }); }
 });
-commercialDocumentRouter.get("/series", async (_req, res) => res.json(await prisma.documentSeries.findMany({ where: { active: true }, orderBy: [{ documentType: "asc" }, { prefix: "asc" }] })));
+commercialDocumentRouter.get("/series", async (req, res) => { const tenant = companyContext(req); res.json(await prisma.documentSeries.findMany({ where: { active: true, companyKey: tenant.companyId, establishmentKey: tenant.branchId ?? undefined }, orderBy: [{ documentType: "asc" }, { prefix: "asc" }] })); });
 
 commercialDocumentRouter.post("/", requireRole("ADMIN"), async (req, res) => {
   const parsed = documentInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_commercial_document", details: parsed.error.flatten() }); return; }
   try {
+    const tenant = companyContext(req);
     const result = await prisma.$transaction(async (tx) => {
-      const products = await tx.product.findMany({ where: { id: { in: parsed.data.lines.map((line) => line.productId) }, active: true } });
+      const products = await tx.product.findMany({ where: { id: { in: parsed.data.lines.map((line) => line.productId) }, companyId: tenant.companyId, branchId: tenant.branchId, active: true } });
       const byId = new Map(products.map((product) => [product.id, product]));
       const lines = parsed.data.lines.map((line) => {
         if (!byId.has(line.productId)) throw new Error("product_not_found");
@@ -70,7 +72,7 @@ commercialDocumentRouter.post("/", requireRole("ADMIN"), async (req, res) => {
       let series = parsed.data.series;
       let number = parsed.data.number;
       if (seriesId) {
-        const configuredSeries = await tx.documentSeries.findUnique({ where: { id: seriesId } });
+        const configuredSeries = await tx.documentSeries.findFirst({ where: { id: seriesId, companyKey: tenant.companyId, establishmentKey: tenant.branchId ?? undefined } });
         if (!configuredSeries || !configuredSeries.active || configuredSeries.documentType !== parsed.data.type) throw new Error("invalid_document_series");
         const allocated = await tx.documentSeries.update({ where: { id: seriesId }, data: { nextNumber: { increment: 1 } } });
         series = allocated.prefix;
@@ -79,6 +81,8 @@ commercialDocumentRouter.post("/", requireRole("ADMIN"), async (req, res) => {
       if (!number) throw new Error("document_number_required");
       const document = await tx.commercialDocument.create({
         data: {
+          companyId: tenant.companyId,
+          branchId: tenant.branchId,
           type: parsed.data.type,
           series,
           number,

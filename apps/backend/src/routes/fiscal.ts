@@ -2,12 +2,13 @@ import { Router } from "express";
 import { getEnv } from "../config/env.js";
 import { z } from "zod";
 import QRCode from "qrcode";
-import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { prisma } from "../db.js";
 import { audit, verifyPassword } from "../services/security.js";
 import { encryptFiscalSecret, exportSaftAo, qrPayload, validateSaftXml } from "../services/fiscal.js";
 import { canManageCashSession } from "../services/authorization.js";
 export const localCashRouter = Router();
+localCashRouter.use(requireAuth, requireCompanyContext);
 localCashRouter.post("/open-shift", async (req, res) => {
   const parsed = z.object({ pin: z.string().regex(/^\d{4,6}$/), initialAmount: z.number().nonnegative(), registerNumber: z.string().min(1).default("01") }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_attendant_pin", message: "PIN de atendedor inválido ou não cadastrado." }); return; }
@@ -18,9 +19,12 @@ localCashRouter.post("/open-shift", async (req, res) => {
     if (!attendant) { console.warn("[cashier/open-shift] attendant PIN mismatch"); res.status(403).json({ error: "invalid_attendant_pin", message: "PIN de atendedor inválido ou não cadastrado." }); return; }
     const session = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`cash-open:${attendant.id}`}))`;
-      const existing = await tx.cashSession.findFirst({ where: { openedBy: attendant.id, closedAt: null }, orderBy: { openedAt: "desc" } });
+      const tenant = companyContext(req);
+      const membership = await tx.companyMembership.findFirst({ where: { userId: attendant.id, companyId: tenant.companyId, branchId: tenant.branchId, active: true }, select: { id: true } });
+      if (!membership) throw new Error("attendant_context_forbidden");
+      const existing = await tx.cashSession.findFirst({ where: { openedBy: attendant.id, companyId: tenant.companyId, branchId: tenant.branchId, closedAt: null }, orderBy: { openedAt: "desc" } });
       if (existing) throw new Error("cash_already_open");
-      const created = await tx.cashSession.create({ data: { openedBy: attendant.id, openingCents: Math.round(parsed.data.initialAmount * 100), operatorName: attendant.displayName ?? "Atendedor", operatorNif: attendant.nif ?? "", operatorPhone: attendant.phone ?? "", terminalId: parsed.data.registerNumber } });
+      const created = await tx.cashSession.create({ data: { openedBy: attendant.id, companyId: tenant.companyId, branchId: tenant.branchId, openingCents: Math.round(parsed.data.initialAmount * 100), operatorName: attendant.displayName ?? "Atendedor", operatorNif: attendant.nif ?? "", operatorPhone: attendant.phone ?? "", terminalId: parsed.data.registerNumber } });
       await audit("CASH_OPEN", attendant.id, "CASH_SESSION", created.id, { mode: "ATTENDANT_PIN", terminalId: parsed.data.registerNumber }, tx);
       return created;
     });
@@ -28,7 +32,7 @@ localCashRouter.post("/open-shift", async (req, res) => {
   } catch (error) { console.error("[cashier/open-shift] failed", error); res.status(error instanceof Error && error.message === "cash_already_open" ? 409 : 500).json({ error: error instanceof Error && error.message === "cash_already_open" ? "cash_already_open" : "cash_open_failed", message: "Não foi possível abrir o turno localmente." }); }
 });
 export const fiscalRouter = Router();
-fiscalRouter.use(requireAuth);
+fiscalRouter.use(requireAuth, requireCompanyContext);
 fiscalRouter.post("/cash/open", async (req, res) => {
   const parsed = z.object({
     pin: z.string().regex(/^\d{6}$/),
@@ -78,9 +82,10 @@ fiscalRouter.post("/cash/open", async (req, res) => {
     }
     const session = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`cash-open:${userId}`}))`;
-      const existing = await tx.cashSession.findFirst({ where: { openedBy: userId, closedAt: null }, orderBy: { openedAt: "desc" } });
+      const tenant = companyContext(req);
+      const existing = await tx.cashSession.findFirst({ where: { openedBy: userId, companyId: tenant.companyId, branchId: tenant.branchId, closedAt: null }, orderBy: { openedAt: "desc" } });
       if (existing) throw new Error("cash_already_open");
-      const created = await tx.cashSession.create({ data: { openedBy: userId, openingCents, operatorName, operatorNif, operatorPhone, terminalId } });
+      const created = await tx.cashSession.create({ data: { openedBy: userId, companyId: tenant.companyId, branchId: tenant.branchId, openingCents, operatorName, operatorNif, operatorPhone, terminalId } });
       await audit("CASH_OPEN", userId, "CASH_SESSION", created.id, { supervisorId, operatorName, operatorNif, operatorPhone, terminalId }, tx);
       return created;
     });
@@ -95,13 +100,14 @@ fiscalRouter.post("/cash/:id/close", async (req, res) => {
   const closingCents = z.object({ closingCents: z.number().int().nonnegative() }).parse(req.body).closingCents;
   const userId = (req as AuthRequest).user?.id as string;
   const role = (req as AuthRequest).user?.role;
-  const existing = await prisma.cashSession.findUnique({ where: { id: String(req.params.id) } });
+  const tenant = companyContext(req);
+  const existing = await prisma.cashSession.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId } });
   if (!existing) { res.status(404).json({ error: "cash_session_not_found" }); return; }
   if (!canManageCashSession(existing.openedBy, userId, role)) { res.status(403).json({ error: "cash_session_forbidden" }); return; }
   if (existing.closedAt) { res.status(409).json({ error: "cash_session_already_closed" }); return; }
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.cashSession.updateMany({ where: { id: String(req.params.id), closedAt: null }, data: { closedBy: userId, closedAt: new Date(), closingCents } });
+      const updated = await tx.cashSession.updateMany({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId, closedAt: null }, data: { closedBy: userId, closedAt: new Date(), closingCents } });
       if (updated.count !== 1) throw new Error("cash_session_already_closed");
       const session = await tx.cashSession.findUniqueOrThrow({ where: { id: String(req.params.id) } });
       await audit("CASH_CLOSE", userId, "CASH_SESSION", session.id, { stage: "TRANSACTION" }, tx);
@@ -118,7 +124,8 @@ fiscalRouter.post("/cash/:id/close", async (req, res) => {
 });
 fiscalRouter.get("/cash/current", async (req, res) => {
   const userId = (req as AuthRequest).user?.id as string;
-  const session = await prisma.cashSession.findFirst({ where: { openedBy: userId, closedAt: null }, orderBy: { openedAt: "desc" } });
+  const tenant = companyContext(req);
+  const session = await prisma.cashSession.findFirst({ where: { openedBy: userId, companyId: tenant.companyId, branchId: tenant.branchId, closedAt: null }, orderBy: { openedAt: "desc" } });
   if (!session) { res.json(null); return; }
   const sales = await prisma.sale.aggregate({ where: { cashSessionId: session.id, status: { not: "CANCELLED" } }, _sum: { totalCents: true, cashCents: true, cardCents: true, transferCents: true }, _count: { id: true } });
   res.json({ ...session, summary: { salesCount: sales._count.id, totalCents: sales._sum.totalCents ?? 0, cashCents: sales._sum.cashCents ?? 0, cardCents: sales._sum.cardCents ?? 0, transferCents: sales._sum.transferCents ?? 0, expectedCashCents: session.openingCents + (sales._sum.cashCents ?? 0) + session.suprimentoCents - session.sangriaCents } });
@@ -127,14 +134,15 @@ fiscalRouter.post("/cash/:id/adjustment", async (req, res) => {
   const parsed = z.object({ type: z.enum(["SANGRIA", "SUPRIMENTO"]), amountCents: z.number().int().positive() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_cash_adjustment" }); return; }
   const userId = (req as AuthRequest).user?.id as string;
-  const existing = await prisma.cashSession.findUnique({ where: { id: String(req.params.id) } });
+  const tenant = companyContext(req);
+  const existing = await prisma.cashSession.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId } });
   if (!existing) { res.status(404).json({ error: "cash_session_not_found" }); return; }
   if (!canManageCashSession(existing.openedBy, userId, (req as AuthRequest).user?.role)) { res.status(403).json({ error: "cash_session_forbidden" }); return; }
   if (existing.closedAt) { res.status(409).json({ error: "cash_session_closed" }); return; }
   const field = parsed.data.type === "SANGRIA" ? "sangriaCents" : "suprimentoCents";
   try {
     const session = await prisma.$transaction(async (tx) => {
-      const updated = await tx.cashSession.updateMany({ where: { id: String(req.params.id), closedAt: null }, data: { [field]: { increment: parsed.data.amountCents } } });
+      const updated = await tx.cashSession.updateMany({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId, closedAt: null }, data: { [field]: { increment: parsed.data.amountCents } } });
       if (updated.count !== 1) throw new Error("cash_session_closed");
       const changed = await tx.cashSession.findUniqueOrThrow({ where: { id: String(req.params.id) } });
       await audit(parsed.data.type, userId, "CASH_SESSION", changed.id, { amountCents: parsed.data.amountCents, stage: "TRANSACTION" }, tx);
@@ -152,7 +160,7 @@ fiscalRouter.post("/cash/:id/adjustment", async (req, res) => {
 fiscalRouter.get("/saft", async (req, res) => {
   const parsed = z.object({ from: z.coerce.date(), to: z.coerce.date() }).safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "invalid_date_range" }); return; }
-  const xml = await exportSaftAo(parsed.data.from, parsed.data.to);
+  const xml = await exportSaftAo(parsed.data.from, parsed.data.to, companyContext(req));
   try { validateSaftXml(xml); } catch { res.status(500).json({ error: "invalid_saft_output" }); return; }
   res.type("application/xml").send(xml);
 });
@@ -160,7 +168,8 @@ fiscalRouter.get("/saft", async (req, res) => {
 fiscalRouter.get("/saft/validation", (_req, res) => res.json({ mode: getEnv().SAFT_AO_XSD_PATH ? "configured-xsd" : "structural", caveat: "This is not official AGT legal homologation. Configure the current official XSD to validate against it." }));
 
 fiscalRouter.get("/sales/:id/qr.svg", async (req, res) => {
-  const sale = await prisma.sale.findUnique({ where: { id: String(req.params.id) } });
+  const tenant = companyContext(req);
+  const sale = await prisma.sale.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId } });
   if (!sale) { res.status(404).json({ error: "not_found" }); return; }
   const data = sale.qrCode ?? qrPayload({ number: sale.number, totalCents: sale.totalCents, taxCents: sale.taxCents, issuedAt: sale.createdAt, hash: sale.fiscalHash ?? "" });
   res.type("image/svg+xml").send(await QRCode.toString(data, { type: "svg", margin: 1 }));
@@ -172,25 +181,30 @@ fiscalRouter.post("/qr/validate", async (req, res) => {
   const number = fields.get("F");
   const hash = fields.get("H");
   const total = fields.get("T");
-  if (fields.get("A") !== getEnv().COMPANY_NIF || !number || !hash || !total) { res.status(400).json({ error: "invalid_agt_qr" }); return; }
-  const sale = await prisma.sale.findUnique({ where: { number }, include: { lines: { include: { product: true } } } });
+  const tenant = companyContext(req);
+  const config = await prisma.fiscalConfig.findUnique({ where: { companyId: tenant.companyId }, select: { companyNif: true } });
+  const issuerNif = config?.companyNif ?? getEnv().COMPANY_NIF;
+  if (fields.get("A") !== issuerNif || !number || !hash || !total) { res.status(400).json({ error: "invalid_fiscal_qr" }); return; }
+  const sale = await prisma.sale.findFirst({ where: { number, companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: { include: { product: true } } } });
   if (!sale || sale.fiscalHash !== hash || Number(total) !== sale.totalCents / 100) { res.status(404).json({ error: "qr_validation_failed" }); return; }
   res.json({ valid: true, document: { number: sale.number, totalCents: sale.totalCents, taxCents: sale.taxCents, issuedAt: sale.createdAt, hash: sale.fiscalHash, status: sale.status }, lines: sale.lines.map((line) => ({ product: line.product.name, quantity: line.quantity, unitPriceCents: line.unitPriceCents })) });
 });
 
-fiscalRouter.get("/config", requireRole("ADMIN"), async (_req, res) => {
-  const config = await prisma.fiscalConfig.findUnique({ where: { id: "default" } });
-  res.json({ configured: Boolean(config), companyName: config?.companyName ?? "", companyNif: config?.companyNif ?? "", companyAddress: config?.companyAddress ?? "", companyProvince: config?.companyProvince ?? "", companyPhone: config?.companyPhone ?? "", invoiceSeries: config?.invoiceSeries ?? "A", saftSchedule: config?.saftSchedule ?? "", updatedAt: config?.updatedAt ?? null, secrets: { certificatePfx: Boolean(config?.certificatePfxEncrypted), privateKeyPem: Boolean(config?.privateKeyPemEncrypted), passphrase: Boolean(config?.passphraseEncrypted), license: Boolean(config?.licenseEncrypted) } });
+fiscalRouter.get("/config", requireRole("ADMIN"), async (req, res) => {
+  const config = await prisma.fiscalConfig.findUnique({ where: { companyId: companyContext(req).companyId } });
+  res.json({ configured: Boolean(config), companyName: config?.companyName ?? "", companyNif: config?.companyNif ?? "", companyAddress: config?.companyAddress ?? "", companyProvince: config?.companyProvince ?? "", companyPhone: config?.companyPhone ?? "", softwareCertificationNumber: config?.softwareCertificationNumber ?? "", softwareVersion: config?.softwareVersion ?? "", baseCurrency: config?.baseCurrency ?? "AOA", timezone: config?.timezone ?? "Africa/Luanda", fiscalRegime: config?.fiscalRegime ?? "", roundingMode: config?.roundingMode ?? "HALF_UP", fiscalArchiveRetentionYears: config?.fiscalArchiveRetentionYears ?? null, saftXsdVersion: config?.saftXsdVersion ?? "", invoiceSeries: config?.invoiceSeries ?? "A", saftSchedule: config?.saftSchedule ?? "", updatedAt: config?.updatedAt ?? null, secrets: { certificatePfx: Boolean(config?.certificatePfxEncrypted), privateKeyPem: Boolean(config?.privateKeyPemEncrypted), passphrase: Boolean(config?.passphraseEncrypted), license: Boolean(config?.licenseEncrypted) } });
 });
 fiscalRouter.put("/config", requireRole("ADMIN"), async (req, res) => {
-  const body = z.object({ companyName: z.string().max(200).optional(), companyNif: z.string().max(30).optional(), companyAddress: z.string().max(300).optional(), companyProvince: z.string().max(100).optional(), companyPhone: z.string().max(50).optional(), invoiceSeries: z.string().min(1).max(20).optional(), saftSchedule: z.string().max(100).optional(), certificatePfx: z.string().optional(), privateKeyPem: z.string().optional(), passphrase: z.string().optional(), license: z.string().optional() }).parse(req.body);
-  const config = await prisma.fiscalConfig.upsert({ where: { id: "default" }, create: { id: "default", companyName: body.companyName, companyNif: body.companyNif, companyAddress: body.companyAddress, companyProvince: body.companyProvince, companyPhone: body.companyPhone, invoiceSeries: body.invoiceSeries ?? "A", saftSchedule: body.saftSchedule, certificatePfxEncrypted: body.certificatePfx ? encryptFiscalSecret(body.certificatePfx) : null, privateKeyPemEncrypted: body.privateKeyPem ? encryptFiscalSecret(body.privateKeyPem) : null, passphraseEncrypted: body.passphrase ? encryptFiscalSecret(body.passphrase) : null, licenseEncrypted: body.license ? encryptFiscalSecret(body.license) : null }, update: { companyName: body.companyName, companyNif: body.companyNif, companyAddress: body.companyAddress, companyProvince: body.companyProvince, companyPhone: body.companyPhone, invoiceSeries: body.invoiceSeries, saftSchedule: body.saftSchedule, ...(body.certificatePfx ? { certificatePfxEncrypted: encryptFiscalSecret(body.certificatePfx) } : {}), ...(body.privateKeyPem ? { privateKeyPemEncrypted: encryptFiscalSecret(body.privateKeyPem) } : {}), ...(body.passphrase ? { passphraseEncrypted: encryptFiscalSecret(body.passphrase) } : {}), ...(body.license ? { licenseEncrypted: encryptFiscalSecret(body.license) } : {}) } });
+  const body = z.object({ companyName: z.string().max(200).optional(), companyNif: z.string().max(30).optional(), companyAddress: z.string().max(300).optional(), companyProvince: z.string().max(100).optional(), companyPhone: z.string().max(50).optional(), softwareCertificationNumber: z.string().max(100).nullable().optional(), softwareVersion: z.string().max(100).nullable().optional(), baseCurrency: z.string().length(3).optional(), timezone: z.string().max(100).optional(), fiscalRegime: z.string().max(100).nullable().optional(), roundingMode: z.enum(["HALF_UP", "HALF_EVEN", "DOWN", "UP"]).optional(), fiscalArchiveRetentionYears: z.number().int().positive().max(100).nullable().optional(), saftXsdVersion: z.string().max(100).nullable().optional(), invoiceSeries: z.string().min(1).max(20).optional(), saftSchedule: z.string().max(100).optional(), certificatePfx: z.string().optional(), privateKeyPem: z.string().optional(), passphrase: z.string().optional(), license: z.string().optional() }).parse(req.body);
+  const tenant = companyContext(req);
+  const config = await prisma.fiscalConfig.upsert({ where: { companyId: tenant.companyId }, create: { id: `fiscal-${tenant.companyId}`, companyId: tenant.companyId, branchId: tenant.branchId, companyName: body.companyName, companyNif: body.companyNif, companyAddress: body.companyAddress, companyProvince: body.companyProvince, companyPhone: body.companyPhone, softwareCertificationNumber: body.softwareCertificationNumber, softwareVersion: body.softwareVersion, baseCurrency: body.baseCurrency ?? "AOA", timezone: body.timezone ?? "Africa/Luanda", fiscalRegime: body.fiscalRegime, roundingMode: body.roundingMode ?? "HALF_UP", fiscalArchiveRetentionYears: body.fiscalArchiveRetentionYears, saftXsdVersion: body.saftXsdVersion, invoiceSeries: body.invoiceSeries ?? "A", saftSchedule: body.saftSchedule, certificatePfxEncrypted: body.certificatePfx ? encryptFiscalSecret(body.certificatePfx) : null, privateKeyPemEncrypted: body.privateKeyPem ? encryptFiscalSecret(body.privateKeyPem) : null, passphraseEncrypted: body.passphrase ? encryptFiscalSecret(body.passphrase) : null, licenseEncrypted: body.license ? encryptFiscalSecret(body.license) : null }, update: { branchId: tenant.branchId, companyName: body.companyName, companyNif: body.companyNif, companyAddress: body.companyAddress, companyProvince: body.companyProvince, companyPhone: body.companyPhone, softwareCertificationNumber: body.softwareCertificationNumber, softwareVersion: body.softwareVersion, baseCurrency: body.baseCurrency, timezone: body.timezone, fiscalRegime: body.fiscalRegime, roundingMode: body.roundingMode, fiscalArchiveRetentionYears: body.fiscalArchiveRetentionYears, saftXsdVersion: body.saftXsdVersion, invoiceSeries: body.invoiceSeries, saftSchedule: body.saftSchedule, ...(body.certificatePfx ? { certificatePfxEncrypted: encryptFiscalSecret(body.certificatePfx) } : {}), ...(body.privateKeyPem ? { privateKeyPemEncrypted: encryptFiscalSecret(body.privateKeyPem) } : {}), ...(body.passphrase ? { passphraseEncrypted: encryptFiscalSecret(body.passphrase) } : {}), ...(body.license ? { licenseEncrypted: encryptFiscalSecret(body.license) } : {}) } });
   await audit("FISCAL_CONFIG_UPDATED", (req as AuthRequest).user?.id, "FISCAL_CONFIG", config.id);
   res.json({ configured: true, updatedAt: config.updatedAt });
 });
 fiscalRouter.post("/saft/schedule", requireRole("ADMIN"), async (req, res) => {
   const schedule = z.object({ schedule: z.string().max(100) }).parse(req.body);
-  const config = await prisma.fiscalConfig.upsert({ where: { id: "default" }, create: { id: "default", saftSchedule: schedule.schedule }, update: { saftSchedule: schedule.schedule } });
+  const tenant = companyContext(req);
+  const config = await prisma.fiscalConfig.upsert({ where: { companyId: tenant.companyId }, create: { id: `fiscal-${tenant.companyId}`, companyId: tenant.companyId, branchId: tenant.branchId, saftSchedule: schedule.schedule }, update: { branchId: tenant.branchId, saftSchedule: schedule.schedule } });
   await audit("SAFT_SCHEDULE_UPDATED", (req as AuthRequest).user?.id, "FISCAL_CONFIG", config.id);
   res.json({ schedule: config.saftSchedule, configured: true });
 });

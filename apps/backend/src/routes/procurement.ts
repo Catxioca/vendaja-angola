@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireCompanyContext, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 
 export const procurementRouter = Router();
-procurementRouter.use(requireAuth, requireModuleAccess("STOCK"));
+procurementRouter.use(requireAuth, requireCompanyContext, requireModuleAccess("STOCK"));
 const lines = z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), unitCostCents: z.number().int().nonnegative().optional() })).min(1);
 
 procurementRouter.get("/requests", async (_req, res) => res.json(await prisma.procurementRequest.findMany({ include: { lines: true, quotations: true }, orderBy: { createdAt: "desc" }, take: 200 })));

@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { requireAuth, requireModuleAccess } from "../middleware/auth.js";
+import { requireAuth, requireCompanyContext, requireModuleAccess } from "../middleware/auth.js";
 import { cashflowReport, type CashflowFilters } from "../services/cashflow-service.js";
 
 export const cashflowRouter = Router();
-cashflowRouter.use(requireAuth, requireModuleAccess("ACCOUNTING"));
+cashflowRouter.use(requireAuth, requireCompanyContext, requireModuleAccess("ACCOUNTING"));
 
 cashflowRouter.get("/", async (req, res) => {
   const date = (value: unknown, end = false) => {

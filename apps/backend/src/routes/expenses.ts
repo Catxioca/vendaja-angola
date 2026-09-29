@@ -2,13 +2,13 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireModuleAccess, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { expenseCategories, expensePaymentMethods } from "../services/expense-validation.js";
 import { ensureAccountingPeriod, postExpenseAccounting } from "../services/accounting.js";
 
 export const expenseRouter = Router();
-expenseRouter.use(requireAuth, requireModuleAccess("ACCOUNTING"));
+expenseRouter.use(requireAuth, requireCompanyContext, requireModuleAccess("ACCOUNTING"));
 
 const expenseInput = z.object({
   description: z.string().trim().min(2).max(260),
@@ -57,8 +57,9 @@ expenseRouter.post("/", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), a
     if (parsed.data.supplierId && !supplier) { res.status(404).json({ error: "supplier_not_found" }); return; }
     const expense = await prisma.$transaction(async (tx) => {
       const created = await tx.expense.create({ data: { ...parsed.data, operatorId: (req as AuthRequest).user?.id ?? null } });
-      await ensureAccountingPeriod(tx, created.expenseDate);
-      await postExpenseAccounting(tx, created);
+      const tenant = companyContext(req);
+      await ensureAccountingPeriod(tx, tenant, created.expenseDate);
+      await postExpenseAccounting(tx, tenant, created);
       return created;
     });
     await audit("EXPENSE_CREATED", (req as AuthRequest).user?.id, "EXPENSE", expense.id, { amountCents: expense.amountCents });

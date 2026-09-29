@@ -31,10 +31,11 @@ export async function calculateSale(
   client: Pick<Prisma.TransactionClient, "product"> | { product: { findMany: (args: unknown) => Promise<ProductRecord[]> } },
   requestedLines: SaleRequestLine[],
   _ignoredDiscountCents?: number,
+  tenant?: { companyId: string; branchId: string | null },
 ): Promise<CalculatedSale> {
   const productIds = [...new Set(requestedLines.map((line) => line.productId))];
   const products = await client.product.findMany({
-    where: { id: { in: productIds }, active: true },
+    where: { id: { in: productIds }, active: true, ...(tenant ? { companyId: tenant.companyId, branchId: tenant.branchId } : {}) },
     select: { id: true, sku: true, name: true, priceCents: true, taxRate: true, taxCategory: true, exemptionCode: true, active: true },
   });
   const byId = new Map(products.map((product) => [product.id, product]));

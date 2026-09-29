@@ -274,6 +274,8 @@ model ReprintLog {
 }
 model Product {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   sku String @unique
   name String
   priceCents Int
@@ -323,6 +325,8 @@ model FiscalExemption {
 }
 model Sale {
   id String @id
+  companyId String?
+  branchId String?
   number String @unique
   subtotalCents Int
   taxCents Int
@@ -360,7 +364,9 @@ model Sale {
 
 model Customer {
   id String @id @default(uuid())
-  nif String? @unique
+  companyId String?
+  branchId String?
+  nif String?
   name String
   email String?
   phone String?
@@ -373,6 +379,8 @@ model Customer {
   commercialDocuments CommercialDocument[]
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
+  @@unique([companyId, nif])
+  @@index([companyId, branchId, active])
 }
 
 model ReceivablePayment {
@@ -394,6 +402,8 @@ model ReceivablePayment {
 
 model FiscalConfig {
   id String @id @default("default")
+  companyId String? @unique
+  branchId String?
   certificatePfxEncrypted String?
   privateKeyPemEncrypted String?
   passphraseEncrypted String?
@@ -403,6 +413,16 @@ model FiscalConfig {
   companyAddress String?
   companyProvince String?
   companyPhone String?
+  // These are tenant-owned operational settings. They are not assertions of
+  // AGT approval and must be populated from approved company/source material.
+  softwareCertificationNumber String?
+  softwareVersion String?
+  baseCurrency String @default("AOA")
+  timezone String @default("Africa/Luanda")
+  fiscalRegime String?
+  roundingMode String @default("HALF_UP")
+  fiscalArchiveRetentionYears Int?
+  saftXsdVersion String?
   saftSchedule String?
   invoiceSeries String @default("A")
   saftLastExportAt DateTime?
@@ -411,14 +431,16 @@ model FiscalConfig {
 
 model Supplier {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   name String
-  nif String? @unique
+  nif String?
   email String?
   phone String?
   address String?
   contactName String?
   notes String?
-  code String? @unique
+  code String?
   active Boolean @default(true)
   products Product[]
   purchases Purchase[]
@@ -428,12 +450,17 @@ model Supplier {
   commercialDocuments CommercialDocument[]
   supplierQuotations SupplierQuotation[]
   procurementOrders ProcurementOrder[]
+  @@unique([companyId, nif])
+  @@unique([companyId, code])
+  @@index([companyId, branchId, active])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Expense {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   description String
   category String
   supplierId String?
@@ -455,6 +482,8 @@ model Expense {
 
 model Purchase {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   number String @unique
   supplierId String
   operatorId String?
@@ -690,6 +719,8 @@ model PurchaseReceiptLine {
 
 model CommercialDocument {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   type String
   status String @default("DRAFT")
   series String
@@ -756,14 +787,25 @@ model AuditLog {
 
 model FiscalSequence {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
+  // A non-null scope makes the uniqueness constraint work consistently when
+  // a company chooses a company-wide (rather than branch-specific) series.
+  branchScopeId String @default("__COMPANY__")
   documentType String
   series String
+  fiscalYear Int
   nextNumber Int @default(1)
-  @@unique([documentType, series])
+  closedAt DateTime?
+  closedBy String?
+  @@unique([companyId, branchScopeId, documentType, series, fiscalYear])
+  @@index([companyId, branchId, documentType, series])
 }
 
 model CashSession {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   openedBy String
   openedAt DateTime @default(now())
   openingCents Int
@@ -782,6 +824,8 @@ model CashSession {
 
 model Employee {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   fullName String
   nif String? @unique
   inss String? @unique
@@ -806,6 +850,8 @@ model Employee {
 
 model Payroll {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   employeeId String
   month String
   salaryBaseCents Int
@@ -844,6 +890,8 @@ model Account {
 
 model JournalEntry {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   description String
   entryDate DateTime @default(now())
   debitAccountId String
@@ -862,6 +910,8 @@ model JournalEntry {
 
 model Journal {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   description String
   entryDate DateTime @default(now())
   journalType String @default("GENERAL")
@@ -877,11 +927,13 @@ model Journal {
   lines JournalLine[]
   @@index([entryDate])
   @@index([periodId])
-  @@unique([sourceType, sourceId])
+  @@unique([companyId, sourceType, sourceId])
 }
 
 model AccountingPeriod {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   name String
   startsAt DateTime
   endsAt DateTime
@@ -890,12 +942,14 @@ model AccountingPeriod {
   closedBy String?
   journals Journal[]
   createdAt DateTime @default(now())
-  @@unique([startsAt, endsAt])
+  @@unique([companyId, startsAt, endsAt])
   @@index([status, startsAt, endsAt])
 }
 
 model TaxRule {
   id String @id @default(uuid())
+  companyId String?
+  branchId String?
   code String @unique
   name String
   rate Decimal @db.Decimal(5,4)

@@ -1,1 +1,1 @@
-{"extends":"../../tsconfig.base.json","compilerOptions":{"module":"ESNext","moduleResolution":"Bundler","jsx":"react-jsx","outDir":"dist","rootDir":"src"},"include":["src"],"exclude":["src/db.ts"]}
+{"extends":"../../tsconfig.base.json","compilerOptions":{"module":"ESNext","moduleResolution":"Bundler","jsx":"react-jsx","outDir":"build","rootDir":"src"},"include":["src"],"exclude":["src/db.ts"]}

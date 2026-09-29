@@ -128,9 +128,9 @@ syncRouter.post("/", async (req, res) => {
           if (!canManageCashSession(session.openedBy, operatorId, (req as AuthRequest).user?.role)) throw new Error("cash_session_forbidden");
           if (session.closedAt) throw new Error("cash_session_closed");
         }
-        const series = (await tx.fiscalConfig.findUnique({ where: { id: "default" }, select: { invoiceSeries: true } }))?.invoiceSeries ?? "A";
-        const number = await nextFiscalNumber(sale.fiscalType, series, tx);
+        const series = (await tx.fiscalConfig.findUnique({ where: { companyId: auth.context!.companyId }, select: { invoiceSeries: true } }))?.invoiceSeries ?? "A";
         const issuedAt = new Date(item.occurredAt);
+        const number = await nextFiscalNumber({ documentType: sale.fiscalType, series, issuedAt, tenant: { companyId: auth.context!.companyId, branchId: auth.context!.branchId } }, tx);
         const hash = deterministicInvoiceHash({ number, date: issuedAt, subtotalCents: calculated.subtotalCents, totalCents: calculated.totalCents, taxCents: calculated.taxCents });
         const signed = signFiscalPayload(`${number}|${issuedAt.toISOString().slice(0, 10)}|${calculated.subtotalCents}|${calculated.totalCents}|${calculated.taxCents}|${hash}`);
         const qrCode = qrPayload({ number, totalCents: calculated.totalCents, taxCents: calculated.taxCents, issuedAt, hash });

@@ -152,7 +152,7 @@ aiCopilotRouter.get("/audit", async (req: Request, res: Response): Promise<void>
   try {
     const logs = await prisma.auditLog.findMany({
       where: { module: "AI_COPILOT" },
-      orderBy: { timestamp: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 50,
     });
     res.json({ logs, count: logs.length });

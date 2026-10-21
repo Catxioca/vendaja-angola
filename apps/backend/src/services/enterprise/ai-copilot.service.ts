@@ -108,7 +108,7 @@ export class EnterpriseAiCopilotService {
           action: "ACCESS_DENIED",
           userId: data.userId,
           companyId: data.companyId,
-          details: `Tentativa de consulta à IA rejeitada por falta de permissão: ${requiredPermission}`,
+          details: { message: `Tentativa de consulta à IA rejeitada por falta de permissão: ${requiredPermission}` },
           metadata: { query: data.query, intent, requiredPermission },
         });
 
@@ -148,7 +148,7 @@ export class EnterpriseAiCopilotService {
       action: "QUERY_EXECUTED",
       userId: data.userId,
       companyId: data.companyId,
-      details: `VendaJá Copilot respondeu à pergunta sobre ${domain}: "${data.query}"`,
+      details: { message: `VendaJá Copilot respondeu à pergunta sobre ${domain}: "${data.query}"` },
       metadata: {
         query: data.query,
         intent,
@@ -350,7 +350,7 @@ export class EnterpriseAiCopilotService {
           for (const line of s.lines) {
             const current = productMap.get(line.productId) || { name: line.product.name, quantity: 0, revenueCents: 0 };
             current.quantity += line.quantity;
-            current.revenueCents += line.subtotalCents;
+            current.revenueCents += (line.unitPriceCents * line.quantity);
             productMap.set(line.productId, current);
           }
         }
@@ -482,8 +482,8 @@ export class EnterpriseAiCopilotService {
       }
 
       case "FINANCE_RECEIPTS_MONTH": {
-        const receipts = await prisma.payment.findMany({
-          where: { paidAt: { gte: startOfMonth } },
+        const receipts = await prisma.receivablePayment.findMany({
+          where: { receivedAt: { gte: startOfMonth } },
         });
 
         const totalCents = receipts.reduce((acc, r) => acc + r.amountCents, 0);
@@ -506,8 +506,8 @@ export class EnterpriseAiCopilotService {
 
       case "FINANCE_CASH_BALANCE": {
         // Compute total liquidity across cash sessions and bank balances
-        const sessions = await prisma.cashSession.findMany({ where: { status: "OPEN" } });
-        const openCashCents = sessions.reduce((sum, s) => sum + s.initialCents, 0) || 45000000;
+        const sessions = await prisma.cashSession.findMany({ where: { closedAt: null } });
+        const openCashCents = sessions.reduce((sum: number, s: any) => sum + (s.openingCents || 0), 0) || 45000000;
         const estimatedBankLiquidity = 1258000000; // Live treasury accounts or realistic reserve
         const totalLiquidityCents = openCashCents + estimatedBankLiquidity;
 
@@ -532,7 +532,7 @@ export class EnterpriseAiCopilotService {
         const now = new Date();
         const next7Days = new Date(now.getTime() + 7 * 86_400_000);
 
-        const payables = await prisma.payable.findMany({
+        const payables = await prisma.accountPayable.findMany({
           where: {
             dueDate: { lte: next7Days },
             status: { in: ["PENDING", "PARTIAL"] },
@@ -540,7 +540,7 @@ export class EnterpriseAiCopilotService {
           include: { supplier: true },
         });
 
-        const totalPayableCents = payables.reduce((acc, p) => acc + (p.originalCents - p.paidCents), 0);
+        const totalPayableCents = payables.reduce((acc: number, p: any) => acc + (p.originalCents - p.paidCents), 0);
 
         return {
           textAnswer: `Nesta semana vencem **${payables.length} faturas de fornecedores**, totalizando **${formatKwanza(totalPayableCents)}** a liquidar.`,
@@ -551,7 +551,7 @@ export class EnterpriseAiCopilotService {
           table: {
             title: "Compromissos Financeiros Imediatos (Próximos 7 Dias)",
             headers: ["Fornecedor", "Data Vencimento", "Valor Pendente", "Prioridade"],
-            rows: payables.map((p) => [p.supplier.name, p.dueDate.toISOString().slice(0, 10), formatKwanza(p.originalCents - p.paidCents), "ALTA"]),
+            rows: payables.map((p: any) => [p.supplier?.name || "Fornecedor", p.dueDate ? p.dueDate.toISOString().slice(0, 10) : "—", formatKwanza(p.originalCents - p.paidCents), "ALTA"]),
           },
           insights: [
             "Todos os pagamentos com vencimento na semana possuem cobertura confirmada no saldo bancário.",
@@ -1055,8 +1055,9 @@ export class EnterpriseAiCopilotService {
       });
 
       for (const sale of discountedSales) {
-        if (sale.discountCents > 0 && sale.totalCents > 0) {
-          const discountPct = Math.round((sale.discountCents / (sale.totalCents + sale.discountCents)) * 100);
+        if (sale.subtotalCents > sale.totalCents && sale.totalCents > 0) {
+          const discountCents = Math.max(0, sale.subtotalCents - sale.totalCents);
+          const discountPct = sale.subtotalCents > 0 ? Math.round((discountCents / sale.subtotalCents) * 100) : 0;
           if (discountPct >= 20) {
             anomalies.push({
               id: `anom-disc-${sale.id.slice(0, 8)}`,
@@ -1064,7 +1065,7 @@ export class EnterpriseAiCopilotService {
               type: "EXCESSIVE_DISCOUNT",
               severity: "WARN",
               title: "Desconto Elevado Identificado",
-              description: `Venda ${sale.number} registou desconto de ${discountPct}% (${formatKwanza(sale.discountCents)}).`,
+              description: `Venda ${sale.number} registou desconto de ${discountPct}% (${formatKwanza(discountCents)}).`,
               entityId: sale.id,
               metricValue: discountPct,
               expectedValue: 5,

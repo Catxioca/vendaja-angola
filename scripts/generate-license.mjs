@@ -56,6 +56,7 @@ const PLAN_PRESETS = {
     "GOVERNANCE",
     "INTEGRATIONS",
     "CLOUD",
+    "AI",
   ],
   CUSTOM: [],
 };

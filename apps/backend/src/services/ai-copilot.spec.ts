@@ -177,10 +177,13 @@ test("VendaJá Copilot: Proactive insights engine returns non-empty structured a
   assert.ok(result.insights.length >= 1, "Deve gerar insights proativos");
 
   const sample = result.insights[0];
+  assert.ok(sample);
   assert.ok(sample.id);
-  assert.ok(sample.category);
-  assert.ok(sample.message);
-  assert.ok(sample.severity);
+  if (sample) {
+    assert.ok(sample.category);
+    assert.ok(sample.message);
+    assert.ok(sample.severity);
+  }
 });
 
 test("VendaJá Copilot: Anomaly detection engine flags irregular operations", async () => {

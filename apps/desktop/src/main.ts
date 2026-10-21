@@ -679,6 +679,31 @@ ipcMain.handle("log-license-audit", async (_event, event: string, details: strin
   await appendLicenseAudit(event as any, details, "Utilizador Frontend");
   return true;
 });
+ipcMain.handle("check-live-updates", async (_event, apiUrl?: string) => {
+  try {
+    const config = await readServerConfig();
+    const targetUrl = apiUrl || config?.apiUrl || "http://localhost:4000";
+    const res = await fetch(`${targetUrl}/api/v1/saas/updates/check?currentVersion=${app.getVersion()}`);
+    if (res.ok) return await res.json();
+    return { updateAvailable: false, manifest: { version: app.getVersion() } };
+  } catch (err) {
+    return { updateAvailable: false, error: String(err) };
+  }
+});
+ipcMain.handle("sync-live-config", async (_event, apiUrl?: string) => {
+  try {
+    const config = await readServerConfig();
+    const targetUrl = apiUrl || config?.apiUrl || "http://localhost:4000";
+    const res = await fetch(`${targetUrl}/api/v1/saas/updates/live-config`);
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, liveConfig: data };
+    }
+    return { success: false, error: `HTTP ${res.status}` };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+});
 process.on("uncaughtException", (error) => console.error("[desktop] uncaught exception", error));
 process.on("unhandledRejection", (error) => console.error("[desktop] unhandled rejection", error));
 app.whenReady().then(() => { startLocalBackend(); createWindow(); }).catch((error) => console.error("[desktop] startup failed", error));

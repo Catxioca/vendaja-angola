@@ -52,8 +52,8 @@ test("EnterpriseAuditService: resilient recording does not throw when database i
   }, "Registo de auditoria nunca deve lançar exceção não tratada ao negócio");
 });
 
-test("EnterpriseRbacService: contains all 79 granular enterprise permissions across 11 core modules", () => {
-  assert.equal(SYSTEM_PERMISSIONS.length, 79, "Deve conter exatamente 79 permissões granulares de governança, automação, CRM, documentos, APIs, Finanças e BI");
+test("EnterpriseRbacService: contains all 84 granular enterprise permissions across 12 core modules", () => {
+  assert.equal(SYSTEM_PERMISSIONS.length, 84, "Deve conter exatamente 84 permissões granulares de governança, automação, CRM, documentos, APIs, Finanças, BI e IA");
 
   const modules = new Set(SYSTEM_PERMISSIONS.map((p) => p.module));
   assert.ok(modules.has("POS"), "Deve conter módulo POS");
@@ -67,6 +67,7 @@ test("EnterpriseRbacService: contains all 79 granular enterprise permissions acr
   assert.ok(modules.has("API"), "Deve conter módulo API");
   assert.ok(modules.has("FINANCE"), "Deve conter módulo FINANCE");
   assert.ok(modules.has("BI"), "Deve conter módulo BI");
+  assert.ok(modules.has("AI"), "Deve conter módulo AI");
 
   // Every permission must have code, module, action, description
   for (const perm of SYSTEM_PERMISSIONS) {

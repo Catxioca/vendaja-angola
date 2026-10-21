@@ -150,4 +150,48 @@ export class EnterpriseCloudUpdateService {
     LATEST_RELEASES[data.channel] = manifest;
     return manifest;
   }
+
+  /**
+   * Retrieves dynamic live module configurations, allowing installed clients
+   * to automatically enable new features (e.g. VendaJá Copilot, BI, Portals)
+   * in-place without running an OS installer.
+   */
+  static getLiveConfig(companyId?: string) {
+    return {
+      minVersion: LATEST_RELEASES.stable.minSupportedVersion || "2.0.0",
+      version: LATEST_RELEASES.stable.version,
+      liveUpdateProtocol: "v2-hot-reload",
+      activeModules: [
+        "DASHBOARD",
+        "POS",
+        "STOCK",
+        "PURCHASES",
+        "TREASURY",
+        "ACCOUNTING",
+        "HR",
+        "CRM",
+        "DOCUMENTS",
+        "BI",
+        "REPORTS",
+        "AUTOMATION",
+        "GOVERNANCE",
+        "INTEGRATIONS",
+        "CLOUD",
+        "AI",
+        "SETTINGS",
+      ],
+      features: {
+        aiCopilot: true,
+        offlineNlu: true,
+        predictiveForecast: true,
+        anomalyDetection: true,
+        omnichannelPortals: true,
+        mobileSyncBatch: true,
+      },
+      updatedAt: new Date().toISOString(),
+      syncTimestamp: new Date().toISOString(),
+      hotReloadEligible: true,
+      hotReloadAllowed: true,
+    };
+  }
 }

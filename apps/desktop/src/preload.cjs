@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld("pos", {
   getServerConfig: () => ipcRenderer.invoke("get-server-config"),
   saveServerConfig: (config) => ipcRenderer.invoke("save-server-config", config),
   testServerConnection: (apiUrl) => ipcRenderer.invoke("test-server-connection", apiUrl),
+  checkLiveUpdates: (apiUrl) => ipcRenderer.invoke("check-live-updates", apiUrl),
+  syncLiveConfig: (apiUrl) => ipcRenderer.invoke("sync-live-config", apiUrl),
 });

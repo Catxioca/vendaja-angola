@@ -8,6 +8,14 @@ O formato baseia-se em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 ## [1.0.0-enterprise-foundation] - 2026-10-21
 
 ### Adicionado
+- **Inteligência Artificial Empresarial & VendaJá Copilot (Fase 10)**:
+  - **VendaJá Copilot**: Assistente corporativo multi-domínio em linguagem natural operando exclusivamente sobre dados reais do ERP (proibição de dados fictícios em produção), integrado no Dashboard, CRM, Financeiro, RH, Compras, Stocks, Portais e Mobile.
+  - **Assistentes Especializados**: Assistente Financeiro & Tesouraria (previsão de liquidez e pagamentos), Assistente Comercial (pipeline, ranking e retenção), Assistente de Stocks (previsão de ruptura em dias e compras sugeridas), Assistente de RH (férias LGT 22 dias e massa salarial) e Assistente Executivo.
+  - **Modelos Preditivos de Machine Learning**: Previsão de vendas em 3 cenários (Conservador -10%, Esperado Real e Otimista +15% com 95% de confiança), cálculo de dias até esgotamento de stock e fluxo de caixa a 30/60/90 dias.
+  - **Deteção Contínua de Anomalias & Auditoria**: Alerta automático de descontos excessivos (>20%), quebras de stock atípicas e faturas anuladas com registo compulsório na trilha forense do `EnterpriseAuditService`.
+  - **Recomendações Estratégicas**: Sugestões automáticas com estimativa explícita de impacto financeiro em Kwanzas (Kz).
+  - **Auto-Atualização Dinâmica sem Reinstalador (Hot-Sync Live)**: Sistema de distribuição contínua via `/api/v1/saas/updates/live-config` e IPC `syncLiveConfig`, permitindo ativar novos módulos e diretrizes fiscais nos computadores já instalados sem necessidade de novos ficheiros executáveis (.exe/.msi).
+  - **Segurança & Governança RBAC**: 5 novas permissões canónicas (`AI.View`, `AI.Chat`, `AI.Forecast`, `AI.Analytics`, `AI.Admin`) elevando a matriz para 84 permissões e 12 módulos canónicos.
 - **Licenciamento Modular em Dois Níveis & Proteção DRM**:
   - Separação formal e independente entre a **Licença do Produto** (autorização base do ERP) e **Licenças Modulares** (desbloqueio por módulo contratado).
   - Assinatura assimétrica RSA-2048 de licenças com verificação local via `public.pem`.

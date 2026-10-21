@@ -412,3 +412,9 @@ cloudSaasRouter.get("/updates/check", (req: Request, res: Response) => {
   const result = EnterpriseCloudUpdateService.checkForUpdate(currentVersion, channel);
   return res.json(result);
 });
+
+cloudSaasRouter.get("/updates/live-config", (req: Request, res: Response) => {
+  const companyId = (req.query.companyId as string) || (req.headers["x-company-id"] as string);
+  const result = EnterpriseCloudUpdateService.getLiveConfig(companyId);
+  return res.json(result);
+});

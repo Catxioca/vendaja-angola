@@ -144,6 +144,8 @@ declare global {
       getServerConfig?: () => Promise<any>;
       saveServerConfig?: (config: any) => Promise<any>;
       testServerConnection?: (apiUrl: string) => Promise<any>;
+      checkLiveUpdates?: (apiUrl?: string) => Promise<any>;
+      syncLiveConfig?: (apiUrl?: string) => Promise<any>;
     };
   }
 }

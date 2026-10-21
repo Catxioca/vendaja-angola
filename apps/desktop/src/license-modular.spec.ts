@@ -60,7 +60,7 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
     });
 
     it("verifies full coverage of all 16 canonical modules in MODULE_CATALOG", () => {
-      assert.equal(MODULE_CATALOG.length, 16);
+      assert.equal(MODULE_CATALOG.length, 17);
       const codes = MODULE_CATALOG.map((m) => m.code);
       const expectedCodes: AppModule[] = [
         "DASHBOARD",
@@ -79,6 +79,7 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
         "GOVERNANCE",
         "INTEGRATIONS",
         "CLOUD",
+        "AI",
       ];
       for (const expected of expectedCodes) {
         assert.ok(codes.includes(expected), `Module ${expected} missing from catalog`);
@@ -121,7 +122,8 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
       assert.ok(ent.includes("GOVERNANCE"));
       assert.ok(ent.includes("INTEGRATIONS"));
       assert.ok(ent.includes("CLOUD"));
-      assert.equal(ent.length, 16);
+      assert.ok(ent.includes("AI"));
+      assert.equal(ent.length, 17);
     });
   });
 
@@ -217,7 +219,7 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
       assert.equal(result.plan, "ENTERPRISE");
       assert.equal(result.expiryTier, "valid");
       assert.ok(result.daysRemaining! > 300);
-      assert.equal(result.modules?.length, 16);
+      assert.equal(result.modules?.length, 17);
     });
 
     it("rejects token when hardwareId does not match the current machine", () => {
@@ -322,9 +324,9 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
   });
 
   describe("Two-Tier Licensing & Modular Isolation Engine", () => {
-    it("verifies clean install defaults: Product active, ALL 15 operational modules locked", () => {
-      // In clean installation, only SETTINGS is unlocked; all 15 operational modules are strictly locked
-      assert.equal(OPERATIONAL_MODULES.length, 15);
+    it("verifies clean install defaults: Product active, ALL 16 operational modules locked", () => {
+      // In clean installation, only SETTINGS is unlocked; all 16 operational modules are strictly locked
+      assert.equal(OPERATIONAL_MODULES.length, 16);
       assert.deepEqual(defaultLicensedModules, ["SETTINGS"]);
       assert.deepEqual(PRODUCT_CORE_MODULES, ["SETTINGS"]);
 
@@ -408,6 +410,7 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
         "GOVERNANCE",
         "INTEGRATIONS",
         "CLOUD",
+        "AI",
       ];
 
       for (const lockedMod of remainingLocked) {

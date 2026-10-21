@@ -14,6 +14,7 @@ export type AppModule =
   | "GOVERNANCE"
   | "INTEGRATIONS"
   | "CLOUD"
+  | "AI"
   | "SETTINGS";
 
 export type CommercialPlan = "STARTER" | "PROFESSIONAL" | "BUSINESS" | "ENTERPRISE" | "CUSTOM";
@@ -81,6 +82,7 @@ export const PLAN_METADATA: Record<CommercialPlan, PlanDefinition> = {
       "GOVERNANCE",
       "INTEGRATIONS",
       "CLOUD",
+      "AI",
     ],
   },
   CUSTOM: {
@@ -230,6 +232,14 @@ export const MODULE_CATALOG: ModuleInfo[] = [
     description: "Gestão centralizada de múltiplas lojas e filiais, sincronização de bases de dados distribuídas e SaaS.",
     minimumPlan: "ENTERPRISE",
   },
+  {
+    code: "AI",
+    name: "VendaJá Copilot (IA)",
+    category: "Inteligência Artificial",
+    icon: "🤖",
+    description: "Assistente empresarial inteligente com consultas em linguagem natural, previsões preditivas e deteção de anomalias.",
+    minimumPlan: "ENTERPRISE",
+  },
 ];
 
 export const PRODUCT_CORE_MODULES: AppModule[] = ["SETTINGS"];
@@ -250,6 +260,7 @@ export const OPERATIONAL_MODULES: AppModule[] = [
   "GOVERNANCE",
   "INTEGRATIONS",
   "CLOUD",
+  "AI",
 ];
 
 export const isOperationalModule = (module: AppModule): boolean => {
@@ -297,11 +308,12 @@ export const roleModules: Record<string, AppModule[]> = {
     "GOVERNANCE",
     "INTEGRATIONS",
     "CLOUD",
+    "AI",
     "SETTINGS",
   ],
-  ROLE_CASHIER: ["POS", "DASHBOARD"],
-  ROLE_HR: ["HR", "DASHBOARD"],
-  ROLE_ACCOUNTANT: ["ACCOUNTING", "DASHBOARD"],
+  ROLE_CASHIER: ["POS", "DASHBOARD", "AI"],
+  ROLE_HR: ["HR", "DASHBOARD", "AI"],
+  ROLE_ACCOUNTANT: ["ACCOUNTING", "DASHBOARD", "AI"],
 };
 
 export const normalizeModuleCode = (code: string): AppModule | null => {
@@ -322,6 +334,7 @@ export const normalizeModuleCode = (code: string): AppModule | null => {
   if (upper === "GOVERNANCE" || upper === "GOVERNANCA" || upper === "AUDIT" || upper === "SECURITY") return "GOVERNANCE";
   if (upper === "INTEGRATIONS" || upper === "INTEGRACOES" || upper === "API" || upper === "WEBHOOKS") return "INTEGRATIONS";
   if (upper === "CLOUD" || upper === "SAAS" || upper === "MULTILOJAS" || upper === "MULTILOJA") return "CLOUD";
+  if (upper === "AI" || upper === "COPILOT" || upper === "IA" || upper === "ASSISTANT") return "AI";
   return null;
 };
 

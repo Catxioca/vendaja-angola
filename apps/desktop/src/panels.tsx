@@ -8982,3 +8982,5 @@ export * from "./financial-panel";
 export * from "./bi-analytics-panel";
 export * from "./saas-cloud-panel";
 export * from "./licensing-panel";
+
+export * from "./copilot-panel";

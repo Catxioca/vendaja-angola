@@ -110,6 +110,13 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
   { code: "BI.Export", module: "BI", screen: "Reports", action: "Export", description: "Exportar relatórios analíticos em PDF, Excel, CSV e Power BI" },
   { code: "BI.CreateDashboard", module: "BI", screen: "DashboardBuilder", action: "Create", description: "Construir e personalizar dashboards e widgets analíticos" },
   { code: "BI.Manage", module: "BI", screen: "Configuration", action: "Manage", description: "Administrar regras de alertas executivos e modelos de BI" },
+
+  // Artificial Intelligence, VendaJá Copilot & Machine Learning (Fase 10)
+  { code: "AI.View", module: "AI", screen: "Copilot", action: "View", description: "Aceder ao assistente inteligente VendaJá Copilot" },
+  { code: "AI.Chat", module: "AI", screen: "Copilot", action: "Chat", description: "Interagir em linguagem natural com o VendaJá Copilot" },
+  { code: "AI.Forecast", module: "AI", screen: "Copilot", action: "Forecast", description: "Consultar previsões de vendas, stock e tesouraria por IA" },
+  { code: "AI.Analytics", module: "AI", screen: "Copilot", action: "Analytics", description: "Solicitar insights analíticos e deteção de anomalias por IA" },
+  { code: "AI.Admin", module: "AI", screen: "Copilot", action: "Admin", description: "Administrar modelos, parâmetros e auditoria de IA" },
 ];
 
 export class EnterpriseRbacService {
@@ -335,6 +342,8 @@ export class EnterpriseRbacService {
         effectivePermissions.add("Sales.Create");
         effectivePermissions.add("Sales.Cancel");
         effectivePermissions.add("Stock.View");
+        effectivePermissions.add("AI.View");
+        effectivePermissions.add("AI.Chat");
       }
       if (normalized.includes("HR")) {
         effectivePermissions.add("HR.View");
@@ -342,6 +351,8 @@ export class EnterpriseRbacService {
         effectivePermissions.add("HR.Edit");
         effectivePermissions.add("HR.Salary.View");
         effectivePermissions.add("HR.Salary.Edit");
+        effectivePermissions.add("AI.View");
+        effectivePermissions.add("AI.Chat");
       }
       if (normalized.includes("ACCOUNTANT") || normalized.includes("ACCOUNTING")) {
         effectivePermissions.add("Accounting.View");
@@ -353,6 +364,9 @@ export class EnterpriseRbacService {
         effectivePermissions.add("Cashflow.Manage");
         effectivePermissions.add("Sales.View");
         effectivePermissions.add("Purchases.View");
+        effectivePermissions.add("AI.View");
+        effectivePermissions.add("AI.Chat");
+        effectivePermissions.add("AI.Analytics");
       }
       if (normalized.includes("MANAGER") || normalized.includes("SUPERVISOR")) {
         effectivePermissions.add("Sales.View");
@@ -367,6 +381,10 @@ export class EnterpriseRbacService {
         effectivePermissions.add("Purchases.View");
         effectivePermissions.add("Purchases.Create");
         effectivePermissions.add("Cashflow.View");
+        effectivePermissions.add("AI.View");
+        effectivePermissions.add("AI.Chat");
+        effectivePermissions.add("AI.Forecast");
+        effectivePermissions.add("AI.Analytics");
       }
     }
 

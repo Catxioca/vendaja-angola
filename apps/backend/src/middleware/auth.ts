@@ -36,7 +36,7 @@ export function companyContext(req: Express.Request): NonNullable<AuthRequest["c
   return context;
 }
 export const requireRole = (...roles: string[]): RequestHandler => (req, res, next) => {
-  const role = normalizeRole((req as AuthRequest).user?.role);
+  const role = normalizeRole((req as AuthRequest).context?.role ?? (req as AuthRequest).user?.role);
   if (!roles.map(normalizeRole).includes(role)) { res.status(403).json({ error: "forbidden", message: "Não tem permissão para esta operação." }); return; }
   next();
 };
@@ -58,7 +58,7 @@ export function normalizeRole(role?: string): string {
   return value.startsWith("ROLE_") ? value : `ROLE_${value}`;
 }
 export const requireModuleAccess = (module: AppModule): RequestHandler => (req, res, next) => {
-  const role = normalizeRole((req as AuthRequest).user?.role);
+  const role = normalizeRole((req as AuthRequest).context?.role ?? (req as AuthRequest).user?.role);
   if (!moduleRoles[module].includes(role)) {
     res.status(403).json({ error: "module_forbidden", module, message: "O seu perfil não tem acesso a este módulo." });
     return;
@@ -67,8 +67,8 @@ export const requireModuleAccess = (module: AppModule): RequestHandler => (req, 
 };
 export const requireAdminOrGrant = (action: string): RequestHandler => (req, res, next) => {
   const user = (req as AuthRequest).user;
-  const role = user?.role?.toUpperCase();
-  if (role === "ADMIN" || role === "SUPERVISOR") { next(); return; }
+  const role = normalizeRole((req as AuthRequest).context?.role ?? user?.role);
+  if (role === "ROLE_ADMIN" || role === "ROLE_SUPERVISOR") { next(); return; }
   const grant = req.header("x-admin-authorization");
   if (!grant) {
     res.status(403).json({ error: "admin_authorization_required", action, stage: "PERMISSION" });

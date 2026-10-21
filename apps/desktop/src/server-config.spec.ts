@@ -64,3 +64,24 @@ test("reports unavailable backend and recovers after health endpoint returns", a
     assert.equal((await testServerConnection("https://pilot.example.com")).message, "Ligação ao backend confirmada.");
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test("normalizes legacy and canonical license module codes transparently", async () => {
+  const { normalizeModuleCode, normalizeRole, roleModules } = await import("./modules.js");
+  assert.equal(normalizeModuleCode("pdv"), "POS");
+  assert.equal(normalizeModuleCode("cash"), "POS");
+  assert.equal(normalizeModuleCode("POS"), "POS");
+  assert.equal(normalizeModuleCode("products"), "STOCK");
+  assert.equal(normalizeModuleCode("stock"), "STOCK");
+  assert.equal(normalizeModuleCode("fiscal"), "SETTINGS");
+  assert.equal(normalizeModuleCode("devices"), "SETTINGS");
+  assert.equal(normalizeModuleCode("hr"), "HR");
+  assert.equal(normalizeModuleCode("accounting"), "ACCOUNTING");
+  assert.equal(normalizeModuleCode("dashboard"), "DASHBOARD");
+  assert.equal(normalizeModuleCode("unknown_module"), null);
+
+  assert.equal(normalizeRole("admin"), "ROLE_ADMIN");
+  assert.equal(normalizeRole("cashier"), "ROLE_CASHIER");
+  assert.equal(normalizeRole("operator"), "ROLE_CASHIER");
+  assert.deepEqual(roleModules["ROLE_CASHIER"], ["POS", "DASHBOARD"]);
+  assert.ok(roleModules["ROLE_ADMIN"]?.includes("ACCOUNTING"));
+});

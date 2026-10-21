@@ -55,15 +55,19 @@ async function main() {
     create: { name: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`, companyId: company.id, branchId: branch.id, startsAt, endsAt, status: "OPEN" },
   });
 
-  const category = await prisma.category.findUniqueOrThrow({ where: { name: "Bebidas" } });
-  const bakery = await prisma.category.findUniqueOrThrow({ where: { name: "Padaria" } });
-  const products = [
-    { sku: "CAF-001", name: "Café Angola", priceCents: 125000, stock: 42, taxRate: 0.14, categoryId: category.id, companyId: company.id, branchId: branch.id },
-    { sku: "AGU-001", name: "Água mineral", priceCents: 75000, stock: 80, taxRate: 0.14, categoryId: category.id, companyId: company.id, branchId: branch.id },
-    { sku: "PAO-001", name: "Pão de forma", priceCents: 150000, stock: 18, taxRate: 0.05, categoryId: bakery.id, companyId: company.id, branchId: branch.id },
-  ];
-  for (const product of products) await prisma.product.upsert({ where: { sku: product.sku }, update: product, create: product });
-  console.log(`Seed concluído: administrador ${admin.email}, ${products.length} produtos e ${exemptions.length} códigos fiscais.`);
+  if (process.env.SEED_DEMO_DATA === "true") {
+    const category = await prisma.category.findUniqueOrThrow({ where: { name: "Bebidas" } });
+    const bakery = await prisma.category.findUniqueOrThrow({ where: { name: "Padaria" } });
+    const products = [
+      { sku: "CAF-001", name: "Café Angola", priceCents: 125000, stock: 42, taxRate: 0.14, categoryId: category.id, companyId: company.id, branchId: branch.id },
+      { sku: "AGU-001", name: "Água mineral", priceCents: 75000, stock: 80, taxRate: 0.14, categoryId: category.id, companyId: company.id, branchId: branch.id },
+      { sku: "PAO-001", name: "Pão de forma", priceCents: 150000, stock: 18, taxRate: 0.05, categoryId: bakery.id, companyId: company.id, branchId: branch.id },
+    ];
+    for (const product of products) await prisma.product.upsert({ where: { sku: product.sku }, update: product, create: product });
+    console.log(`Seed concluído: administrador ${admin.email}, ${products.length} produtos de demonstração e ${exemptions.length} códigos fiscais.`);
+  } else {
+    console.log(`Seed de produção concluído: administrador ${admin.email} e ${exemptions.length} códigos fiscais. Sem produtos fictícios.`);
+  }
 }
 
 main().catch((error: unknown) => { console.error("Seed falhou", error); process.exitCode = 1; }).finally(() => prisma.$disconnect());

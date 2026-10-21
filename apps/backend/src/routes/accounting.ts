@@ -120,11 +120,12 @@ accountingRouter.get("/entries", async (req, res) => {
     const columns = req.query.columns === "8" ? 8 : 4;
     const from = req.query.from ? new Date(String(req.query.from)) : undefined;
     const to = req.query.to ? new Date(String(req.query.to)) : undefined;
-    const where = from || to ? { entryDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : undefined;
+    const tenant = companyContext(req);
+    const where = { companyId: tenant.companyId, branchId: tenant.branchId, ...(from || to ? { entryDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}) };
     const [accounts, journals, legacy] = await Promise.all([
       prisma.account.findMany({ orderBy: { code: "asc" } }),
       prisma.journal.findMany({ where, include: { lines: true } }),
-      prisma.journalEntry.findMany({ where: where ? { entryDate: where.entryDate } : undefined }),
+      prisma.journalEntry.findMany({ where }),
     ]);
     const totals = new Map(accounts.map((a) => [a.id, { debit: 0, credit: 0 }]));
     for (const j of journals) for (const l of j.lines) { const t = totals.get(l.accountId)!; t.debit += l.debitCents; t.credit += l.creditCents; }
@@ -174,7 +175,8 @@ accountingRouter.get("/entries", async (req, res) => {
   accountingRouter.get("/financial-statements", async (req, res) => {
     const from = req.query.from ? new Date(String(req.query.from)) : new Date(0);
     const to = req.query.to ? new Date(String(req.query.to)) : new Date();
-    const journals = await prisma.journal.findMany({ where: { entryDate: { gte: from, lte: to }, status: "POSTED" }, include: { lines: { include: { account: true } } } });
+    const tenant = companyContext(req);
+    const journals = await prisma.journal.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId, entryDate: { gte: from, lte: to }, status: "POSTED" }, include: { lines: { include: { account: true } } } });
     const totals = new Map<string, { code: string; name: string; debit: number; credit: number; type: string }>();
     for (const journal of journals) for (const line of journal.lines) {
       const current = totals.get(line.accountId) ?? { code: line.account.code, name: line.account.name, debit: 0, credit: 0, type: line.account.type };
@@ -185,22 +187,25 @@ accountingRouter.get("/entries", async (req, res) => {
     res.json({ from: from.toISOString(), to: to.toISOString(), balanceSheet: rows.filter((row) => ["ASSET", "LIABILITY", "EQUITY"].includes(row.type)), incomeStatement: rows.filter((row) => ["REVENUE", "EXPENSE"].includes(row.type)), totals: { assetsCents: result(["ASSET"]), liabilitiesCents: -result(["LIABILITY"]), equityCents: -result(["EQUITY"]), revenueCents: -result(["REVENUE"]), expensesCents: result(["EXPENSE"]) } });
   });
 
-  accountingRouter.get("/receivables", async (_req, res) => {
-    const customers = await prisma.customer.findMany({ where: { outstandingDebtCents: { gt: 0 } }, select: { id: true, name: true, nif: true, outstandingDebtCents: true, creditLimitCents: true }, orderBy: { outstandingDebtCents: "desc" } });
+  accountingRouter.get("/receivables", async (req, res) => {
+    const tenant = companyContext(req);
+    const customers = await prisma.customer.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId, outstandingDebtCents: { gt: 0 } }, select: { id: true, name: true, nif: true, outstandingDebtCents: true, creditLimitCents: true }, orderBy: { outstandingDebtCents: "desc" } });
     res.json({ rows: customers, totalOpenCents: customers.reduce((sum, customer) => sum + customer.outstandingDebtCents, 0) });
   });
 
-  accountingRouter.get("/payables", async (_req, res) => {
-    const payables = await prisma.accountPayable.findMany({ where: { status: { not: "PAID" } }, include: { supplier: { select: { id: true, name: true, nif: true } }, purchase: { select: { id: true, number: true } } }, orderBy: { dueDate: "asc" } });
+  accountingRouter.get("/payables", async (req, res) => {
+    const tenant = companyContext(req);
+    const payables = await prisma.accountPayable.findMany({ where: { status: { not: "PAID" }, purchase: { companyId: tenant.companyId, branchId: tenant.branchId } }, include: { supplier: { select: { id: true, name: true, nif: true } }, purchase: { select: { id: true, number: true } } }, orderBy: { dueDate: "asc" } });
     res.json({ rows: payables, totalOpenCents: payables.reduce((sum, payable) => sum + payable.originalCents - payable.paidCents, 0) });
   });
 
   accountingRouter.get("/tax-summary", async (req, res) => {
     const from = req.query.from ? new Date(String(req.query.from)) : new Date(0);
     const to = req.query.to ? new Date(String(req.query.to)) : new Date();
+    const tenant = companyContext(req);
     const [sales, purchases] = await Promise.all([
-      prisma.sale.aggregate({ where: { createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { taxCents: true, subtotalCents: true } }),
-      prisma.purchase.aggregate({ where: { purchasedAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { taxCents: true, subtotalCents: true } }),
+      prisma.sale.aggregate({ where: { companyId: tenant.companyId, branchId: tenant.branchId, createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { taxCents: true, subtotalCents: true } }),
+      prisma.purchase.aggregate({ where: { companyId: tenant.companyId, branchId: tenant.branchId, purchasedAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { taxCents: true, subtotalCents: true } }),
     ]);
     const outputCents = sales._sum.taxCents ?? 0;
     const inputCents = purchases._sum.taxCents ?? 0;
@@ -210,11 +215,12 @@ accountingRouter.get("/entries", async (req, res) => {
   accountingRouter.get("/reconciliation", async (req, res) => {
     const from = req.query.from ? new Date(String(req.query.from)) : new Date(0);
     const to = req.query.to ? new Date(String(req.query.to)) : new Date();
+    const tenant = companyContext(req);
     const [sales, receivables, purchases, payables] = await Promise.all([
-      prisma.sale.aggregate({ where: { createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { totalCents: true } }),
-      prisma.receivablePayment.aggregate({ where: { receivedAt: { gte: from, lte: to } }, _sum: { amountCents: true } }),
-      prisma.purchase.aggregate({ where: { purchasedAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { totalCents: true } }),
-      prisma.payablePayment.aggregate({ where: { paidAt: { gte: from, lte: to } }, _sum: { amountCents: true } }),
+      prisma.sale.aggregate({ where: { companyId: tenant.companyId, branchId: tenant.branchId, createdAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { totalCents: true } }),
+      prisma.receivablePayment.aggregate({ where: { customer: { companyId: tenant.companyId, branchId: tenant.branchId }, receivedAt: { gte: from, lte: to } }, _sum: { amountCents: true } }),
+      prisma.purchase.aggregate({ where: { companyId: tenant.companyId, branchId: tenant.branchId, purchasedAt: { gte: from, lte: to }, status: { not: "CANCELLED" } }, _sum: { totalCents: true } }),
+      prisma.payablePayment.aggregate({ where: { payable: { purchase: { companyId: tenant.companyId, branchId: tenant.branchId } }, paidAt: { gte: from, lte: to } }, _sum: { amountCents: true } }),
     ]);
     res.json({ from: from.toISOString(), to: to.toISOString(), salesCents: sales._sum.totalCents ?? 0, receivedCents: receivables._sum.amountCents ?? 0, purchasesCents: purchases._sum.totalCents ?? 0, paidCents: payables._sum.amountCents ?? 0 });
   });

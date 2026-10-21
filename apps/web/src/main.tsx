@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { createPosStorage, SyncEngine, formatKwanza } from "@angola/shared";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { BootstrapAccountForm } from "./BootstrapAccountForm";
+import { CustomerPortal } from "./CustomerPortal";
+import { SupplierPortal } from "./SupplierPortal";
+import { EmployeePortal } from "./EmployeePortal";
+import { MobileErpApp } from "./MobileErpApp";
 import "./style.css";
 
 if ("serviceWorker" in navigator) {
@@ -13,7 +18,7 @@ if ("serviceWorker" in navigator) {
 }
 const api = () => (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__ ?? (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "http://localhost:4000";
 function Login({ onLogin }: { onLogin: () => void }) {
-  const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState("");
+  const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [showBootstrap, setShowBootstrap] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -30,7 +35,9 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setError("Não foi possível contactar o servidor. Verifique a ligação ao backend; o início de sessão requer ligação ativa.");
     }
   }
-  return <main className="startup-loading"><form onSubmit={(e) => void submit(e)}><h1>VendaJá Angola</h1><input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required /><input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} /><button>Entrar</button>{error && <p role="alert">{error}</p>}</form></main>;
+  return <main className="startup-loading">{showBootstrap
+    ? <BootstrapAccountForm apiUrl={api()} onComplete={onLogin} onCancel={() => setShowBootstrap(false)} />
+    : <form onSubmit={(e) => void submit(e)}><h1>VendaJá Angola</h1><input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required /><input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} /><button>Entrar</button>{error && <p role="alert">{error}</p>}<hr /><p>Ainda não configurou esta instalação?</p><button type="button" className="bootstrap-entry" onClick={() => setShowBootstrap(true)}>Criar Conta de Administrador</button></form>};</main>;
 }
 function CompanyContextSelector() {
   const [contexts, setContexts] = useState<Array<{ companyId: string; branchId: string | null; company: { legalName: string }; branch?: { name: string } | null }>>([]);
@@ -225,9 +232,36 @@ function Reports() {
   const rows = Array.isArray(data?.rows) ? data.rows as Array<Record<string, unknown>> : [];
   return <section><h2>Relatórios comerciais</h2><div className="customer-fields"><select value={type} onChange={e => setType(e.target.value)}>{[["sales", "Vendas"], ["products", "Produtos"], ["stock", "Stock"], ["purchases", "Compras"], ["expenses", "Despesas"], ["receivables", "Contas a receber"], ["payables", "Contas a pagar"], ["summary", "Resumo financeiro"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input type="date" value={from} onChange={e => setFrom(e.target.value)} /><input type="date" value={to} onChange={e => setTo(e.target.value)} /><button onClick={() => void load()}>Aplicar filtros</button></div>{error && <p className="error-message">{error}</p>}{data && type === "sales" && <div className="cards"><article><small>Documentos</small><strong>{String(data.documents ?? 0)}</strong></article><article><small>Total</small><strong>{formatKwanza(Number(data.totalCents ?? 0))}</strong></article><article><small>Ticket médio</small><strong>{formatKwanza(Number(data.averageTicketCents ?? 0))}</strong></article></div>}{data && type === "summary" && <div className="cards"><article><small>Vendas</small><strong>{formatKwanza(Number(data.salesCents ?? 0))}</strong></article><article><small>Compras</small><strong>{formatKwanza(Number(data.purchasesCents ?? 0))}</strong></article><article><small>Despesas</small><strong>{formatKwanza(Number(data.expensesCents ?? 0))}</strong></article></div>}<table><thead><tr>{rows[0] ? Object.keys(rows[0]).slice(0, 8).map(key => <th key={key}>{key}</th>) : <th>Resultado</th>}</tr></thead><tbody>{rows.slice(0, 200).map((row, index) => <tr key={index}>{Object.keys(row).slice(0, 8).map(key => <td key={key}>{typeof row[key] === "object" ? JSON.stringify(row[key]) : String(row[key] ?? "—")}</td>)}</tr>)}{!rows.length && <tr><td>Sem dados no período selecionado.</td></tr>}</tbody></table></section>;
 }
+type OmnichannelView = "erp" | "customer-portal" | "supplier-portal" | "employee-portal" | "mobile-erp";
+
 function Boot() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [view, setView] = useState<OmnichannelView>(() => {
+    const hash = (typeof window !== "undefined" ? window.location.hash.replace("#", "") : "") as OmnichannelView;
+    if (["erp", "customer-portal", "supplier-portal", "employee-portal", "mobile-erp"].includes(hash)) return hash;
+    const saved = localStorage.getItem("vendaja_omnichannel_view") as OmnichannelView;
+    if (["erp", "customer-portal", "supplier-portal", "employee-portal", "mobile-erp"].includes(saved)) return saved;
+    return "erp";
+  });
+
+  useEffect(() => {
+    const handleHash = () => {
+      const next = window.location.hash.replace("#", "") as OmnichannelView;
+      if (["erp", "customer-portal", "supplier-portal", "employee-portal", "mobile-erp"].includes(next)) {
+        setView(next);
+      }
+    };
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  const changeView = (next: OmnichannelView) => {
+    setView(next);
+    window.location.hash = next;
+    localStorage.setItem("vendaja_omnichannel_view", next);
+  };
+
   useEffect(() => {
     let active = true;
     const storage = createPosStorage("angola-pos-pwa");
@@ -239,9 +273,126 @@ function Boot() {
       .catch((reason: unknown) => { const next = reason instanceof Error ? reason : new Error(String(reason)); console.error("[web] local storage initialization failed", next); if (active) setError(next); });
     return () => { active = false; };
   }, []);
+
   if (error) return <main className="startup-error"><h1>Armazenamento local indisponível</h1><p>{error.message}</p><button onClick={() => window.location.reload()}>Recarregar</button></main>;
   if (!ready) return <main className="startup-loading"><div className="spinner" /><p>A iniciar o armazenamento offline…</p></main>;
-  return localStorage.getItem("accessToken") ? <Dashboard /> : <Login onLogin={() => setReady(true)} />;
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          padding: "8px 16px",
+          background: "#0f172a",
+          color: "#f8fafc",
+          borderBottom: "2px solid #0284c7",
+          fontSize: "13px",
+          fontFamily: "system-ui, sans-serif",
+          zIndex: 9999,
+          position: "sticky",
+          top: 0,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <strong style={{ color: "#38bdf8", fontSize: "14px" }}>🇦🇴 VendaJá Omnichannel Suite</strong>
+          <span style={{ color: "#64748b" }}>|</span>
+          <span style={{ color: "#94a3b8" }}>Plataforma Digital Integrada</span>
+        </div>
+        <nav style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => changeView("erp")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: view === "erp" ? "#0284c7" : "#1e293b",
+              color: view === "erp" ? "#ffffff" : "#cbd5e1",
+            }}
+          >
+            💼 ERP Comercial
+          </button>
+          <button
+            type="button"
+            onClick={() => changeView("customer-portal")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: view === "customer-portal" ? "#0284c7" : "#1e293b",
+              color: view === "customer-portal" ? "#ffffff" : "#cbd5e1",
+            }}
+          >
+            🏢 Portal do Cliente
+          </button>
+          <button
+            type="button"
+            onClick={() => changeView("supplier-portal")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: view === "supplier-portal" ? "#0284c7" : "#1e293b",
+              color: view === "supplier-portal" ? "#ffffff" : "#cbd5e1",
+            }}
+          >
+            🚛 Portal do Fornecedor
+          </button>
+          <button
+            type="button"
+            onClick={() => changeView("employee-portal")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: view === "employee-portal" ? "#0284c7" : "#1e293b",
+              color: view === "employee-portal" ? "#ffffff" : "#cbd5e1",
+            }}
+          >
+            👥 Portal do Colaborador (RH)
+          </button>
+          <button
+            type="button"
+            onClick={() => changeView("mobile-erp")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: view === "mobile-erp" ? "#0284c7" : "#1e293b",
+              color: view === "mobile-erp" ? "#ffffff" : "#cbd5e1",
+            }}
+          >
+            📱 Mobile ERP App
+          </button>
+        </nav>
+      </header>
+      <div style={{ flex: 1 }}>
+        {view === "customer-portal" && <CustomerPortal apiUrl={api()} />}
+        {view === "supplier-portal" && <SupplierPortal apiUrl={api()} />}
+        {view === "employee-portal" && <EmployeePortal apiUrl={api()} />}
+        {view === "mobile-erp" && <MobileErpApp apiUrl={api()} />}
+        {view === "erp" && (localStorage.getItem("accessToken") ? <Dashboard /> : <Login onLogin={() => setReady(true)} />)}
+      </div>
+    </div>
+  );
 }
 const root = document.getElementById("root");
 if (!root) throw new Error("Elemento #root não encontrado.");

@@ -69,7 +69,8 @@ supplierRouter.delete("/:id", requireRole("ADMIN"), async (req, res) => {
 });
 
 supplierRouter.get("/:id/prices", async (req, res) => {
-  const prices = await prisma.supplierProductPrice.findMany({ where: { supplierId: String(req.params.id), OR: [{ validTo: null }, { validTo: { gt: new Date() } }] }, include: { product: true }, orderBy: { validFrom: "desc" } });
+  const tenant = companyContext(req);
+  const prices = await prisma.supplierProductPrice.findMany({ where: { supplierId: String(req.params.id), supplier: { companyId: tenant.companyId, branchId: tenant.branchId }, product: { companyId: tenant.companyId, branchId: tenant.branchId }, OR: [{ validTo: null }, { validTo: { gt: new Date() } }] }, include: { product: true }, orderBy: { validFrom: "desc" } });
   res.json(prices);
 });
 
@@ -77,7 +78,11 @@ supplierRouter.post("/:id/prices", requireRole("ADMIN"), async (req, res) => {
   const parsed = z.object({ productId: z.string().uuid(), unitCostCents: z.number().int().nonnegative(), validFrom: z.coerce.date().optional(), validTo: z.coerce.date().optional().nullable() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_supplier_price" }); return; }
   try {
-    const price = await prisma.supplierProductPrice.create({ data: { supplierId: String(req.params.id), ...parsed.data } });
+    const tenant = companyContext(req);
+    const supplier = await prisma.supplier.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId } });
+    const product = await prisma.product.findFirst({ where: { id: parsed.data.productId, companyId: tenant.companyId, branchId: tenant.branchId } });
+    if (!supplier || !product) { res.status(404).json({ error: "supplier_or_product_not_found" }); return; }
+    const price = await prisma.supplierProductPrice.create({ data: { supplierId: supplier.id, ...parsed.data } });
     res.status(201).json(price);
   } catch { res.status(400).json({ error: "supplier_price_failed" }); }
 });
@@ -91,21 +96,23 @@ const purchaseInput = z.object({
   documentNumber: z.string().max(100).optional().nullable(), purchasedAt: z.coerce.date().optional(), notes: z.string().max(1000).optional().nullable(),
 });
 purchaseRouter.get("/", async (req, res) => {
+  const tenant = companyContext(req);
   const supplierId = typeof req.query.supplierId === "string" ? req.query.supplierId : undefined;
-  res.json(await prisma.purchase.findMany({ where: supplierId ? { supplierId } : undefined, include: { supplier: true, lines: { include: { product: true } }, payable: true }, orderBy: { purchasedAt: "desc" }, take: 200 }));
+  res.json(await prisma.purchase.findMany({ where: { companyId: tenant.companyId, branchId: tenant.branchId, ...(supplierId ? { supplierId } : {}) }, include: { supplier: true, lines: { include: { product: true } }, payable: true }, orderBy: { purchasedAt: "desc" }, take: 200 }));
 });
-purchaseRouter.get("/payables", async (_req, res) => res.json(await prisma.accountPayable.findMany({ include: { supplier: true, purchase: true, payments: { include: { operator: { select: { id: true, displayName: true, username: true } } }, orderBy: { paidAt: "desc" } } }, orderBy: { dueDate: "asc" } })));
+purchaseRouter.get("/payables", async (req, res) => { const tenant = companyContext(req); res.json(await prisma.accountPayable.findMany({ where: { purchase: { companyId: tenant.companyId, branchId: tenant.branchId } }, include: { supplier: true, purchase: true, payments: { include: { operator: { select: { id: true, displayName: true, username: true } } }, orderBy: { paidAt: "desc" } } }, orderBy: { dueDate: "asc" } })); });
 purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
   const parsed = purchaseInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_purchase", details: parsed.error.flatten() }); return; }
   const actorId = (req as AuthRequest).user?.id;
+  const tenant = companyContext(req);
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const replay = await tx.purchase.findUnique({ where: { idempotencyKey: parsed.data.idempotencyKey }, include: { lines: true, payable: true } });
+      const replay = await tx.purchase.findFirst({ where: { idempotencyKey: parsed.data.idempotencyKey, companyId: tenant.companyId, branchId: tenant.branchId }, include: { lines: true, payable: true } });
       if (replay) return replay;
-      const supplier = await tx.supplier.findUnique({ where: { id: parsed.data.supplierId } });
+      const supplier = await tx.supplier.findFirst({ where: { id: parsed.data.supplierId, companyId: tenant.companyId, branchId: tenant.branchId } });
       if (!supplier?.active) throw new Error("supplier_inactive");
-      const products = await tx.product.findMany({ where: { id: { in: parsed.data.lines.map((line) => line.productId) }, active: true } });
+      const products = await tx.product.findMany({ where: { id: { in: parsed.data.lines.map((line) => line.productId) }, companyId: tenant.companyId, branchId: tenant.branchId, active: true } });
       const byId = new Map(products.map((product) => [product.id, product]));
       const lines = parsed.data.lines.map((line) => {
         if (!byId.has(line.productId)) throw new Error("product_not_found");
@@ -160,7 +167,7 @@ purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
       const subtotalCents = lines.reduce((sum, line) => sum + line.quantity * line.unitCostCents, 0);
       const taxCents = lines.reduce((sum, line) => sum + Math.round(line.quantity * line.unitCostCents * line.taxRate), 0);
       const totalCents = subtotalCents - parsed.data.discountCents + taxCents;
-      const purchase = await tx.purchase.create({ data: { number: parsed.data.number, supplierId: parsed.data.supplierId, procurementOrderId: parsed.data.procurementOrderId ?? null, operatorId: actorId, status: "CONFIRMED", paymentMethod: parsed.data.paymentMethod, subtotalCents, discountCents: parsed.data.discountCents, taxCents, totalCents, documentNumber: parsed.data.documentNumber ?? null, purchasedAt: parsed.data.purchasedAt, confirmedAt: new Date(), notes: parsed.data.notes ?? null, idempotencyKey: parsed.data.idempotencyKey, lines: { create: lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitCostCents: line.unitCostCents, taxRate: line.taxRate, totalCents: line.totalCents })) }, payable: parsed.data.paymentMethod === "CREDIT" ? { create: { supplierId: parsed.data.supplierId, originalCents: totalCents, dueDate: parsed.data.dueDate ?? new Date(Date.now() + 30 * 86400000) } } : undefined }, include: { lines: true, payable: true } });
+      const purchase = await tx.purchase.create({ data: { companyId: tenant.companyId, branchId: tenant.branchId, number: parsed.data.number, supplierId: parsed.data.supplierId, procurementOrderId: parsed.data.procurementOrderId ?? null, operatorId: actorId, status: "CONFIRMED", paymentMethod: parsed.data.paymentMethod, subtotalCents, discountCents: parsed.data.discountCents, taxCents, totalCents, documentNumber: parsed.data.documentNumber ?? null, purchasedAt: parsed.data.purchasedAt, confirmedAt: new Date(), notes: parsed.data.notes ?? null, idempotencyKey: parsed.data.idempotencyKey, lines: { create: lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitCostCents: line.unitCostCents, taxRate: line.taxRate, totalCents: line.totalCents })) }, payable: parsed.data.paymentMethod === "CREDIT" ? { create: { supplierId: parsed.data.supplierId, originalCents: totalCents, dueDate: parsed.data.dueDate ?? new Date(Date.now() + 30 * 86400000) } } : undefined }, include: { lines: true, payable: true } });
       await ensureAccountingPeriod(tx, companyContext(req), purchase.purchasedAt);
       await postPurchaseAccounting(tx, companyContext(req), purchase);
       await audit("PURCHASE_CONFIRMED", actorId, "PURCHASE", purchase.id, { totalCents }, tx);

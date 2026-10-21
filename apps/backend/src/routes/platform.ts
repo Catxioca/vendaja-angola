@@ -152,3 +152,55 @@ platformRouter.post("/reprints", async (req, res) => {
   await auditInContext("DOCUMENT_REPRINTED", context(req as AuthRequest), actor(req as AuthRequest), parsed.data.documentType, parsed.data.documentId, { reason: parsed.data.reason });
   res.status(201).json(log);
 });
+
+// Logs and Diagnostics for Technical Admin Dashboard
+platformRouter.get("/logs", async (req, res) => {
+  if (!requireAdmin(req as AuthRequest, res)) return;
+  const { logger } = await import("../services/enterprise/logger.service.js");
+  const moduleParam = typeof req.query.module === "string" ? req.query.module : undefined;
+  const severityParam = typeof req.query.severity === "string" ? req.query.severity as any : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 100;
+  const logs = logger.queryLogs({
+    module: moduleParam,
+    severity: severityParam,
+    limit,
+    companyId: context(req as AuthRequest).companyId,
+  });
+  res.json({ total: logs.length, logs });
+});
+
+// System Notifications
+platformRouter.get("/notifications", async (req, res) => {
+  const { EnterpriseNotificationService } = await import("../services/enterprise/notification.service.js");
+  const notifications = EnterpriseNotificationService.getNotifications(
+    context(req as AuthRequest).companyId,
+    actor(req as AuthRequest)
+  );
+  res.json(notifications);
+});
+
+platformRouter.post("/notifications/:id/read", async (req, res) => {
+  const { EnterpriseNotificationService } = await import("../services/enterprise/notification.service.js");
+  const success = EnterpriseNotificationService.markAsRead(String(req.params.id));
+  res.json({ success });
+});
+
+// Enterprise Audit Logs
+platformRouter.get("/audit-logs", async (req, res) => {
+  if (!requireAdmin(req as AuthRequest, res)) return;
+  const { EnterpriseAuditService } = await import("../services/enterprise/audit.service.js");
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+  const skip = req.query.skip ? Number(req.query.skip) : 0;
+  const entity = typeof req.query.entity === "string" ? req.query.entity : undefined;
+  const action = typeof req.query.action === "string" ? req.query.action : undefined;
+  const result = await EnterpriseAuditService.query({
+    companyId: context(req as AuthRequest).companyId,
+    branchId: context(req as AuthRequest).branchId ?? undefined,
+    entity,
+    action,
+    limit,
+    skip,
+  });
+  res.json(result);
+});
+

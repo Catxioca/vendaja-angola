@@ -37,15 +37,17 @@ function filters(req: { query: Record<string, unknown> }) {
 
 expenseRouter.get("/categories", (_req, res) => res.json(expenseCategories));
 expenseRouter.get("/", async (req, res) => {
+  const tenant = companyContext(req);
   const expenses = await prisma.expense.findMany({
-    where: { ...filters(req), ...(req.query.status === "CANCELLED" ? { status: "CANCELLED" } : { status: "ACTIVE" }) },
+    where: { companyId: tenant.companyId, branchId: tenant.branchId, ...filters(req), ...(req.query.status === "CANCELLED" ? { status: "CANCELLED" } : { status: "ACTIVE" }) },
     include: { supplier: true, operator: { select: { id: true, displayName: true, username: true } } },
     orderBy: { expenseDate: "desc" }, take: 500,
   });
   res.json(expenses);
 });
 expenseRouter.get("/:id", async (req, res) => {
-  const expense = await prisma.expense.findUnique({ where: { id: String(req.params.id) }, include: { supplier: true, operator: { select: { id: true, displayName: true, username: true } } } });
+  const tenant = companyContext(req);
+  const expense = await prisma.expense.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId }, include: { supplier: true, operator: { select: { id: true, displayName: true, username: true } } } });
   if (!expense) { res.status(404).json({ error: "expense_not_found" }); return; }
   res.json(expense);
 });
@@ -53,11 +55,11 @@ expenseRouter.post("/", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), a
   const parsed = expenseInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_expense", details: parsed.error.flatten() }); return; }
   try {
-    const supplier = parsed.data.supplierId ? await prisma.supplier.findUnique({ where: { id: parsed.data.supplierId } }) : null;
+    const tenant = companyContext(req);
+    const supplier = parsed.data.supplierId ? await prisma.supplier.findFirst({ where: { id: parsed.data.supplierId, companyId: tenant.companyId, branchId: tenant.branchId } }) : null;
     if (parsed.data.supplierId && !supplier) { res.status(404).json({ error: "supplier_not_found" }); return; }
     const expense = await prisma.$transaction(async (tx) => {
-      const created = await tx.expense.create({ data: { ...parsed.data, operatorId: (req as AuthRequest).user?.id ?? null } });
-      const tenant = companyContext(req);
+      const created = await tx.expense.create({ data: { ...parsed.data, companyId: tenant.companyId, branchId: tenant.branchId, operatorId: (req as AuthRequest).user?.id ?? null } });
       await ensureAccountingPeriod(tx, tenant, created.expenseDate);
       await postExpenseAccounting(tx, tenant, created);
       return created;
@@ -73,11 +75,14 @@ expenseRouter.patch("/:id", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"
   const parsed = expenseInput.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_expense", details: parsed.error.flatten() }); return; }
   try {
+    const tenant = companyContext(req);
     if (parsed.data.supplierId) {
-      const supplier = await prisma.supplier.findUnique({ where: { id: parsed.data.supplierId } });
+      const supplier = await prisma.supplier.findFirst({ where: { id: parsed.data.supplierId, companyId: tenant.companyId, branchId: tenant.branchId } });
       if (!supplier) { res.status(404).json({ error: "supplier_not_found" }); return; }
     }
-    const expense = await prisma.expense.update({ where: { id: String(req.params.id) }, data: parsed.data });
+    const current = await prisma.expense.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId } });
+    if (!current) { res.status(404).json({ error: "expense_not_found" }); return; }
+    const expense = await prisma.expense.update({ where: { id: current.id }, data: parsed.data });
     await audit("EXPENSE_UPDATED", (req as AuthRequest).user?.id, "EXPENSE", expense.id);
     res.json(expense);
   } catch (error) {
@@ -87,7 +92,10 @@ expenseRouter.patch("/:id", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"
 });
 expenseRouter.post("/:id/cancel", requireRole("ADMIN", "ROLE_ADMIN", "ROLE_ACCOUNTANT"), async (req, res) => {
   try {
-    const expense = await prisma.expense.update({ where: { id: String(req.params.id) }, data: { status: "CANCELLED" } });
+    const tenant = companyContext(req);
+    const current = await prisma.expense.findFirst({ where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId } });
+    if (!current) { res.status(404).json({ error: "expense_not_found" }); return; }
+    const expense = await prisma.expense.update({ where: { id: current.id }, data: { status: "CANCELLED" } });
     await audit("EXPENSE_CANCELLED", (req as AuthRequest).user?.id, "EXPENSE", expense.id);
     res.json(expense);
   } catch (error) {

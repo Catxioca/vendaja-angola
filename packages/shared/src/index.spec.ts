@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createBrowserPosStorage, SyncEngine, type Sale, type SyncMutation } from "./index.js";
+import { createBrowserPosStorage, deleteBrowserPosStorage, POS_DB_VERSION, SyncEngine, type Sale, type SyncMutation } from "./index.js";
 
 const sale: Sale = {
   id: "sale-1", number: "local-1", lines: [], subtotalCents: 0, taxCents: 0, totalCents: 0,
@@ -8,11 +8,28 @@ const sale: Sale = {
 };
 const mutation: SyncMutation = { id: "mutation-1", operation: "CREATE", entity: "SALE", payload: sale, occurredAt: sale.createdAt };
 
+test("exports POS_DB_VERSION equal to 2 for updated IndexedDB schema", () => {
+  assert.equal(POS_DB_VERSION, 2);
+});
+
 test("persists a sale and its outbox mutation together", async () => {
   const storage = createBrowserPosStorage(`test-${crypto.randomUUID()}`);
   await storage.saveSaleAndEnqueue(sale, mutation);
   assert.deepEqual(await storage.getSales(), [sale]);
   assert.deepEqual(await storage.getOutbox(), [mutation]);
+});
+
+test("clears storage and deletes database without throwing", async () => {
+  const dbName = `test-${crypto.randomUUID()}`;
+  const storage = createBrowserPosStorage(dbName);
+  await storage.saveSaleAndEnqueue(sale, mutation);
+  assert.equal((await storage.getSales()).length, 1);
+  if (storage.clear) {
+    await storage.clear();
+    assert.equal((await storage.getSales()).length, 0);
+    assert.equal((await storage.getOutbox()).length, 0);
+  }
+  await deleteBrowserPosStorage(dbName);
 });
 
 test("sends bearer credentials and only acknowledges sent mutations", async () => {

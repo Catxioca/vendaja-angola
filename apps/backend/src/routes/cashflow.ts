@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth, requireCompanyContext, requireModuleAccess } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireModuleAccess } from "../middleware/auth.js";
 import { cashflowReport, type CashflowFilters } from "../services/cashflow-service.js";
 
 export const cashflowRouter = Router();
@@ -13,6 +13,7 @@ cashflowRouter.get("/", async (req, res) => {
   };
   const direction = req.query.direction === "IN" || req.query.direction === "OUT" ? req.query.direction : undefined;
   const filters: CashflowFilters = {
+    ...companyContext(req),
     from: date(req.query.from),
     to: date(req.query.to, true),
     direction,

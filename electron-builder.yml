@@ -27,6 +27,7 @@ win:
   signAndEditExecutable: false
 nsis:
   perMachine: true
+  deleteAppDataOnUninstall: false
 linux:
   target: AppImage
 mac:

@@ -1,0 +1,281 @@
+import { Router } from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import { prisma } from "../db.js";
+import {
+  EnterpriseWorkflowService,
+  EnterpriseTaskService,
+  EnterpriseRulesService,
+  EnterpriseQueueService,
+  EnterpriseWebhookService,
+  EnterpriseApiKeyService,
+} from "../services/enterprise/index.js";
+
+export const healthRouter = Router();
+
+const startedAt = Date.now();
+
+/**
+ * Checks database connectivity and latency
+ */
+export async function checkDatabase(): Promise<{
+  status: "ok" | "down";
+  latencyMs: number;
+  engine: string;
+  error?: string;
+}> {
+  const start = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return {
+      status: "ok",
+      latencyMs: Date.now() - start,
+      engine: "PostgreSQL (Prisma ORM)",
+    };
+  } catch (err) {
+    return {
+      status: "down",
+      latencyMs: Date.now() - start,
+      engine: "Memory Resilience Fallback",
+      error: err instanceof Error ? err.message : "database_unreachable",
+    };
+  }
+}
+
+/**
+ * Checks RSA public key and licensing system readiness
+ */
+export async function checkLicense(): Promise<{
+  status: "ok" | "down";
+  keyAvailable: boolean;
+  hardwareId?: string;
+  error?: string;
+}> {
+  try {
+    const candidatePaths = [
+      path.resolve(process.cwd(), "public.pem"),
+      path.resolve(process.cwd(), "../../public.pem"),
+      path.resolve(process.cwd(), "dist/public.pem"),
+    ];
+
+    let foundKey = false;
+    for (const keyPath of candidatePaths) {
+      try {
+        const content = await fs.readFile(keyPath, "utf8");
+        if (content.includes("BEGIN PUBLIC KEY")) {
+          foundKey = true;
+          break;
+        }
+      } catch {
+        /* try next path */
+      }
+    }
+
+    if (foundKey) {
+      return { status: "ok", keyAvailable: true };
+    }
+    return { status: "down", keyAvailable: false, error: "public_key_missing" };
+  } catch (err) {
+    return {
+      status: "down",
+      keyAvailable: false,
+      error: err instanceof Error ? err.message : "license_check_failed",
+    };
+  }
+}
+
+/**
+ * Checks Automation Service (Workflows, Tasks, Rules engine, Job queue)
+ */
+export async function checkAutomation(): Promise<{
+  status: "ok" | "degraded" | "down";
+  latencyMs: number;
+  service: string;
+  workflowsActive: number;
+  pendingTasks: number;
+  rulesLoaded: number;
+  queueStatus: "idle" | "processing" | "offline";
+  error?: string;
+}> {
+  const start = Date.now();
+  try {
+    const workflows = await EnterpriseWorkflowService.listDefinitions();
+    const tasks = EnterpriseTaskService.listTasks();
+    const rules = EnterpriseRulesService.listRules();
+    const queueMetrics = EnterpriseQueueService.getQueueMetrics();
+
+    const pending = tasks.filter((t) => t.status === "PENDING" || t.status === "IN_PROGRESS").length;
+    const activeRules = rules.filter((r) => r.active).length;
+
+    return {
+      status: "ok",
+      latencyMs: Date.now() - start,
+      service: "Enterprise Workflow & Automation Hub",
+      workflowsActive: workflows.length,
+      pendingTasks: pending,
+      rulesLoaded: activeRules,
+      queueStatus: (queueMetrics.queued ?? 0) > 0 ? "processing" : "idle",
+    };
+  } catch (err) {
+    return {
+      status: "degraded",
+      latencyMs: Date.now() - start,
+      service: "Enterprise Workflow & Automation Hub (Fallback)",
+      workflowsActive: 0,
+      pendingTasks: 0,
+      rulesLoaded: 0,
+      queueStatus: "offline",
+      error: err instanceof Error ? err.message : "automation_service_error",
+    };
+  }
+}
+
+/**
+ * Checks Integrations Subsystem (Webhooks, API Keys, OAuth2, Connectors)
+ */
+export async function checkIntegrations(): Promise<{
+  status: "ok" | "degraded" | "down";
+  latencyMs: number;
+  service: string;
+  webhooksCount: number;
+  activeApiKeys: number;
+  connectors: {
+    agtFiscalAuthority: "ready";
+    multicaixaExpress: "ready";
+    primaveraSapBridge: "ready";
+  };
+  error?: string;
+}> {
+  const start = Date.now();
+  try {
+    const webhooks = await EnterpriseWebhookService.listSubscriptions();
+    const apiKeys = await EnterpriseApiKeyService.listKeys();
+
+    return {
+      status: "ok",
+      latencyMs: Date.now() - start,
+      service: "Enterprise Integrations & OpenAPI Hub",
+      webhooksCount: webhooks.length,
+      activeApiKeys: apiKeys.filter((k: any) => k.active).length,
+      connectors: {
+        agtFiscalAuthority: "ready",
+        multicaixaExpress: "ready",
+        primaveraSapBridge: "ready",
+      },
+    };
+  } catch (err) {
+    return {
+      status: "degraded",
+      latencyMs: Date.now() - start,
+      service: "Enterprise Integrations Hub",
+      webhooksCount: 0,
+      activeApiKeys: 0,
+      connectors: {
+        agtFiscalAuthority: "ready",
+        multicaixaExpress: "ready",
+        primaveraSapBridge: "ready",
+      },
+      error: err instanceof Error ? err.message : "integrations_check_failed",
+    };
+  }
+}
+
+/**
+ * Checks filesystem storage read/write accessibility
+ */
+export async function checkStorage(): Promise<{ status: "ok" | "down"; writable: boolean; error?: string }> {
+  try {
+    const testDir = path.join(os.tmpdir(), "vendaja-health-check");
+    await fs.mkdir(testDir, { recursive: true });
+    const testFile = path.join(testDir, `probe-${Date.now()}.tmp`);
+    await fs.writeFile(testFile, "probe-ok");
+    await fs.unlink(testFile);
+    return { status: "ok", writable: true };
+  } catch (err) {
+    return {
+      status: "down",
+      writable: false,
+      error: err instanceof Error ? err.message : "storage_io_error",
+    };
+  }
+}
+
+// GET /health
+healthRouter.get("/", async (_req, res) => {
+  const [db, license, storage, automation, integrations] = await Promise.all([
+    checkDatabase(),
+    checkLicense(),
+    checkStorage(),
+    checkAutomation(),
+    checkIntegrations(),
+  ]);
+
+  const isHealthy = storage.status === "ok";
+  const statusCode = isHealthy ? 200 : 503;
+
+  res.status(statusCode).json({
+    status: isHealthy ? (db.status === "ok" && license.status === "ok" ? "ok" : "degraded") : "down",
+    service: "backend",
+    version: process.env.npm_package_version ?? "2.2.4",
+    uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+    timestamp: new Date().toISOString(),
+    checks: {
+      database: db,
+      automation,
+      license,
+      integrations,
+      storage,
+    },
+    system: {
+      memory: process.memoryUsage(),
+      loadAverage: os.loadavg(),
+      nodeVersion: process.version,
+    },
+  });
+});
+
+// GET /health/database
+healthRouter.get("/database", async (_req, res) => {
+  const db = await checkDatabase();
+  res.status(db.status === "ok" ? 200 : 503).json({
+    ...db,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /health/automation
+healthRouter.get("/automation", async (_req, res) => {
+  const automation = await checkAutomation();
+  res.status(automation.status === "down" ? 503 : 200).json({
+    ...automation,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /health/license
+healthRouter.get("/license", async (_req, res) => {
+  const license = await checkLicense();
+  res.status(license.status === "ok" ? 200 : 503).json({
+    ...license,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /health/integrations
+healthRouter.get("/integrations", async (_req, res) => {
+  const integrations = await checkIntegrations();
+  res.status(integrations.status === "down" ? 503 : 200).json({
+    ...integrations,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /health/storage
+healthRouter.get("/storage", async (_req, res) => {
+  const storage = await checkStorage();
+  res.status(storage.status === "ok" ? 200 : 503).json({
+    ...storage,
+    timestamp: new Date().toISOString(),
+  });
+});

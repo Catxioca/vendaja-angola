@@ -29,12 +29,17 @@ export function summarizeCashflow(movements: CashflowMovement[]) {
   return { entriesCents: entries, exitsCents: exits, netCents: entries - exits, byDay: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)), byMethod: [...byMethod.entries()].map(([method, amountCents]) => ({ method, amountCents })), byOrigin: [...byOrigin.entries()].map(([origin, amountCents]) => ({ origin, amountCents })) };
 }
 
-export async function cashflowReport(filters: CashflowFilters = {}) {
+/**
+ * Cash-flow data is tenant-scoped by design.  Do not add an empty default
+ * here: doing so would make it possible for a future internal caller to
+ * accidentally query every company.
+ */
+export async function cashflowReport(filters: CashflowFilters) {
   const [sales, receivables, payables, expenses] = await Promise.all([
-    prisma.sale.findMany({ where: { createdAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) }, status: { not: "CANCELLED" }, fiscalType: { not: "PROFORMA" }, paymentMethod: { not: "CREDIT" } }, select: { id: true, number: true, createdAt: true, cashCents: true, cardCents: true, transferCents: true, operatorId: true } }),
-    prisma.receivablePayment.findMany({ where: { receivedAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }, select: { id: true, receivedAt: true, amountCents: true, paymentMethod: true, idempotencyKey: true, operatorId: true, reference: true, note: true } }),
-    prisma.payablePayment.findMany({ where: { paidAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }, select: { id: true, paidAt: true, amountCents: true, paymentMethod: true, reference: true, note: true, operatorId: true, payable: { select: { purchase: { select: { number: true } } } } } }),
-    prisma.expense.findMany({ where: { expenseDate: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) }, status: "ACTIVE", paymentMethod: { not: "CREDIT" } }, select: { id: true, expenseDate: true, amountCents: true, paymentMethod: true, documentNumber: true, description: true, operatorId: true, notes: true } }),
+    prisma.sale.findMany({ where: { companyId: filters.companyId, branchId: filters.branchId, createdAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) }, status: { not: "CANCELLED" }, fiscalType: { not: "PROFORMA" }, paymentMethod: { not: "CREDIT" } }, select: { id: true, number: true, createdAt: true, cashCents: true, cardCents: true, transferCents: true, operatorId: true } }),
+    prisma.receivablePayment.findMany({ where: { customer: { companyId: filters.companyId, branchId: filters.branchId }, receivedAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }, select: { id: true, receivedAt: true, amountCents: true, paymentMethod: true, idempotencyKey: true, operatorId: true, reference: true, note: true } }),
+    prisma.payablePayment.findMany({ where: { payable: { purchase: { companyId: filters.companyId, branchId: filters.branchId } }, paidAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }, select: { id: true, paidAt: true, amountCents: true, paymentMethod: true, reference: true, note: true, operatorId: true, payable: { select: { purchase: { select: { number: true } } } } } }),
+    prisma.expense.findMany({ where: { companyId: filters.companyId, branchId: filters.branchId, expenseDate: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) }, status: "ACTIVE", paymentMethod: { not: "CREDIT" } }, select: { id: true, expenseDate: true, amountCents: true, paymentMethod: true, documentNumber: true, description: true, operatorId: true, notes: true } }),
   ]);
   const movements: CashflowMovement[] = [];
   for (const sale of sales) {

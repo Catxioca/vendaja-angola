@@ -140,6 +140,7 @@ app.use("/api/v1/bi", businessIntelligenceRouter);
 app.use("/api/v1/saas", cloudSaasRouter);
 app.use("/api/v1/portals", portalsRouter);
 app.use("/api/v1/ai", aiCopilotRouter);
+app.use("/api/ai", aiCopilotRouter);
 app.use("/api/v1/biometrics", biometricsAccessRouter);
 app.use("/api/v1/access-control", biometricsAccessRouter);
 app.use("/api/v1", apiV1PublicRouter);

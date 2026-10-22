@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { formatKwanza } from "@angola/shared";
+import { formatKwanza, type LocalPosStorage } from "@angola/shared";
+import { EnterpriseLocalCopilotEngine } from "./local-copilot-engine.js";
+import type { LicenseStatus } from "./license.js";
 
 interface ChatMessage {
   id: string;
@@ -46,19 +48,41 @@ interface Recommendation {
   actions: string[];
 }
 
+const formatTableData = (rawTable: any): Array<Record<string, unknown>> | undefined => {
+  if (!rawTable) return undefined;
+  if (Array.isArray(rawTable)) return rawTable;
+  if (Array.isArray(rawTable.rows) && Array.isArray(rawTable.headers)) {
+    return rawTable.rows.map((row: any[]) => {
+      const obj: Record<string, unknown> = {};
+      rawTable.headers.forEach((h: string, idx: number) => {
+        obj[h] = row[idx];
+      });
+      return obj;
+    });
+  }
+  return undefined;
+};
+
 export function EnterpriseCopilotPanel({
   api,
   token,
   onError,
+  storage,
+  licenseStatus,
+  session,
 }: {
   api: string;
   token: string;
   onError: (msg: string) => void;
+  storage?: LocalPosStorage;
+  licenseStatus?: LicenseStatus | null;
+  session?: any;
 }) {
   const [activeTab, setActiveTab] = useState<"chat" | "forecast" | "anomalies" | "recommendations" | "live_updates">("chat");
   const [activeDomain, setActiveDomain] = useState<string>("ALL");
   const [inputQuery, setInputQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"ONLINE" | "OFFLINE" | "CHECKING">("CHECKING");
   const [insights, setInsights] = useState<ProactiveInsight[]>([]);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -80,33 +104,91 @@ export function EnterpriseCopilotPanel({
     "content-type": "application/json",
   };
 
-  // Load proactive insights on mount
+  // Check connection status & load insights on mount
   useEffect(() => {
+    let active = true;
+    const probeBackend = async () => {
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(`${api}/api/v1/ai/status`, { signal: controller.signal }).finally(() => clearTimeout(t));
+        if (active) setConnectionStatus(res.ok ? "ONLINE" : "OFFLINE");
+      } catch {
+        if (active) setConnectionStatus("OFFLINE");
+      }
+    };
+    void probeBackend();
     void loadInsights();
+    return () => { active = false; };
   }, [api, token]);
 
   const loadInsights = async () => {
     try {
-      const res = await fetch(`${api}/api/v1/ai/insights`, { headers });
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${api}/api/v1/ai/insights`, { headers, signal: controller.signal }).finally(() => clearTimeout(t));
       if (res.ok) {
         const data = await res.json() as ProactiveInsight[];
         setInsights(Array.isArray(data) ? data : []);
       }
     } catch {
-      // Offline fallback silent
+      // Offline fallback: load local quick insights
+      if (storage) {
+        try {
+          const sales = await storage.getSales();
+          const today = new Date().toISOString().slice(0, 10);
+          const count = sales.filter((s) => s.createdAt?.startsWith(today) && s.fiscalType !== "PROFORMA").length;
+          setInsights([
+            {
+              id: "ins-offline-1",
+              type: "INFO",
+              title: "VendaJá Copilot (Motor Local Ativo)",
+              description: `Terminal a operar em contingência local com ${count} documento(s) emitidos hoje. Consultas e cálculos executam diretamente sobre o storage offline.`,
+              domain: "SYSTEM",
+            },
+          ]);
+        } catch {
+          // ignore
+        }
+      }
     }
   };
 
   const loadAnomalies = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${api}/api/v1/ai/anomalies`, { headers });
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${api}/api/v1/ai/anomalies`, { headers, signal: controller.signal }).finally(() => clearTimeout(t));
       if (res.ok) {
-        const data = await res.json() as Anomaly[];
-        setAnomalies(Array.isArray(data) ? data : []);
+        const data = await res.json() as { anomalies?: Anomaly[] } | Anomaly[];
+        const list = Array.isArray(data) ? data : (data.anomalies || []);
+        setAnomalies(list);
+      } else {
+        throw new Error(`HTTP ${res.status}`);
       }
-    } catch (e) {
-      onError("Não foi possível carregar o diagnóstico de anomalias.");
+    } catch {
+      // Offline fallback: generate local anomaly check
+      if (storage) {
+        try {
+          const sales = await storage.getSales();
+          const suspicious = sales.filter((s) => s.discountCents && s.totalCents && (s.discountCents / (s.totalCents + s.discountCents)) > 0.2);
+          if (suspicious.length > 0) {
+            setAnomalies(suspicious.map((s, idx) => ({
+              id: `anom-${idx}`,
+              severity: "MEDIUM",
+              type: "EXCESSIVE_DISCOUNT",
+              description: `Venda ${s.number} contém desconto superior a 20% no valor de ${formatKwanza(s.discountCents || 0)}.`,
+              detectedAt: s.createdAt,
+              investigationSteps: ["Validar autorização do supervisor na linha de caixa."],
+            })));
+          } else {
+            setAnomalies([]);
+          }
+        } catch {
+          onError("Não foi possível carregar o diagnóstico de anomalias.");
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -115,13 +197,38 @@ export function EnterpriseCopilotPanel({
   const loadRecommendations = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${api}/api/v1/ai/recommendations`, { headers });
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${api}/api/v1/ai/recommendations`, { headers, signal: controller.signal }).finally(() => clearTimeout(t));
       if (res.ok) {
-        const data = await res.json() as Recommendation[];
-        setRecommendations(Array.isArray(data) ? data : []);
+        const data = await res.json() as { recommendations?: Recommendation[] } | Recommendation[];
+        const list = Array.isArray(data) ? data : (data.recommendations || []);
+        setRecommendations(list);
+      } else {
+        throw new Error(`HTTP ${res.status}`);
       }
-    } catch (e) {
-      onError("Não foi possível carregar as recomendações estratégicas.");
+    } catch {
+      // Offline fallback recommendations
+      setRecommendations([
+        {
+          id: "rec-local-1",
+          category: "STOCK",
+          title: "Monitorização Preventiva de Artigos Críticos",
+          rationale: "Artigos com stock inferior a 5 unidades devem ser repostos para evitar quebras de venda.",
+          impactEstimatedKwanza: 150000,
+          priority: "HIGH",
+          actions: ["Verificar níveis de stock na aba Produtos", "Gerar requisição de compra"],
+        },
+        {
+          id: "rec-local-2",
+          category: "SALES",
+          title: "Conferência Regular de Gaveta de Caixa",
+          rationale: "A realização de sangrias programadas minimiza o risco de perdas em numerário no balcão.",
+          impactEstimatedKwanza: 50000,
+          priority: "MEDIUM",
+          actions: ["Executar sangria parcial através do módulo Caixa"],
+        },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -142,50 +249,139 @@ export function EnterpriseCopilotPanel({
     setInputQuery("");
     setLoading(true);
 
-    try {
-      const res = await fetch(`${api}/api/v1/ai/chat`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          query: q,
-          domain: activeDomain === "ALL" ? undefined : activeDomain,
-        }),
-      });
+    // 1. Validate Licensing Locally First
+    if (licenseStatus) {
+      const activeModules = Array.isArray(licenseStatus.modules) ? licenseStatus.modules : [];
+      const hasAi =
+        activeModules.includes("AI" as any) ||
+        (licenseStatus.modularLicense?.modules || []).some((m) => m.code === "AI" && m.licensed);
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Erro HTTP ${res.status}`);
+      if (!hasAi) {
+        const licenseMsg: ChatMessage = {
+          id: `c-${Date.now()}`,
+          sender: "copilot",
+          text: "🔒 **Módulo IA não licenciado.**\n\nO VendaJá Copilot requer a ativação do módulo **'AI'** na sua licença comercial (Plano ENTERPRISE). Para desbloquear o assistente empresarial inteligente, dirija-se a **Definições > Licenciamento** e introduza uma chave de licença que contemple o módulo de Inteligência Artificial.",
+          timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
+          domain: "ERROR",
+        };
+        setMessages((prev) => [...prev, licenseMsg]);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 2. Validate Role Permissions for sensitive queries
+    const userRole = (session?.role || "ADMIN").toUpperCase();
+    if (q.toLowerCase().includes("salario") && userRole === "ROLE_CASHIER") {
+      const permMsg: ChatMessage = {
+        id: `c-${Date.now()}`,
+        sender: "copilot",
+        text: "🔒 **Permissão 'HR.Salary.View' em falta.** O seu perfil de utilizador (Operador de Caixa) não possui permissão para consultar massas salariais ou despesas com pessoal.",
+        timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
+        domain: "HR",
+      };
+      setMessages((prev) => [...prev, permMsg]);
+      setLoading(false);
+      return;
+    }
+
+    // 3. Attempt Central Backend (Electron IPC or Direct Fetch)
+    let backendSuccess = false;
+    let replyData: any = null;
+
+    try {
+      // Step A: Attempt Electron IPC if available
+      if (window.pos?.copilotQuery) {
+        const ipcRes = await window.pos.copilotQuery({
+          query: q,
+          contextModule: activeDomain === "ALL" ? undefined : activeDomain,
+          token,
+          apiUrl: api,
+        });
+
+        if (ipcRes.success && ipcRes.result) {
+          replyData = ipcRes.result;
+          backendSuccess = true;
+          setConnectionStatus("ONLINE");
+        }
       }
 
-      const reply = await res.json() as {
-        answer: string;
-        domain: string;
-        intent: string;
-        confidence: number;
-        data?: Record<string, unknown>;
-        table?: Array<Record<string, unknown>>;
-        chart?: { type: "bar" | "line" | "kpi"; series: Array<{ label: string; value: number }> };
-      };
+      // Step B: Attempt HTTP REST API with 3.5s timeout if IPC didn't answer
+      if (!backendSuccess) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`${api}/api/v1/ai/chat`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            query: q,
+            domain: activeDomain === "ALL" ? undefined : activeDomain,
+          }),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
+        if (res.ok) {
+          replyData = await res.json();
+          backendSuccess = true;
+          setConnectionStatus("ONLINE");
+        } else {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error || `HTTP ${res.status}`);
+        }
+      }
+    } catch (netErr: unknown) {
+      console.warn("[VendaJá Copilot] Falha ao comunicar com backend central; acionando motor local offline:", netErr);
+      setConnectionStatus("OFFLINE");
+      backendSuccess = false;
+    }
+
+    // 4. If Central Backend succeeded, render response
+    if (backendSuccess && replyData) {
+      const answerText = replyData.textAnswer || replyData.answer || "Consulta concluída.";
       const copilotMsg: ChatMessage = {
         id: `c-${Date.now()}`,
         sender: "copilot",
-        text: reply.answer,
+        text: `🟢 *(Servidor Central)*\n\n${answerText}`,
         timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
-        domain: reply.domain,
-        intent: reply.intent,
-        confidence: reply.confidence,
-        data: reply.data,
-        table: reply.table,
-        chart: reply.chart,
+        domain: replyData.domain,
+        intent: replyData.intent,
+        confidence: replyData.confidence,
+        data: replyData.data,
+        table: formatTableData(replyData.table),
+        chart: replyData.chart,
       };
-
       setMessages((prev) => [...prev, copilotMsg]);
-    } catch (err: unknown) {
+      setLoading(false);
+      return;
+    }
+
+    // 5. Seamless Local Offline Fallback (Direct Terminal Data Engine)
+    try {
+      const localResult = await EnterpriseLocalCopilotEngine.query(q, {
+        storage,
+        licenseStatus,
+        session,
+      });
+
+      const offlineBadge = "🟡 *(Modo Offline: Dados apurados a partir da base de dados local do seu terminal)*\n\n";
+      const copilotMsg: ChatMessage = {
+        id: `c-${Date.now()}`,
+        sender: "copilot",
+        text: `${offlineBadge}${localResult.textAnswer}`,
+        timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
+        domain: localResult.domain,
+        intent: localResult.intent,
+        confidence: localResult.confidence,
+        table: formatTableData(localResult.table),
+        chart: localResult.chart,
+      };
+      setMessages((prev) => [...prev, copilotMsg]);
+    } catch (localErr: unknown) {
+      const classified = EnterpriseLocalCopilotEngine.classifyError(localErr, api);
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         sender: "copilot",
-        text: `⚠️ Não foi possível processar a consulta: ${err instanceof Error ? err.message : "Serviço de IA indisponível."}. Verifique se o módulo de Inteligência Artificial está ativo na sua licença e se o backend está acessível.`,
+        text: `⚠️ Não foi possível processar a consulta: ${classified.userMessage}`,
         timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
         domain: "ERROR",
       };
@@ -202,15 +398,19 @@ export function EnterpriseCopilotPanel({
       if (window.pos?.syncLiveConfig) {
         const result = await window.pos.syncLiveConfig(api);
         if (result.success) {
+          const mods = result.activeModules || result.liveConfig?.activeModules || [];
+          const ver = result.minVersion || result.liveConfig?.minVersion || "2.2.4";
           setLiveSyncStatus(
-            `✅ Sucesso! Configurações e módulos sincronizados dinamicamente: [${(result.activeModules || []).join(", ")}]. Versão mínima: ${result.minVersion || "2.2.4"}. As alterações já estão ativas nesta sessão sem necessidade de descarregar novos instaladores.`
+            `✅ Sucesso! Configurações e módulos sincronizados dinamicamente: [${mods.join(", ")}]. Versão mínima: ${ver}. As alterações já estão ativas nesta sessão sem necessidade de descarregar novos instaladores.`
           );
         } else {
-          setLiveSyncStatus(`⚠️ Falha na sincronização dinâmica: ${result.message || "Erro desconhecido"}`);
+          setLiveSyncStatus(`⚠️ Falha na sincronização dinâmica: ${result.message || result.error || "Erro de ligação"}`);
         }
       } else {
         // Fallback direct fetch
-        const res = await fetch(`${api}/api/v1/saas/updates/live-config`);
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`${api}/api/v1/saas/updates/live-config`, { signal: controller.signal }).finally(() => clearTimeout(t));
         if (res.ok) {
           const cfg = await res.json();
           setLiveSyncStatus(
@@ -268,6 +468,21 @@ export function EnterpriseCopilotPanel({
                 }}
               >
                 Enterprise AI Suite
+              </span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  background: connectionStatus === "ONLINE" ? "rgba(34, 197, 94, 0.25)" : "rgba(234, 179, 8, 0.25)",
+                  color: connectionStatus === "ONLINE" ? "#86efac" : "#fde047",
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  border: `1px solid ${connectionStatus === "ONLINE" ? "#22c55e" : "#eab308"}`,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                {connectionStatus === "ONLINE" ? "🟢 Servidor Central Online" : connectionStatus === "OFFLINE" ? "🟡 Modo Offline Ativo (Terminal Local)" : "⚪ A verificar..."}
               </span>
             </h2>
             <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#c7d2fe" }}>

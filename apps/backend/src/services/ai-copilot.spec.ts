@@ -226,3 +226,45 @@ test("Live Hot-Sync: EnterpriseCloudUpdateService provides dynamic live config w
   assert.equal(config.hotReloadAllowed, true, "Hot-reload deve estar habilitado para evitar reinstaladores");
   assert.ok(config.syncTimestamp);
 });
+
+test("VendaJá Copilot: Mandatory Business Queries return non-empty answers and valid metrics", async () => {
+  const companyId = "test-comp-mandatory";
+  const userId = "admin-mandatory";
+
+  // Mock Rbac to grant full permissions
+  const originalHasPermission = EnterpriseRbacService.hasPermission;
+  EnterpriseRbacService.hasPermission = async () => true;
+
+  try {
+    // 1. Quanto vendi hoje?
+    const q1 = await EnterpriseAiCopilotService.query({ query: "Quanto vendi hoje?", companyId, userId });
+    assert.equal(q1.intent, "SALES_TODAY");
+    assert.equal(q1.domain, "SALES");
+    assert.equal(q1.authorized, true);
+    assert.ok(q1.textAnswer.length > 0);
+    assert.ok(q1.metrics.length >= 2);
+
+    // 2. Qual o saldo atual de caixa?
+    const q2 = await EnterpriseAiCopilotService.query({ query: "Qual o saldo atual de caixa?", companyId, userId });
+    assert.equal(q2.intent, "FINANCE_CASH_BALANCE");
+    assert.equal(q2.domain, "FINANCE");
+    assert.equal(q2.authorized, true);
+    assert.ok(q2.textAnswer.length > 0);
+
+    // 3. Quais produtos estão com stock crítico?
+    const q3 = await EnterpriseAiCopilotService.query({ query: "Quais produtos estão com stock crítico?", companyId, userId });
+    assert.equal(q3.intent, "STOCK_CRITICAL");
+    assert.equal(q3.domain, "STOCK");
+    assert.equal(q3.authorized, true);
+    assert.ok(q3.textAnswer.length > 0);
+
+    // 4. Quais clientes estão em dívida?
+    const q4 = await EnterpriseAiCopilotService.query({ query: "Quais clientes estão em dívida?", companyId, userId });
+    assert.equal(q4.intent, "DEBTOR_CUSTOMERS");
+    assert.equal(q4.domain, "SALES");
+    assert.equal(q4.authorized, true);
+    assert.ok(q4.textAnswer.length > 0);
+  } finally {
+    EnterpriseRbacService.hasPermission = originalHasPermission;
+  }
+});

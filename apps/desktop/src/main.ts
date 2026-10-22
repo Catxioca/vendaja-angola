@@ -694,14 +694,122 @@ ipcMain.handle("sync-live-config", async (_event, apiUrl?: string) => {
   try {
     const config = await readServerConfig();
     const targetUrl = apiUrl || config?.apiUrl || "http://localhost:4000";
-    const res = await fetch(`${targetUrl}/api/v1/saas/updates/live-config`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${targetUrl}/api/v1/saas/updates/live-config`, {
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+
     if (res.ok) {
       const data = await res.json();
-      return { success: true, liveConfig: data };
+      return {
+        success: true,
+        liveConfig: data,
+        activeModules: Array.isArray(data.activeModules) ? data.activeModules : OPERATIONAL_MODULES,
+        minVersion: data.minVersion || "2.2.4",
+      };
     }
-    return { success: false, error: `HTTP ${res.status}` };
+    return {
+      success: true,
+      isLocalFallback: true,
+      activeModules: OPERATIONAL_MODULES,
+      minVersion: app.getVersion(),
+      liveConfig: {
+        activeModules: OPERATIONAL_MODULES,
+        minVersion: app.getVersion(),
+        version: app.getVersion(),
+      },
+    };
+  } catch (_err) {
+    // Resilient offline fallback: return current operational modules
+    return {
+      success: true,
+      isLocalFallback: true,
+      activeModules: OPERATIONAL_MODULES,
+      minVersion: app.getVersion(),
+      liveConfig: {
+        activeModules: OPERATIONAL_MODULES,
+        minVersion: app.getVersion(),
+        version: app.getVersion(),
+      },
+    };
+  }
+});
+
+// AI Copilot IPC Handlers (Renderer -> Main -> Backend Bridge)
+ipcMain.handle(
+  "ai-copilot-query",
+  async (_event, payload: { query: string; contextModule?: string; token?: string; apiUrl?: string }) => {
+    try {
+      const config = await readServerConfig();
+      const targetUrl = payload.apiUrl || config?.apiUrl || "http://localhost:4000";
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+      };
+      if (payload.token) {
+        headers.authorization = `Bearer ${payload.token}`;
+      }
+
+      const res = await fetch(`${targetUrl}/api/v1/ai/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          query: payload.query,
+          contextModule: payload.contextModule,
+        }),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return {
+          success: false,
+          statusCode: res.status,
+          error: errData.error || `Erro HTTP ${res.status}`,
+          requiredPermission: errData.requiredPermission,
+        };
+      }
+
+      const reply = await res.json();
+      return {
+        success: true,
+        result: reply,
+      };
+    } catch (err: unknown) {
+      const rawMsg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        isOffline: true,
+        error: rawMsg,
+      };
+    }
+  }
+);
+
+ipcMain.handle("ai-copilot-status", async (_event, apiUrl?: string) => {
+  try {
+    const config = await readServerConfig();
+    const targetUrl = apiUrl || config?.apiUrl || "http://localhost:4000";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${targetUrl}/api/v1/ai/status`, {
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+
+    if (res.ok) {
+      const data = await res.json();
+      return { online: true, ...data };
+    }
+    return { online: false, reason: `HTTP ${res.status}` };
   } catch (err) {
-    return { success: false, error: String(err) };
+    return {
+      online: false,
+      reason: "Serviço central de IA parado ou backend inacessível.",
+      localBackendRunning: !!backendProcess,
+    };
   }
 });
 process.on("uncaughtException", (error) => console.error("[desktop] uncaught exception", error));

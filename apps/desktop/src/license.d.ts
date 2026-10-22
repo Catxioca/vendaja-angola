@@ -146,6 +146,8 @@ declare global {
       testServerConnection?: (apiUrl: string) => Promise<any>;
       checkLiveUpdates?: (apiUrl?: string) => Promise<any>;
       syncLiveConfig?: (apiUrl?: string) => Promise<any>;
+      copilotQuery?: (payload: { query: string; contextModule?: string; token?: string; apiUrl?: string }) => Promise<{ success: boolean; result?: any; isOffline?: boolean; error?: string; statusCode?: number }>;
+      copilotStatus?: (apiUrl?: string) => Promise<{ online: boolean; reason?: string; service?: string; databaseConnected?: boolean }>;
     };
   }
 }

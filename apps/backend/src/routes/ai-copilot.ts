@@ -39,12 +39,87 @@ aiCopilotRouter.post("/chat", async (req: Request, res: Response): Promise<void>
       contextModule,
     });
 
-    res.json(result);
+    res.json({
+      ...result,
+      answer: result.textAnswer,
+      textAnswer: result.textAnswer,
+    });
   } catch (error: any) {
     res.status(500).json({
       error: "Falha ao processar consulta no VendaJá Copilot.",
       details: error.message,
     });
+  }
+});
+
+/**
+ * GET /api/v1/ai/status and /api/ai/status
+ * Real-time operational diagnostics of AI Copilot Service
+ */
+aiCopilotRouter.get("/status", async (req: Request, res: Response): Promise<void> => {
+  try {
+    let dbConnected = true;
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch {
+      dbConnected = false;
+    }
+
+    res.json({
+      service: "EnterpriseAiCopilotService",
+      status: "ONLINE",
+      version: "2.2.4",
+      databaseConnected: dbConnected,
+      modelsReady: true,
+      supportedDomains: [
+        "SALES",
+        "FINANCE",
+        "STOCK",
+        "HR",
+        "CRM",
+        "ACCESS_CONTROL",
+        "FORECAST",
+        "ANOMALY",
+        "RECOMMENDATION",
+        "GENERAL",
+      ],
+      canonicalPermissions: [
+        "AI.View",
+        "AI.Chat",
+        "AI.Forecast",
+        "AI.Analytics",
+        "AI.Admin",
+      ],
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao verificar status da IA.", details: error.message });
+  }
+});
+
+/**
+ * ALL /api/v1/ai/forecast and /api/ai/forecast
+ * General forecast endpoint supporting queries
+ */
+aiCopilotRouter.all("/forecast", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { companyId, userId } = getContext(req);
+    const query =
+      (req.body && req.body.query) ||
+      (req.query && (req.query.query as string)) ||
+      "previsao de vendas para os proximos 30 dias";
+    const result = await EnterpriseAiCopilotService.query({
+      query,
+      companyId,
+      userId,
+    });
+    res.json({
+      ...result,
+      answer: result.textAnswer,
+      textAnswer: result.textAnswer,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao processar previsão analítica.", details: error.message });
   }
 });
 

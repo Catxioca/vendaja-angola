@@ -19,4 +19,6 @@ contextBridge.exposeInMainWorld("pos", {
   testServerConnection: (apiUrl) => ipcRenderer.invoke("test-server-connection", apiUrl),
   checkLiveUpdates: (apiUrl) => ipcRenderer.invoke("check-live-updates", apiUrl),
   syncLiveConfig: (apiUrl) => ipcRenderer.invoke("sync-live-config", apiUrl),
+  copilotQuery: (payload) => ipcRenderer.invoke("ai-copilot-query", payload),
+  copilotStatus: (apiUrl) => ipcRenderer.invoke("ai-copilot-status", apiUrl),
 });

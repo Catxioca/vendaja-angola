@@ -178,6 +178,7 @@ export class EnterpriseCloudUpdateService {
         "INTEGRATIONS",
         "CLOUD",
         "AI",
+        "BIOMETRICS",
         "SETTINGS",
       ],
       features: {

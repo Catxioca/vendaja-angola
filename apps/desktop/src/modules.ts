@@ -15,6 +15,7 @@ export type AppModule =
   | "INTEGRATIONS"
   | "CLOUD"
   | "AI"
+  | "BIOMETRICS"
   | "SETTINGS";
 
 export type CommercialPlan = "STARTER" | "PROFESSIONAL" | "BUSINESS" | "ENTERPRISE" | "CUSTOM";
@@ -83,6 +84,7 @@ export const PLAN_METADATA: Record<CommercialPlan, PlanDefinition> = {
       "INTEGRATIONS",
       "CLOUD",
       "AI",
+      "BIOMETRICS",
     ],
   },
   CUSTOM: {
@@ -240,6 +242,14 @@ export const MODULE_CATALOG: ModuleInfo[] = [
     description: "Assistente empresarial inteligente com consultas em linguagem natural, previsões preditivas e deteção de anomalias.",
     minimumPlan: "ENTERPRISE",
   },
+  {
+    code: "BIOMETRICS",
+    name: "Biometria & Acessos",
+    category: "Segurança & Acessos",
+    icon: "👁️",
+    description: "Controlo inteligente de acessos com Reconhecimento Facial, Digitais, RFID, QR Code, torniquetes e assiduidade.",
+    minimumPlan: "ENTERPRISE",
+  },
 ];
 
 export const PRODUCT_CORE_MODULES: AppModule[] = ["SETTINGS"];
@@ -261,6 +271,7 @@ export const OPERATIONAL_MODULES: AppModule[] = [
   "INTEGRATIONS",
   "CLOUD",
   "AI",
+  "BIOMETRICS",
 ];
 
 export const isOperationalModule = (module: AppModule): boolean => {
@@ -309,11 +320,12 @@ export const roleModules: Record<string, AppModule[]> = {
     "INTEGRATIONS",
     "CLOUD",
     "AI",
+    "BIOMETRICS",
     "SETTINGS",
   ],
-  ROLE_CASHIER: ["POS", "DASHBOARD", "AI"],
-  ROLE_HR: ["HR", "DASHBOARD", "AI"],
-  ROLE_ACCOUNTANT: ["ACCOUNTING", "DASHBOARD", "AI"],
+  ROLE_CASHIER: ["POS", "DASHBOARD"],
+  ROLE_HR: ["HR", "DASHBOARD"],
+  ROLE_ACCOUNTANT: ["ACCOUNTING", "DASHBOARD"],
 };
 
 export const normalizeModuleCode = (code: string): AppModule | null => {
@@ -335,6 +347,7 @@ export const normalizeModuleCode = (code: string): AppModule | null => {
   if (upper === "INTEGRATIONS" || upper === "INTEGRACOES" || upper === "API" || upper === "WEBHOOKS") return "INTEGRATIONS";
   if (upper === "CLOUD" || upper === "SAAS" || upper === "MULTILOJAS" || upper === "MULTILOJA") return "CLOUD";
   if (upper === "AI" || upper === "COPILOT" || upper === "IA" || upper === "ASSISTANT") return "AI";
+  if (upper === "BIOMETRICS" || upper === "BIOMETRIA" || upper === "ACCESS_CONTROL" || upper === "ACESSOS" || upper === "ACCESS") return "BIOMETRICS";
   return null;
 };
 

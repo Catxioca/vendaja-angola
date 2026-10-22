@@ -7,8 +7,8 @@ import {
   SYSTEM_PERMISSIONS,
 } from "./enterprise/index.js";
 
-test("VendaJá Copilot: SYSTEM_PERMISSIONS contains canonical AI permission suite (84 total)", () => {
-  assert.equal(SYSTEM_PERMISSIONS.length, 84, "Total de permissões do sistema deve ser 84");
+test("VendaJá Copilot: SYSTEM_PERMISSIONS contains canonical AI permission suite (89 total)", () => {
+  assert.equal(SYSTEM_PERMISSIONS.length, 89, "Total de permissões do sistema deve ser 89");
   
   const aiPerms = SYSTEM_PERMISSIONS.filter((p) => p.module === "AI");
   assert.equal(aiPerms.length, 5, "Módulo de IA deve possuir exatamente 5 permissões canónicas");

@@ -34,6 +34,7 @@ import { businessIntelligenceRouter } from "./routes/business-intelligence.js";
 import { cloudSaasRouter } from "./routes/cloud-saas.js";
 import { portalsRouter } from "./routes/portals.js";
 import { aiCopilotRouter } from "./routes/ai-copilot.js";
+import { biometricsAccessRouter } from "./routes/biometrics-access.js";
 import { logger } from "./services/enterprise/logger.service.js";
 import { correlationId, countMetric, logJson, metricsSnapshot } from "./services/observability.js";
 
@@ -139,6 +140,8 @@ app.use("/api/v1/bi", businessIntelligenceRouter);
 app.use("/api/v1/saas", cloudSaasRouter);
 app.use("/api/v1/portals", portalsRouter);
 app.use("/api/v1/ai", aiCopilotRouter);
+app.use("/api/v1/biometrics", biometricsAccessRouter);
+app.use("/api/v1/access-control", biometricsAccessRouter);
 app.use("/api/v1", apiV1PublicRouter);
 app.use("/api/v1", openapiRouter);
 app.use("/api", openapiRouter);

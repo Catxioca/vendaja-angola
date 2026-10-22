@@ -117,6 +117,13 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
   { code: "AI.Forecast", module: "AI", screen: "Copilot", action: "Forecast", description: "Consultar previsões de vendas, stock e tesouraria por IA" },
   { code: "AI.Analytics", module: "AI", screen: "Copilot", action: "Analytics", description: "Solicitar insights analíticos e deteção de anomalias por IA" },
   { code: "AI.Admin", module: "AI", screen: "Copilot", action: "Admin", description: "Administrar modelos, parâmetros e auditoria de IA" },
+
+  // Biometrics & Intelligent Access Control (Fase 11)
+  { code: "Biometrics.View", module: "BIOMETRICS", screen: "AccessControl", action: "View", description: "Visualizar monitores de acesso, presenças e dashboard biométrico" },
+  { code: "Biometrics.Enroll", module: "BIOMETRICS", screen: "AccessControl", action: "Enroll", description: "Efetuar cadastro facial, impressões digitais, cartões RFID e QR" },
+  { code: "Biometrics.Access", module: "BIOMETRICS", screen: "AccessControl", action: "Access", description: "Configurar regras de acesso, horários e autorizações de entrada" },
+  { code: "Biometrics.Hardware", module: "BIOMETRICS", screen: "AccessControl", action: "Hardware", description: "Administrar torniquetes, portas, controladores ZKTeco, Hikvision e relés" },
+  { code: "Biometrics.Audit", module: "BIOMETRICS", screen: "AccessControl", action: "Audit", description: "Auditar trilha forense de entradas, recusas e relatórios de assiduidade" },
 ];
 
 export class EnterpriseRbacService {

@@ -2078,3 +2078,187 @@ model BiKpiSnapshot {
   @@unique([companyId, branchId, date, granularity])
   @@index([companyId, date])
 }
+
+
+// ==========================================
+// BIOMETRICS & INTELLIGENT ACCESS CONTROL
+// ==========================================
+
+model AccessPerson {
+  id                   String                @id @default(uuid())
+  companyId            String
+  branchId             String?
+  internalCode         String
+  fullName             String
+  nif                  String?
+  phone                String?
+  email                String?
+  photoUrl             String?
+  department           String?
+  category             String                @default("EMPLOYEE")
+  employeeId           String?
+  customerId           String?
+  status               String                @default("ACTIVE")
+  notes                String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  credentials          BiometricCredential[]
+  logs                 AccessLog[]
+  attendanceRecords    AttendanceRecord[]
+  gymSubscriptions     GymSubscription[]
+  visitorPasses        VisitorPass[]
+
+  @@unique([companyId, internalCode])
+  @@index([companyId, category, status])
+  @@index([companyId, nif])
+}
+
+model BiometricCredential {
+  id                String       @id @default(uuid())
+  personId          String
+  type              String
+  identifier        String?
+  biometricTemplate String?
+  qualityScore      Int?         @default(100)
+  hardwareVendor    String?
+  active            Boolean      @default(true)
+  enrolledAt        DateTime     @default(now())
+  lastUsedAt        DateTime?
+  person            AccessPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId, type, active])
+  @@index([identifier])
+}
+
+model AccessDevice {
+  id            String      @id @default(uuid())
+  companyId     String
+  name          String
+  type          String      @default("TURNSTILE")
+  direction     String      @default("ENTRY")
+  locationZone  String      @default("RECEPTION")
+  ipAddress     String?
+  port          Int?        @default(4370)
+  protocol      String      @default("SIMULATOR")
+  mqttTopic     String?
+  relayPin      Int?
+  relayPulseMs  Int         @default(3000)
+  status        String      @default("ONLINE")
+  lastPingAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  logs          AccessLog[]
+
+  @@index([companyId, locationZone, status])
+}
+
+model AccessRule {
+  id                       String   @id @default(uuid())
+  companyId                String
+  name                     String
+  category                 String?
+  daysOfWeek               String   @default("ALL")
+  startTime                String   @default("00:00")
+  endTime                  String   @default("23:59")
+  allowedZones             String   @default("ALL")
+  requireSubscriptionValid  Boolean  @default(false)
+  active                   Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([companyId, category, active])
+}
+
+model AccessLog {
+  id              String        @id @default(uuid())
+  companyId       String
+  personId        String?
+  personName      String
+  personCategory  String?
+  deviceId        String
+  deviceName      String
+  zone            String
+  direction       String        @default("ENTRY")
+  authMethod      String
+  similarityScore Float?
+  granted         Boolean       @default(false)
+  denialReason    String?
+  snapshotUrl     String?
+  timestamp       DateTime      @default(now())
+
+  person          AccessPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  device          AccessDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, timestamp])
+  @@index([companyId, granted])
+  @@index([personId, timestamp])
+}
+
+model AttendanceRecord {
+  id              String        @id @default(uuid())
+  companyId       String
+  employeeId      String
+  personId        String?
+  date            DateTime
+  checkIn         DateTime?
+  breakOut        DateTime?
+  breakIn         DateTime?
+  checkOut        DateTime?
+  workedMinutes   Int           @default(0)
+  overtimeMinutes Int           @default(0)
+  delayMinutes    Int           @default(0)
+  status          String        @default("PRESENT")
+  syncedToPayroll Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  person          AccessPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, employeeId, date])
+  @@index([companyId, date, status])
+}
+
+model GymSubscription {
+  id          String       @id @default(uuid())
+  companyId   String
+  personId    String
+  planName    String
+  startDate   DateTime
+  endDate     DateTime
+  status      String       @default("ACTIVE")
+  amountCents Int          @default(0)
+  isPaid      Boolean      @default(true)
+  saleId      String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  person      AccessPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, personId, status])
+  @@index([companyId, endDate])
+}
+
+model VisitorPass {
+  id                String       @id @default(uuid())
+  companyId         String
+  personId          String
+  hostEmployeeName  String?
+  hostDepartment    String?
+  validFrom         DateTime
+  validUntil        DateTime
+  status            String       @default("APPROVED")
+  purpose           String?
+  badgeNumber       String?
+  qrCodeToken       String?
+  idDocNumber       String?
+  entryTime         DateTime?
+  exitTime          DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  person            AccessPerson @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+  @@index([companyId, validFrom, validUntil])
+}

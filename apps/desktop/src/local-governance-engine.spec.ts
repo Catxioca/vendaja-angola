@@ -248,8 +248,8 @@ describe("Enterprise Local Governance & Offline-First Resilience Suite", () => {
 
     const logs = engine.getLocalAuditLogs({ action: "UNIT_TEST_ACTION" });
     assert.ok(logs.length >= 1);
-    assert.equal(logs[0].action, "UNIT_TEST_ACTION");
-    assert.equal(logs[0].entity, "TestEntity");
+    assert.equal(logs[0]?.action, "UNIT_TEST_ACTION");
+    assert.equal(logs[0]?.entity, "TestEntity");
 
     const exportResult = await engine.exportAuditCsv("http://127.0.0.1:4000", "");
     assert.ok(exportResult.blob);

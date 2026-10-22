@@ -175,10 +175,25 @@ export class EnterpriseBiometricsAccessService {
   private static inMemoryVisitorPasses: Map<string, any> = new Map();
 
   static {
-    this.seedDefaultHardwareAndRules();
+    // Clean production default: zero fake/mock hardware seeded.
+    // Real devices are registered via registerDevice() or connected controllers.
   }
 
-  private static seedDefaultHardwareAndRules(): void {
+  /**
+   * Resets all in-memory caches to a clean state with zero records
+   */
+  public static clearAllData(): void {
+    this.inMemoryPersons.clear();
+    this.inMemoryCredentials.clear();
+    this.inMemoryDevices.clear();
+    this.inMemoryRules.clear();
+    this.inMemoryLogs = [];
+    this.inMemoryAttendance.clear();
+    this.inMemoryGymSubscriptions.clear();
+    this.inMemoryVisitorPasses.clear();
+  }
+
+  public static seedDefaultHardwareAndRules(): void {
     const defaultComp = "default-company";
     
     // Default turnstiles & access doors

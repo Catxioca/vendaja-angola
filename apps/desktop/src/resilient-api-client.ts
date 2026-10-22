@@ -211,6 +211,8 @@ export function classifyNetworkError(
     let serviceLabel = "Servidor de automação ou backend";
     if (pathname.includes("/automation")) {
       serviceLabel = "Serviço de Automação & Workflows";
+    } else if (pathname.includes("/security")) {
+      serviceLabel = "Serviço de Segurança e Governação";
     } else if (pathname.includes("/financial")) {
       serviceLabel = "Serviço Financeiro & Tesouraria";
     } else if (pathname.includes("/bi")) {

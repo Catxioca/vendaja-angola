@@ -59,8 +59,8 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
       assert.equal(isModuleLicensed("STOCK", emptyLicense), false);
     });
 
-    it("verifies full coverage of all 18 canonical modules in MODULE_CATALOG", () => {
-      assert.equal(MODULE_CATALOG.length, 18);
+    it("verifies full coverage of all 19 canonical modules in MODULE_CATALOG", () => {
+      assert.equal(MODULE_CATALOG.length, 19);
       const codes = MODULE_CATALOG.map((m) => m.code);
       const expectedCodes: AppModule[] = [
         "DASHBOARD",
@@ -81,6 +81,7 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
         "CLOUD",
         "AI",
         "BIOMETRICS",
+        "CORPORATE",
       ];
       for (const expected of expectedCodes) {
         assert.ok(codes.includes(expected), `Module ${expected} missing from catalog`);
@@ -125,7 +126,8 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
       assert.ok(ent.includes("CLOUD"));
       assert.ok(ent.includes("AI"));
       assert.ok(ent.includes("BIOMETRICS"));
-      assert.equal(ent.length, 18);
+      assert.ok(ent.includes("CORPORATE"));
+      assert.equal(ent.length, 19);
     });
   });
 
@@ -221,7 +223,7 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
       assert.equal(result.plan, "ENTERPRISE");
       assert.equal(result.expiryTier, "valid");
       assert.ok(result.daysRemaining! > 300);
-      assert.equal(result.modules?.length, 18);
+      assert.equal(result.modules?.length, 19);
     });
 
     it("rejects token when hardwareId does not match the current machine", () => {
@@ -326,9 +328,9 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
   });
 
   describe("Two-Tier Licensing & Modular Isolation Engine", () => {
-    it("verifies clean install defaults: Product active, ALL 17 operational modules locked", () => {
-      // In clean installation, only SETTINGS is unlocked; all 17 operational modules are strictly locked
-      assert.equal(OPERATIONAL_MODULES.length, 17);
+    it("verifies clean install defaults: Product active, ALL 18 operational modules locked", () => {
+      // In clean installation, only SETTINGS is unlocked; all 18 operational modules are strictly locked
+      assert.equal(OPERATIONAL_MODULES.length, 18);
       assert.deepEqual(defaultLicensedModules, ["SETTINGS"]);
       assert.deepEqual(PRODUCT_CORE_MODULES, ["SETTINGS"]);
 

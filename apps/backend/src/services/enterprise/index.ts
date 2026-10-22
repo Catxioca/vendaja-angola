@@ -62,4 +62,5 @@ export * from "./employee-portal.service.js";
 export * from "./mobile-erp.service.js";
 export * from "./ai-copilot.service.js";
 export * from "./biometrics-access.service.js";
+export * from "./corporate-headquarters.service.js";
 

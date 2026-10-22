@@ -124,6 +124,15 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
   { code: "Biometrics.Access", module: "BIOMETRICS", screen: "AccessControl", action: "Access", description: "Configurar regras de acesso, horários e autorizações de entrada" },
   { code: "Biometrics.Hardware", module: "BIOMETRICS", screen: "AccessControl", action: "Hardware", description: "Administrar torniquetes, portas, controladores ZKTeco, Hikvision e relés" },
   { code: "Biometrics.Audit", module: "BIOMETRICS", screen: "AccessControl", action: "Audit", description: "Auditar trilha forense de entradas, recusas e relatórios de assiduidade" },
+
+  // Corporate Headquarters, Multi-Store & Live Updates (Fase 10.8)
+  { code: "Corporate.View", module: "CORPORATE", screen: "Headquarters", action: "View", description: "Consultar Centro Corporativo, filiais e cockpit multi-loja em tempo real" },
+  { code: "Corporate.Manage", module: "CORPORATE", screen: "Headquarters", action: "Manage", description: "Criar, editar, suspender e configurar filiais e lojas remotas" },
+  { code: "Corporate.Users", module: "CORPORATE", screen: "Headquarters", action: "Users", description: "Gestão centralizada de utilizadores, funções e credenciais remotas" },
+  { code: "Corporate.Modules", module: "CORPORATE", screen: "Headquarters", action: "Modules", description: "Ativar, desativar, suspender e distribuir módulos por loja" },
+  { code: "Corporate.Licenses", module: "CORPORATE", screen: "Headquarters", action: "Licenses", description: "Gestão corporativa de licenças, ativações e transferências" },
+  { code: "Corporate.LiveUpdate", module: "CORPORATE", screen: "Headquarters", action: "LiveUpdate", description: "Publicar e distribuir atualizações live, componentes e patches sem instalador" },
+  { code: "Corporate.Broadcast", module: "CORPORATE", screen: "Headquarters", action: "Broadcast", description: "Emitir comunicados, circulares e alertas para as lojas" },
 ];
 
 export class EnterpriseRbacService {
@@ -327,8 +336,18 @@ export class EnterpriseRbacService {
     const effectivePermissions = new Set<string>();
 
     // Administrator always has wildcard access to all permissions
-    const isGlobalAdmin = user.role === "ROLE_ADMIN" || user.role === "ADMIN";
-    const isCompanyAdmin = user.memberships.some((m) => m.role === "ROLE_ADMIN" || m.role === "ADMIN");
+    const isGlobalAdmin =
+      user.role === "ROLE_ADMIN" ||
+      user.role === "ADMIN" ||
+      user.role === "ROLE_SUPER_ADMIN" ||
+      user.role === "SUPER_ADMIN";
+    const isCompanyAdmin = user.memberships.some(
+      (m) =>
+        m.role === "ROLE_ADMIN" ||
+        m.role === "ADMIN" ||
+        m.role === "ROLE_SUPER_ADMIN" ||
+        m.role === "SUPER_ADMIN"
+    );
 
     if (isGlobalAdmin || isCompanyAdmin) {
       return SYSTEM_PERMISSIONS.map((p) => p.code);
@@ -392,6 +411,64 @@ export class EnterpriseRbacService {
         effectivePermissions.add("AI.Chat");
         effectivePermissions.add("AI.Forecast");
         effectivePermissions.add("AI.Analytics");
+      }
+      if (normalized.includes("LOCAL_ADMIN")) {
+        effectivePermissions.add("Sales.View");
+        effectivePermissions.add("Sales.Create");
+        effectivePermissions.add("Sales.Edit");
+        effectivePermissions.add("Sales.Approve");
+        effectivePermissions.add("Sales.Cancel");
+        effectivePermissions.add("Stock.View");
+        effectivePermissions.add("Stock.Create");
+        effectivePermissions.add("Stock.Edit");
+        effectivePermissions.add("Stock.Adjust");
+        effectivePermissions.add("Purchases.View");
+        effectivePermissions.add("Purchases.Create");
+        effectivePermissions.add("Cashflow.View");
+        effectivePermissions.add("Cashflow.Manage");
+        effectivePermissions.add("Security.View");
+        effectivePermissions.add("Audit.View");
+        effectivePermissions.add("AI.View");
+        effectivePermissions.add("AI.Chat");
+      }
+      if (normalized.includes("CFO") || normalized.includes("FINANCIAL_DIRECTOR")) {
+        effectivePermissions.add("Finance.View");
+        effectivePermissions.add("Finance.Create");
+        effectivePermissions.add("Finance.Edit");
+        effectivePermissions.add("Finance.Approve");
+        effectivePermissions.add("Treasury.View");
+        effectivePermissions.add("Treasury.Approve");
+        effectivePermissions.add("Accounting.View");
+        effectivePermissions.add("Accounting.Create");
+        effectivePermissions.add("Accounting.Edit");
+        effectivePermissions.add("Accounting.Approve");
+        effectivePermissions.add("Accounting.Export");
+        effectivePermissions.add("Cashflow.View");
+        effectivePermissions.add("Cashflow.Manage");
+        effectivePermissions.add("Budget.Manage");
+        effectivePermissions.add("Closing.Manage");
+        effectivePermissions.add("BI.View");
+        effectivePermissions.add("BI.Export");
+        effectivePermissions.add("AI.View");
+        effectivePermissions.add("AI.Chat");
+        effectivePermissions.add("AI.Forecast");
+        effectivePermissions.add("AI.Analytics");
+      }
+      if (normalized.includes("CRO") || normalized.includes("COMMERCIAL_DIRECTOR")) {
+        effectivePermissions.add("Sales.View");
+        effectivePermissions.add("Sales.Create");
+        effectivePermissions.add("Sales.Edit");
+        effectivePermissions.add("Sales.Approve");
+        effectivePermissions.add("Sales.Cancel");
+        effectivePermissions.add("Sales.Export");
+        effectivePermissions.add("Stock.View");
+        effectivePermissions.add("CRM.View");
+        effectivePermissions.add("CRM.Create");
+        effectivePermissions.add("CRM.Edit");
+        effectivePermissions.add("CRM.Approve");
+        effectivePermissions.add("BI.View");
+        effectivePermissions.add("AI.View");
+        effectivePermissions.add("AI.Chat");
       }
     }
 

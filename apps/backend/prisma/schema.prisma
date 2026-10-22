@@ -168,6 +168,7 @@ model Branch {
   code          String
   name          String
   active        Boolean             @default(true)
+  isHeadquarters Boolean            @default(false)
   company       Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   memberships   CompanyMembership[]
   warehouses    Warehouse[]
@@ -2261,4 +2262,87 @@ model VisitorPass {
 
   @@index([companyId, status])
   @@index([companyId, validFrom, validUntil])
+}
+
+// ==========================================
+// FASE 10.8: CENTRO CORPORATIVO & LIVE UPDATE
+// ==========================================
+
+model CorporateLivePatch {
+  id              String   @id @default(uuid())
+  companyId       String
+  patchVersion    String
+  title           String
+  description     String
+  category        String   // "MODULE_RELEASE", "HOTFIX", "FISCAL_LEGAL", "UI_ENHANCEMENT", "SECURITY"
+  targetModules   String[] @default([])
+  targetBranches  String[] @default(["ALL"])
+  payloadJson     String   // Serialized patch components/configs
+  sha256Signature String   // RSA/SHA-256 cryptographic signature
+  isCritical      Boolean  @default(false)
+  status          String   @default("PUBLISHED") // "PUBLISHED", "STAGED", "DEPRECATED"
+  appliedCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId, patchVersion])
+  @@index([companyId, status])
+}
+
+model CorporateBroadcast {
+  id             String    @id @default(uuid())
+  companyId      String
+  title          String
+  content        String
+  priority       String    @default("NORMAL") // "NORMAL", "URGENT", "CRITICAL"
+  senderUserId   String
+  targetBranches String[]  @default(["ALL"])
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([companyId, priority])
+  @@index([companyId, createdAt])
+}
+
+model CorporateStoreStatus {
+  id                  String   @id @default(uuid())
+  companyId           String
+  branchId            String
+  branchCode          String
+  branchName          String
+  isHeadquarters      Boolean  @default(false)
+  online              Boolean  @default(true)
+  lastPingAt          DateTime @default(now())
+  activeUsersCount    Int      @default(0)
+  todaySalesCents     Int      @default(0)
+  todayDocumentsCount Int      @default(0)
+  cashDrawerCents     Int      @default(0)
+  activeModules       String[] @default([])
+  appVersion          String   @default("2.2.4")
+  hardwareId          String?
+  terminalId          String?
+  pendingSyncCount    Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([companyId, branchId])
+  @@index([companyId, online])
+  @@index([companyId, lastPingAt])
+}
+
+model CorporateEventStream {
+  id          String   @id @default(uuid())
+  companyId   String
+  branchId    String?
+  userId      String?
+  actorName   String
+  eventType   String   // "USER_CREATED", "USER_SUSPENDED", "MODULE_ACTIVATED", "MODULE_DISABLED", "PATCH_DEPLOYED", "LICENSE_ASSIGNED", "STORE_OFFLINE", "STORE_ONLINE"
+  severity    String   @default("INFO") // "INFO", "WARN", "CRITICAL"
+  description String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([companyId, eventType])
+  @@index([companyId, createdAt])
 }

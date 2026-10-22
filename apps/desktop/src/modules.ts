@@ -16,6 +16,7 @@ export type AppModule =
   | "CLOUD"
   | "AI"
   | "BIOMETRICS"
+  | "CORPORATE"
   | "SETTINGS";
 
 export type CommercialPlan = "STARTER" | "PROFESSIONAL" | "BUSINESS" | "ENTERPRISE" | "CUSTOM";
@@ -85,6 +86,7 @@ export const PLAN_METADATA: Record<CommercialPlan, PlanDefinition> = {
       "CLOUD",
       "AI",
       "BIOMETRICS",
+      "CORPORATE",
     ],
   },
   CUSTOM: {
@@ -250,6 +252,14 @@ export const MODULE_CATALOG: ModuleInfo[] = [
     description: "Controlo inteligente de acessos com Reconhecimento Facial, Digitais, RFID, QR Code, torniquetes e assiduidade.",
     minimumPlan: "ENTERPRISE",
   },
+  {
+    code: "CORPORATE",
+    name: "Centro Corporativo",
+    category: "Administração & Sede",
+    icon: "🏢",
+    description: "Cockpit multi-loja em tempo real, administração centralizada de utilizadores, gestão remota de filiais e live updates.",
+    minimumPlan: "ENTERPRISE",
+  },
 ];
 
 export const PRODUCT_CORE_MODULES: AppModule[] = ["SETTINGS"];
@@ -272,6 +282,7 @@ export const OPERATIONAL_MODULES: AppModule[] = [
   "CLOUD",
   "AI",
   "BIOMETRICS",
+  "CORPORATE",
 ];
 
 export const isOperationalModule = (module: AppModule): boolean => {
@@ -321,6 +332,7 @@ export const roleModules: Record<string, AppModule[]> = {
     "CLOUD",
     "AI",
     "BIOMETRICS",
+    "CORPORATE",
     "SETTINGS",
   ],
   ROLE_CASHIER: ["POS", "DASHBOARD"],
@@ -348,6 +360,7 @@ export const normalizeModuleCode = (code: string): AppModule | null => {
   if (upper === "CLOUD" || upper === "SAAS" || upper === "MULTILOJAS" || upper === "MULTILOJA") return "CLOUD";
   if (upper === "AI" || upper === "COPILOT" || upper === "IA" || upper === "ASSISTANT") return "AI";
   if (upper === "BIOMETRICS" || upper === "BIOMETRIA" || upper === "ACCESS_CONTROL" || upper === "ACESSOS" || upper === "ACCESS") return "BIOMETRICS";
+  if (upper === "CORPORATE" || upper === "HEADQUARTERS" || upper === "SEDE" || upper === "LOJA_MAE" || upper === "CORPORATIVO") return "CORPORATE";
   return null;
 };
 

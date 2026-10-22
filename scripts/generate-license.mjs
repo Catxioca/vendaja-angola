@@ -58,6 +58,7 @@ const PLAN_PRESETS = {
     "CLOUD",
     "AI",
     "BIOMETRICS",
+    "CORPORATE",
   ],
   CUSTOM: [],
 };

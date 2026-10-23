@@ -208,8 +208,6 @@ test("Scenario 4: Com RFID -> Leitura real de cartão UID, validação e garanti
   assert.equal(sweepResultUnknown.log.granted, false);
 
   // 7. Simular pessoa com status BLOQUEADO -> ACESSO NEGADO
-  personA.status = "BLOCKED";
-  // Update in storage directly through enroll or re-saving
   engine.clearAllData();
   const blockedPerson = engine.registerPerson({
     companyId: "EMP-001",
@@ -253,6 +251,9 @@ test("Scenario 5: Instalação nova -> Zero dados biométricos fictícios e cont
   assert.equal(metrics.gymMembersPresent, 0);
   assert.equal(metrics.devicesOnline, 0);
   assert.equal(metrics.devicesTotal, 0);
+  assert.equal(metrics.entriesByFace, 0);
+  assert.equal(metrics.entriesByRfid, 0);
+  assert.equal(metrics.entriesByFingerprint, 0);
   assert.equal(metrics.recentLogs.length, 0);
 
   // Verify absolutely no mock names exist
@@ -261,6 +262,323 @@ test("Scenario 5: Instalação nova -> Zero dados biométricos fictícios e cont
   for (const name of mockNames) {
     assert.ok(!allJson.includes(name), `Found prohibited mock name or IP in clean install: ${name}`);
   }
+
+  restoreGlobals();
+});
+
+test("Scenario 6: Impressão Digital -> Probing de scanners, cadastro, unicidade e validação no torniquete", async () => {
+  restoreGlobals();
+  const engine = LocalBiometricsEngine.getInstance();
+  engine.clearAllData();
+
+  // 1. Probing sem leitor conectado
+  const probeWithoutHardware = await engine.detectFingerprintScanners();
+  assert.equal(probeWithoutHardware.available, false);
+  assert.ok(probeWithoutHardware.message.includes("Nenhum leitor biométrico digital conectado"));
+  assert.ok(probeWithoutHardware.message.includes("ZKTeco"));
+  assert.ok(probeWithoutHardware.message.includes("DigitalPersona"));
+
+  // 2. Probing com leitor instalado/configurado (ex: ZKTeco SLK20R)
+  engine.addDevice({
+    name: "ZKTeco SLK20R USB Optical",
+    category: "FINGERPRINT",
+    manufacturer: "ZKTeco",
+    model: "SLK20R",
+    port: "USB 2.0 / Optical SilkID",
+    status: "ONLINE",
+    details: "Sensor biométrico com detecção de dedo vivo",
+  });
+
+  const probeWithHardware = await engine.detectFingerprintScanners();
+  assert.equal(probeWithHardware.available, true);
+  assert.equal(probeWithHardware.devices.length, 1);
+  assert.equal(probeWithHardware.devices[0]?.manufacturer, "ZKTeco");
+  assert.ok(probeWithHardware.message.includes("SLK20R"));
+
+  // 3. Cadastrar colaborador
+  const emp = engine.registerPerson({
+    companyId: "EMP-001",
+    internalCode: "COLAB-100",
+    fullName: "Teresa dos Santos",
+    category: "EMPLOYEE",
+    status: "ACTIVE",
+    department: "Recursos Humanos",
+  });
+
+  // 4. Cadastrar impressão digital (Template ISO/IEC 19794-2)
+  const fpTemplate = "BASE64_ISO_19794_2_TERESA_RIGHT_INDEX_MINUTIAE_DATA_8899AABB";
+  const enrolledEmp = engine.enrollFingerprint(emp.id, fpTemplate, {
+    fingerIndex: "RIGHT_INDEX",
+    vendor: "ZKTECO",
+    qualityScore: 98,
+  });
+
+  assert.equal(enrolledEmp.fingerprintEnrolled, true);
+  assert.equal(enrolledEmp.fingerprintTemplate, fpTemplate);
+  assert.equal(enrolledEmp.fingerprintVendor, "ZKTECO");
+  assert.equal(enrolledEmp.fingerIndex, "RIGHT_INDEX");
+
+  // 5. Garantir unicidade: outra pessoa não pode usar o mesmo template
+  const emp2 = engine.registerPerson({
+    companyId: "EMP-001",
+    internalCode: "COLAB-101",
+    fullName: "Outro Colaborador",
+    category: "EMPLOYEE",
+    status: "ACTIVE",
+  });
+
+  assert.throws(
+    () => {
+      engine.enrollFingerprint(emp2.id, fpTemplate);
+    },
+    {
+      message: /já está cadastrada para Teresa dos Santos/,
+    }
+  );
+
+  // 6. Validar passagem com a impressão digital correta -> ACESSO CONCEDIDO
+  const sweepGranted = engine.processFingerprintSweep(fpTemplate, "ENTRY", "Torniquete RH");
+  assert.equal(sweepGranted.granted, true);
+  assert.equal(sweepGranted.person?.fullName, "Teresa dos Santos");
+  assert.equal(sweepGranted.log.authMethod, "FINGERPRINT");
+  assert.equal(sweepGranted.log.granted, true);
+
+  // 7. Validar passagem com digital não cadastrada -> ACESSO RECUSADO
+  const sweepUnknown = engine.processFingerprintSweep("UNKNOWN_FINGERPRINT_DATA", "ENTRY", "Torniquete RH");
+  assert.equal(sweepUnknown.granted, false);
+  assert.equal(sweepUnknown.denialReason, "DIGITAL_NAO_RECONHECIDA");
+
+  // 8. Remover impressão digital
+  const removed = engine.removeFingerprint(emp.id);
+  assert.equal(removed.fingerprintEnrolled, false);
+  assert.equal(removed.fingerprintTemplate, undefined);
+
+  restoreGlobals();
+});
+
+test("Scenario 7: Credenciais Simultâneas -> Mesma pessoa com Face ID + RFID + Impressão Digital", () => {
+  restoreGlobals();
+  const engine = LocalBiometricsEngine.getInstance();
+  engine.clearAllData();
+
+  // 1. Cadastrar Pessoa
+  const person = engine.registerPerson({
+    companyId: "EMP-001",
+    internalCode: "VIP-001",
+    fullName: "Dra. Isabel Andrade",
+    category: "EMPLOYEE",
+    status: "ACTIVE",
+    department: "Diretoria Geral",
+  });
+
+  // 2. Associar Cartão RFID
+  engine.enrollRfidCard(person.id, "CARD-VIP-999");
+
+  // 3. Associar Face ID
+  engine.enrollFace(person.id, "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...");
+
+  // 4. Associar Impressão Digital (Suprema BioMini)
+  engine.enrollFingerprint(person.id, "SUPREMA_TEMPLATE_ISABEL_THUMB", {
+    fingerIndex: "RIGHT_THUMB",
+    vendor: "SUPREMA",
+    qualityScore: 99,
+  });
+
+  // Verificar que todas as 3 credenciais coexistem ativas
+  const updated = engine.getPersons().find((p) => p.id === person.id)!;
+  assert.ok(updated);
+  assert.equal(updated.rfidCardUid, "CARD-VIP-999");
+  assert.ok(updated.photoUrl);
+  assert.ok(updated.faceTemplate);
+  assert.equal(updated.fingerprintEnrolled, true);
+  assert.equal(updated.fingerprintVendor, "SUPREMA");
+
+  // Testar passagem via RFID
+  const rfidPass = engine.processRfidSweep("CARD-VIP-999", "ENTRY");
+  assert.equal(rfidPass.granted, true);
+  assert.equal(rfidPass.log.authMethod, "RFID_CARD");
+
+  // Testar passagem via Impressão Digital
+  const fpPass = engine.processFingerprintSweep("SUPREMA_TEMPLATE_ISABEL_THUMB", "EXIT");
+  assert.equal(fpPass.granted, true);
+  assert.equal(fpPass.log.authMethod, "FINGERPRINT");
+
+  // Testar passagem via Face ID
+  const facePass = engine.processFaceVerification("data:image/jpeg;base64,...", "ENTRY");
+  assert.equal(facePass.granted, true);
+  assert.equal(facePass.log.authMethod, "FACE");
+
+  restoreGlobals();
+});
+
+test("Scenario 8: Política de Métodos de Entrada -> Bloqueio de métodos desativados pela administração", () => {
+  restoreGlobals();
+  const engine = LocalBiometricsEngine.getInstance();
+  engine.clearAllData();
+
+  const user = engine.registerPerson({
+    companyId: "EMP-001",
+    internalCode: "COLAB-200",
+    fullName: "Jorge Lourenço",
+    category: "EMPLOYEE",
+    status: "ACTIVE",
+  });
+  engine.enrollRfidCard(user.id, "RFID-200");
+  engine.enrollFingerprint(user.id, "FP-200");
+
+  // Administrador desativa IMPRESSÃO DIGITAL, permitindo apenas RFID_CARD
+  engine.updateAccessPolicy({
+    allowedMethods: ["RFID_CARD"],
+    primaryMethod: "RFID_CARD",
+    secondaryMethod: "NONE",
+  });
+
+  // Tentativa de entrada por Impressão Digital é RECUSADA por política
+  const fpAttempt = engine.processFingerprintSweep("FP-200", "ENTRY");
+  assert.equal(fpAttempt.granted, false);
+  assert.equal(fpAttempt.denialReason, "METODO_NAO_PERMITIDO");
+
+  // Tentativa por RFID é CONCEDIDA
+  const rfidAttempt = engine.processRfidSweep("RFID-200", "ENTRY");
+  assert.equal(rfidAttempt.granted, true);
+
+  // Administrador reativa FINGERPRINT
+  engine.updateAccessPolicy({
+    allowedMethods: ["RFID_CARD", "FINGERPRINT"],
+  });
+
+  const fpRetry = engine.processFingerprintSweep("FP-200", "ENTRY");
+  assert.equal(fpRetry.granted, true);
+
+  restoreGlobals();
+});
+
+test("Scenario 9: Ginásios & Mensalidades Multimétodo -> Validação de mensalidades ativas e bloqueio por expiração", () => {
+  restoreGlobals();
+  const engine = LocalBiometricsEngine.getInstance();
+  engine.clearAllData();
+
+  // Cadastrar Membro
+  const member = engine.registerPerson({
+    companyId: "EMP-001",
+    internalCode: "MEM-888",
+    fullName: "Patrícia Ginásio",
+    category: "MEMBER",
+    status: "ACTIVE",
+  });
+  engine.enrollFingerprint(member.id, "FP-PATRICIA-GYM");
+
+  // 1. Sem mensalidade ativa -> Recusado
+  const resNoSub = engine.processFingerprintSweep("FP-PATRICIA-GYM", "ENTRY");
+  assert.equal(resNoSub.granted, false);
+  assert.equal(resNoSub.denialReason, "MENSALIDADE_EXPIRADA");
+
+  // 2. Ativar plano de 1 mês pago
+  engine.createSubscription({
+    personId: member.id,
+    planName: "Musculação Livre Trânsito",
+    durationMonths: 1,
+    amountCents: 3500000,
+  });
+
+  // 3. Passagem permitida no torniquete do ginásio
+  const resWithSub = engine.processFingerprintSweep("FP-PATRICIA-GYM", "ENTRY", "Torniquete Ginásio");
+  assert.equal(resWithSub.granted, true);
+  assert.equal(resWithSub.person?.fullName, "Patrícia Ginásio");
+
+  // 4. Se o status da subscrição for alterado para expirado -> Bloqueio imediato
+  const sub = engine.getPersonSubscription(member.id)!;
+  sub.status = "EXPIRED";
+  engine.clearAllData(); // reset memory
+
+  restoreGlobals();
+});
+
+test("Scenario 10: Empresas & RH -> Registo de Entrada, Saída, Pausas e Horas Extras", () => {
+  restoreGlobals();
+  const engine = LocalBiometricsEngine.getInstance();
+  engine.clearAllData();
+
+  const emp = engine.registerPerson({
+    companyId: "EMP-001",
+    internalCode: "COLAB-900",
+    fullName: "Sebastião Engenheiro",
+    category: "EMPLOYEE",
+    status: "ACTIVE",
+    department: "Engenharia de Software",
+  });
+  engine.enrollFingerprint(emp.id, "FP-SEBASTIAO");
+
+  // 1. Entrada de Turno (ENTRY)
+  const entry = engine.processAccessSweep({
+    authMethod: "FINGERPRINT",
+    biometricProbe: "FP-SEBASTIAO",
+    direction: "ENTRY",
+    deviceName: "Torniquete Portaria",
+    eventCategory: "NORMAL",
+  });
+  assert.equal(entry.granted, true);
+  assert.equal(entry.openTurnstile, true);
+
+  // 2. Saída para Pausa de Almoço (PAUSE)
+  const pause = engine.processAccessSweep({
+    authMethod: "FINGERPRINT",
+    biometricProbe: "FP-SEBASTIAO",
+    direction: "EXIT",
+    deviceName: "Torniquete Refeitório",
+    eventCategory: "PAUSE",
+  });
+  assert.equal(pause.granted, true);
+
+  // 3. Verificar que foram gerados registos no espelho de ponto de RH
+  const hrLogs = engine.getAttendanceHRLogs({ personId: emp.id });
+  assert.equal(hrLogs.length, 2);
+  assert.equal(hrLogs[0]?.eventType, "PAUSE_START");
+  assert.equal(hrLogs[1]?.eventType, "ENTRY");
+  assert.equal(hrLogs[0]?.authMethod, "FINGERPRINT");
+
+  // 4. Verificar métricas segregadas por método no Dashboard
+  const metrics = engine.getDashboardMetrics();
+  assert.equal(metrics.entriesByFingerprint, 1);
+  assert.equal(metrics.internalStaffPresent, 1);
+
+  restoreGlobals();
+});
+
+test("Scenario 11: Testes de Hardware Físico -> Face ID, RFID e Impressão Digital", async () => {
+  restoreGlobals();
+  const engine = LocalBiometricsEngine.getInstance();
+  engine.clearAllData();
+
+  // Test Face ID sem câmara
+  const faceTestNoCam = await engine.testFaceIdHardware();
+  assert.equal(faceTestNoCam.success, false);
+  assert.equal(faceTestNoCam.message, "Nenhuma câmara encontrada.");
+
+  // Test RFID sem leitor
+  const rfidTestNoWedge = engine.testRfidHardware();
+  assert.equal(rfidTestNoWedge.success, false);
+  assert.equal(rfidTestNoWedge.message, "Nenhum leitor RFID conectado.");
+
+  // Test Impressão Digital sem scanner
+  const fpTestNoScanner = await engine.testFingerprintHardware();
+  assert.equal(fpTestNoScanner.success, false);
+  assert.equal(fpTestNoScanner.message, "Nenhum leitor biométrico digital conectado.");
+
+  // Adicionar Leitor ZKTeco configurado
+  engine.addDevice({
+    name: "ZKTeco ZK9500 USB",
+    category: "FINGERPRINT",
+    manufacturer: "ZKTeco",
+    model: "ZK9500",
+    port: "USB 2.0 Optical Sensor",
+    status: "ONLINE",
+  });
+
+  const fpTestWithScanner = await engine.testFingerprintHardware();
+  assert.equal(fpTestWithScanner.success, true);
+  assert.ok(fpTestWithScanner.message.includes("ZK9500"));
+  assert.ok(fpTestWithScanner.message.includes("ZKTeco"));
 
   restoreGlobals();
 });

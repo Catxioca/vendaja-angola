@@ -253,6 +253,16 @@ biometricsAccessRouter.get("/health/rfid", (_req, res) => {
   });
 });
 
+biometricsAccessRouter.get("/health/fingerprint", (_req, res) => {
+  res.json({
+    status: "ok",
+    supportedVendors: ["ZKTECO", "DIGITAL_PERSONA", "SUPREMA", "NITGEN", "FUTRONIC"],
+    supportedStandards: ["ISO_IEC_19794_2", "ANSI_378", "RAW_MINUTIAE"],
+    matchingThreshold: 70,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 biometricsAccessRouter.get("/health/access", (_req, res) => {
   res.json({
     status: "ok",

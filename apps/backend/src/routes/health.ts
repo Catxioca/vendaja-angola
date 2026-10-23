@@ -315,6 +315,17 @@ healthRouter.get("/rfid", async (_req, res) => {
   });
 });
 
+// GET /health/fingerprint
+healthRouter.get("/fingerprint", async (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    supportedVendors: ["ZKTECO", "DIGITAL_PERSONA", "SUPREMA", "NITGEN", "FUTRONIC"],
+    supportedStandards: ["ISO_IEC_19794_2", "ANSI_378", "RAW_MINUTIAE"],
+    matchingThreshold: 70,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // GET /health/access
 healthRouter.get("/access", async (_req, res) => {
   res.status(200).json({

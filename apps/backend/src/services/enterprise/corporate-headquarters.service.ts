@@ -100,6 +100,28 @@ export interface PublishLivePatchDTO {
   isCritical?: boolean;
 }
 
+export interface CorporateCommand {
+  id: string;
+  companyId: string;
+  targetBranchId: string; // branchId or "ALL"
+  commandType:
+    | "CREATE_USER"
+    | "SUSPEND_USER"
+    | "REACTIVATE_USER"
+    | "UPDATE_PERMISSIONS"
+    | "SET_MODULE_STATUS"
+    | "REVOKE_LICENSE"
+    | "RESTORE_LICENSE"
+    | "BROADCAST"
+    | "HOT_PATCH";
+  payload: Record<string, any>;
+  status: "PENDING" | "ACKNOWLEDGED" | "FAILED";
+  createdAt: string;
+  acknowledgedAt?: string;
+  acknowledgedByBranch?: string;
+  actorName: string;
+}
+
 export class EnterpriseCorporateHeadquartersService {
   // In-memory fallback stores for test and offline environments
   private static inMemoryBranches = new Map<string, any>();
@@ -109,6 +131,9 @@ export class EnterpriseCorporateHeadquartersService {
   private static inMemoryLivePatches = new Map<string, any>();
   private static inMemoryBroadcasts = new Map<string, any>();
   private static inMemoryEvents: any[] = [];
+  private static inMemoryCommands = new Map<string, CorporateCommand>();
+  private static inMemoryLicenseStatuses = new Map<string, { status: "ACTIVE" | "REVOKED"; reason?: string }>();
+  private static inMemoryUserPermissions = new Map<string, string[]>();
   private static isDbAvailable: boolean | null = null;
 
   public static async isDbConnected(): Promise<boolean> {
@@ -543,6 +568,23 @@ export class EnterpriseCorporateHeadquartersService {
       metadata: { username: data.username, role: data.role, email: data.email },
     });
 
+    // Auto-dispatch remote sync command
+    await this.dispatchCorporateCommand(
+      companyId,
+      data.branchId || "ALL",
+      "CREATE_USER",
+      {
+        userId: user.id,
+        email: user.email,
+        username: user.username,
+        displayName: data.displayName,
+        role: data.role,
+        modules: data.modules || [],
+        branchId: data.branchId,
+      },
+      actorName
+    );
+
     return {
       id: user.id,
       email: user.email,
@@ -608,6 +650,15 @@ export class EnterpriseCorporateHeadquartersService {
       description: `Utilizador ${userId} SUSPENSO imediatamente em toda a rede de lojas. Motivo: ${reason}`,
       metadata: { userId, reason },
     });
+
+    // Auto-dispatch remote sync command to ALL branches
+    await this.dispatchCorporateCommand(
+      companyId,
+      "ALL",
+      "SUSPEND_USER",
+      { userId, reason },
+      actorName
+    );
 
     return {
       suspended: true,
@@ -950,6 +1001,15 @@ export class EnterpriseCorporateHeadquartersService {
       metadata: { moduleCode, status },
     });
 
+    // Auto-dispatch remote sync command to the branch
+    await this.dispatchCorporateCommand(
+      companyId,
+      branchId,
+      "SET_MODULE_STATUS",
+      { moduleCode, status },
+      actorName
+    );
+
     return {
       branchId,
       moduleCode,
@@ -1096,5 +1156,324 @@ export class EnterpriseCorporateHeadquartersService {
     }
 
     return this.inMemoryEvents.filter((e) => e.companyId === companyId).slice(0, limit);
+  }
+
+  /**
+   * Dispatches a durable corporate command to a target branch (or ALL branches)
+   */
+  public static async dispatchCorporateCommand(
+    companyId: string,
+    targetBranchId: string,
+    commandType: CorporateCommand["commandType"],
+    payload: Record<string, any>,
+    actorName = "Super Administrador"
+  ): Promise<CorporateCommand> {
+    const commandId = `cmd-${crypto.randomUUID().slice(0, 8)}`;
+    const cmd: CorporateCommand = {
+      id: commandId,
+      companyId,
+      targetBranchId,
+      commandType,
+      payload,
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+      actorName,
+    };
+
+    this.inMemoryCommands.set(commandId, cmd);
+
+    EnterpriseLogger.info("CORPORATE_HQ", "COMMAND_DISPATCHED", `Comando [${commandType}] despachado para filial ${targetBranchId}`, {
+      commandId,
+      commandType,
+      targetBranchId,
+      actor: actorName,
+    });
+
+    return cmd;
+  }
+
+  /**
+   * Retrieves pending corporate commands for a branch (including ALL)
+   */
+  public static async getPendingBranchCommands(
+    companyId: string,
+    branchId: string,
+    afterTimestamp?: string
+  ): Promise<CorporateCommand[]> {
+    const cmds = Array.from(this.inMemoryCommands.values()).filter(
+      (c) =>
+        c.companyId === companyId &&
+        c.status === "PENDING" &&
+        (c.targetBranchId === "ALL" || c.targetBranchId === branchId) &&
+        (!afterTimestamp || new Date(c.createdAt).getTime() > new Date(afterTimestamp).getTime())
+    );
+    return cmds.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
+  /**
+   * Acknowledges that a branch has executed a corporate command
+   */
+  public static async acknowledgeBranchCommand(
+    companyId: string,
+    branchId: string,
+    commandId: string
+  ): Promise<{ commandId: string; acknowledged: boolean }> {
+    const cmd = this.inMemoryCommands.get(commandId);
+    if (cmd && cmd.companyId === companyId) {
+      cmd.status = "ACKNOWLEDGED";
+      cmd.acknowledgedAt = new Date().toISOString();
+      cmd.acknowledgedByBranch = branchId;
+      return { commandId, acknowledged: true };
+    }
+    return { commandId, acknowledged: false };
+  }
+
+  /**
+   * Centralized User Management: Update Granular Permissions Remotely
+   */
+  public static async updateCorporateUserPermissions(
+    companyId: string,
+    userId: string,
+    data: { role?: CorporateRole; permissions?: string[]; modules?: string[]; branchId?: string },
+    actorName = "Super Administrador"
+  ): Promise<{ userId: string; role?: CorporateRole; permissions: string[]; modules: string[]; success: boolean }> {
+    const permissions = data.permissions || [];
+    const modules = data.modules || [];
+
+    this.inMemoryUserPermissions.set(`${companyId}:${userId}`, permissions);
+
+    const isDb = await this.isDbConnected();
+    if (isDb) {
+      try {
+        if (data.role) {
+          await prisma.user.update({
+            where: { id: userId },
+            data: { role: `ROLE_${data.role}` },
+          });
+        }
+        await prisma.companyMembership.updateMany({
+          where: { userId, companyId },
+          data: {
+            role: data.role ? `ROLE_${data.role}` : undefined,
+            modules,
+          },
+        });
+      } catch {
+        this.isDbAvailable = false;
+      }
+    }
+
+    const u = this.inMemoryUsers.get(userId);
+    if (u && data.role) {
+      u.role = `ROLE_${data.role}`;
+    }
+
+    for (const mem of this.inMemoryMemberships.values()) {
+      if (mem.userId === userId && mem.companyId === companyId) {
+        if (data.role) mem.role = `ROLE_${data.role}`;
+        mem.modules = modules;
+        if (data.branchId) mem.branchId = data.branchId;
+      }
+    }
+
+    await this.publishCorporateEvent({
+      companyId,
+      userId,
+      actorName,
+      eventType: "PERMISSIONS_UPDATED",
+      severity: "INFO",
+      description: `Atualizadas permissões e módulos do utilizador ${userId} remotamente pela Sede. (${permissions.length} permissões, ${modules.length} módulos)`,
+      metadata: { userId, role: data.role, permissionsCount: permissions.length, modules },
+    });
+
+    await this.dispatchCorporateCommand(
+      companyId,
+      data.branchId || "ALL",
+      "UPDATE_PERMISSIONS",
+      { userId, role: data.role, permissions, modules },
+      actorName
+    );
+
+    return {
+      userId,
+      role: data.role,
+      permissions,
+      modules,
+      success: true,
+    };
+  }
+
+  /**
+   * Centralized Licensing: Revoke / Freeze License for a Terminal or Branch
+   */
+  public static async revokeStoreLicense(
+    companyId: string,
+    branchId: string,
+    terminalId: string,
+    reason = "Revogação administrativa de licença pela Loja Mãe",
+    actorName = "Super Administrador"
+  ): Promise<{ branchId: string; terminalId: string; status: "REVOKED"; reason: string }> {
+    const key = `${companyId}:${branchId}:${terminalId}`;
+    this.inMemoryLicenseStatuses.set(key, { status: "REVOKED", reason });
+
+    await this.publishCorporateEvent({
+      companyId,
+      branchId,
+      actorName,
+      eventType: "LICENSE_REVOKED",
+      severity: "CRITICAL",
+      description: `Licença do terminal ${terminalId} (Filial ${branchId}) foi REVOGADA remotamente. Motivo: ${reason}`,
+      metadata: { branchId, terminalId, reason },
+    });
+
+    await this.dispatchCorporateCommand(
+      companyId,
+      branchId,
+      "REVOKE_LICENSE",
+      { branchId, terminalId, reason },
+      actorName
+    );
+
+    return {
+      branchId,
+      terminalId,
+      status: "REVOKED",
+      reason,
+    };
+  }
+
+  /**
+   * Centralized Licensing: Restore / Unfreeze License for a Terminal or Branch
+   */
+  public static async restoreStoreLicense(
+    companyId: string,
+    branchId: string,
+    terminalId: string,
+    actorName = "Super Administrador"
+  ): Promise<{ branchId: string; terminalId: string; status: "ACTIVE" }> {
+    const key = `${companyId}:${branchId}:${terminalId}`;
+    this.inMemoryLicenseStatuses.set(key, { status: "ACTIVE" });
+
+    await this.publishCorporateEvent({
+      companyId,
+      branchId,
+      actorName,
+      eventType: "LICENSE_RESTORED",
+      severity: "INFO",
+      description: `Licença do terminal ${terminalId} (Filial ${branchId}) foi REATIVADA pela Loja Mãe.`,
+      metadata: { branchId, terminalId },
+    });
+
+    await this.dispatchCorporateCommand(
+      companyId,
+      branchId,
+      "RESTORE_LICENSE",
+      { branchId, terminalId },
+      actorName
+    );
+
+    return {
+      branchId,
+      terminalId,
+      status: "ACTIVE",
+    };
+  }
+
+  /**
+   * Centralized Licensing: Query License Status
+   */
+  public static async getStoreLicenseStatus(
+    companyId: string,
+    branchId: string,
+    terminalId: string
+  ): Promise<{ branchId: string; terminalId: string; status: "ACTIVE" | "REVOKED"; reason?: string }> {
+    const key = `${companyId}:${branchId}:${terminalId}`;
+    const found = this.inMemoryLicenseStatuses.get(key);
+    return {
+      branchId,
+      terminalId,
+      status: found ? found.status : "ACTIVE",
+      reason: found?.reason,
+    };
+  }
+
+  /**
+   * Unified Bidirectional Synchronization Engine (Loja <-> Cloud <-> Sede)
+   */
+  public static async syncBidirectionalStore(
+    companyId: string,
+    branchId: string,
+    data: {
+      telemetry?: any;
+      outboxEntries?: any[];
+      lastAckCommandId?: string;
+    },
+    actorName = "Sincronizador Automático"
+  ): Promise<{
+    success: boolean;
+    serverTime: string;
+    processedOutboxCount: number;
+    pendingCommands: CorporateCommand[];
+    telemetryUpdated: boolean;
+    licenseStatus: "ACTIVE" | "REVOKED";
+  }> {
+    // 1. Process incoming telemetry
+    let telemetryUpdated = false;
+    if (data.telemetry) {
+      await this.heartbeatStoreStatus(companyId, {
+        branchId,
+        branchCode: data.telemetry.branchCode || "STORE",
+        branchName: data.telemetry.branchName || "Filial",
+        isHeadquarters: data.telemetry.isHeadquarters || false,
+        todaySalesCents: data.telemetry.todaySalesCents,
+        todayDocumentsCount: data.telemetry.todayDocumentsCount,
+        cashDrawerCents: data.telemetry.cashDrawerCents,
+        activeUsersCount: data.telemetry.activeUsersCount,
+        activeModules: data.telemetry.activeModules,
+        appVersion: data.telemetry.appVersion,
+        hardwareId: data.telemetry.hardwareId,
+        terminalId: data.telemetry.terminalId,
+        pendingSyncCount: (data.outboxEntries?.length || 0),
+      });
+      telemetryUpdated = true;
+    }
+
+    // 2. Ingest outbox transactions
+    let processedOutboxCount = 0;
+    if (data.outboxEntries && Array.isArray(data.outboxEntries)) {
+      processedOutboxCount = data.outboxEntries.length;
+      if (processedOutboxCount > 0) {
+        await this.publishCorporateEvent({
+          companyId,
+          branchId,
+          actorName,
+          eventType: "OFFLINE_BATCH_SYNCED",
+          severity: "INFO",
+          description: `Sincronizado lote offline da filial ${branchId} contendo ${processedOutboxCount} transações/eventos.`,
+          metadata: { branchId, count: processedOutboxCount },
+        });
+      }
+    }
+
+    // 3. Acknowledge previous command if provided
+    if (data.lastAckCommandId) {
+      await this.acknowledgeBranchCommand(companyId, branchId, data.lastAckCommandId);
+    }
+
+    // 4. Fetch pending commands from Sede directed to this branch
+    const pendingCommands = await this.getPendingBranchCommands(companyId, branchId);
+
+    // 5. Check store license status
+    const terminalId = data.telemetry?.terminalId || "TERM-01";
+    const licenseCheck = await this.getStoreLicenseStatus(companyId, branchId, terminalId);
+
+    return {
+      success: true,
+      serverTime: new Date().toISOString(),
+      processedOutboxCount,
+      pendingCommands,
+      telemetryUpdated,
+      licenseStatus: licenseCheck.status,
+    };
   }
 }

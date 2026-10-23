@@ -275,3 +275,174 @@ test("Corporate Headquarters: Internal Broadcast and Event Stream Audit Trail", 
   const broadcastEvent = events.find((e) => e.eventType === "BROADCAST_SENT");
   assert.ok(broadcastEvent, "O evento BROADCAST_SENT deve ser auditado no stream");
 });
+
+test("Corporate Headquarters: Remote User Permissions Update and Command Dispatch", async () => {
+  const companyId = `comp-corp-perm-${Date.now()}`;
+  const hq = await EnterpriseCorporateHeadquartersService.registerOrUpdateStore(companyId, {
+    code: "HQ-PERM",
+    name: "Sede Permissões",
+    isHeadquarters: true,
+  });
+
+  // Create user
+  const user = await EnterpriseCorporateHeadquartersService.createCorporateUser(
+    companyId,
+    {
+      email: `op-${Date.now()}@vendaja.ao`,
+      username: `op_perm_${Date.now()}`,
+      displayName: "Operador de Caixa Talatona",
+      role: "CASHIER",
+      branchId: hq.id,
+    },
+    "Super Administrador"
+  );
+
+  // Update permissions remotely
+  const updateRes = await EnterpriseCorporateHeadquartersService.updateCorporateUserPermissions(
+    companyId,
+    user.id,
+    {
+      role: "SUPERVISOR",
+      permissions: ["Sales.Create", "Sales.Void", "Inventory.View"],
+      modules: ["POS", "STOCK", "BIOMETRICS"],
+      branchId: hq.id,
+    },
+    "Super Administrador"
+  );
+
+  assert.equal(updateRes.success, true);
+  assert.equal(updateRes.role, "SUPERVISOR");
+  assert.deepEqual(updateRes.modules, ["POS", "STOCK", "BIOMETRICS"]);
+
+  // Verify command was queued for branch
+  const pendingCommands = await EnterpriseCorporateHeadquartersService.getPendingBranchCommands(
+    companyId,
+    hq.id
+  );
+  const permCmd = pendingCommands.find(
+    (c) => c.commandType === "UPDATE_PERMISSIONS" && c.payload.userId === user.id
+  );
+  assert.ok(permCmd, "Comando UPDATE_PERMISSIONS deve estar pendente na fila para a filial");
+  assert.equal(permCmd.payload.role, "SUPERVISOR");
+});
+
+test("Corporate Headquarters: Remote License Revocation and Restoration", async () => {
+  const companyId = `comp-corp-lic-${Date.now()}`;
+  const branchId = `BRANCH-${Date.now()}`;
+  const terminalId = `TERM-${Date.now()}`;
+
+  // Initially active
+  const initialStatus = await EnterpriseCorporateHeadquartersService.getStoreLicenseStatus(
+    companyId,
+    branchId,
+    terminalId
+  );
+  assert.equal(initialStatus.status, "ACTIVE");
+
+  // Revoke license remotely
+  const revokeRes = await EnterpriseCorporateHeadquartersService.revokeStoreLicense(
+    companyId,
+    branchId,
+    terminalId,
+    "Inadimplência de mensalidade e auditoria fiscal irregular",
+    "Diretor de Operações"
+  );
+  assert.equal(revokeRes.status, "REVOKED");
+  assert.equal(revokeRes.terminalId, terminalId);
+
+  // Check status
+  const revokedStatus = await EnterpriseCorporateHeadquartersService.getStoreLicenseStatus(
+    companyId,
+    branchId,
+    terminalId
+  );
+  assert.equal(revokedStatus.status, "REVOKED");
+  assert.ok(revokedStatus.reason?.includes("Inadimplência"));
+
+  // Restore license remotely
+  const restoreRes = await EnterpriseCorporateHeadquartersService.restoreStoreLicense(
+    companyId,
+    branchId,
+    terminalId,
+    "Diretor de Operações"
+  );
+  assert.equal(restoreRes.status, "ACTIVE");
+
+  const restoredStatus = await EnterpriseCorporateHeadquartersService.getStoreLicenseStatus(
+    companyId,
+    branchId,
+    terminalId
+  );
+  assert.equal(restoredStatus.status, "ACTIVE");
+});
+
+test("Corporate Headquarters: Bidirectional Synchronization (Loja <-> Cloud <-> Sede)", async () => {
+  const companyId = `comp-corp-sync-${Date.now()}`;
+  const terminalId = `TERM-SYNC-${Date.now()}`;
+  const branchId = `branch-sync-${Date.now()}`;
+
+  // Sede dispatches a corporate broadcast command
+  await EnterpriseCorporateHeadquartersService.dispatchCorporateCommand(
+    companyId,
+    branchId,
+    "BROADCAST",
+    { message: "Fecho do sistema para manutenção preventiva às 22h." },
+    "Sede Central"
+  );
+
+  // Filial syncs with Cloud Hub (sending telemetry + offline outbox items)
+  const syncResult = await EnterpriseCorporateHeadquartersService.syncBidirectionalStore(
+    companyId,
+    branchId,
+    {
+      telemetry: {
+        branchCode: "FILIAL-01",
+        branchName: "Filial Talatona",
+        terminalId,
+        todaySalesCents: 12500000,
+        todayDocumentsCount: 45,
+        cashDrawerCents: 3200000,
+        activeUsersCount: 3,
+      },
+      outboxEntries: [
+        {
+          id: `outbox-${Date.now()}-1`,
+          type: "SALE_DOCUMENT",
+          payload: { invoiceNo: "FT 2026/001", totalCents: 45000 },
+          queuedAt: new Date().toISOString(),
+        },
+        {
+          id: `outbox-${Date.now()}-2`,
+          type: "DRAWER_MOVEMENT",
+          payload: { type: "CASH_IN", amountCents: 10000 },
+          queuedAt: new Date().toISOString(),
+        },
+      ],
+    }
+  );
+
+  assert.equal(syncResult.success, true);
+  assert.equal(syncResult.processedOutboxCount, 2);
+  assert.equal(syncResult.licenseStatus, "ACTIVE");
+  assert.ok(Array.isArray(syncResult.pendingCommands));
+  assert.ok(syncResult.pendingCommands.length >= 1);
+
+  const broadcastCmd = syncResult.pendingCommands.find((c) => c.commandType === "BROADCAST");
+  assert.ok(broadcastCmd, "Comando pendente deve ser entregue durante a sincronização bidirecional");
+
+  // Filial acknowledges receipt/execution of command
+  const ackRes = await EnterpriseCorporateHeadquartersService.acknowledgeBranchCommand(
+    companyId,
+    branchId,
+    broadcastCmd.id
+  );
+  assert.equal(ackRes.acknowledged, true);
+
+  // Subsequent check reveals command is no longer pending
+  const remainingPending = await EnterpriseCorporateHeadquartersService.getPendingBranchCommands(
+    companyId,
+    branchId
+  );
+  const stillPending = remainingPending.find((c) => c.id === broadcastCmd.id);
+  assert.equal(stillPending, undefined, "Comando confirmado não deve mais constar como pendente");
+});

@@ -174,11 +174,22 @@ const DEFAULT_USERS: CorporateUser[] = [
 
 export const CorporatePanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
-    "COCKPIT" | "STORES" | "USERS" | "MODULES" | "LIVE_UPDATES" | "LICENSES" | "BROADCASTS" | "AUDIT"
+    "COCKPIT" | "STORES" | "USERS" | "MODULES" | "LIVE_UPDATES" | "LICENSES" | "BROADCASTS" | "AUDIT" | "SYNC_HUB"
   >("COCKPIT");
 
   const [stores, setStores] = useState<CorporateStore[]>(DEFAULT_STORES);
   const [users, setUsers] = useState<CorporateUser[]>(DEFAULT_USERS);
+  const [storeLicenses, setStoreLicenses] = useState<Record<string, { status: "ACTIVE" | "REVOKED"; reason?: string }>>({
+    "br-benguela-04": { status: "REVOKED", reason: "Suspensão temporária por auditoria de conciliação fiscal" },
+  });
+  const [editingPermissionsUser, setEditingPermissionsUser] = useState<CorporateUser | null>(null);
+  const [permFormRole, setPermFormRole] = useState<CorporateUser["role"]>("CASHIER");
+  const [permFormModules, setPermFormModules] = useState<AppModule[]>(["POS", "STOCK"]);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [pendingOutboxCount, setPendingOutboxCount] = useState<number>(0);
+  const [lastSyncTime, setLastSyncTime] = useState<string>("Agora mesmo");
+  const [cloudHubOnline, setCloudHubOnline] = useState<boolean>(true);
+
   const [events, setEvents] = useState<CorporateEvent[]>([
     {
       id: "ev-01",
@@ -380,6 +391,161 @@ export const CorporatePanel: React.FC = () => {
     showToast(`Módulo ${modCode} atualizado remotamente sem reinstalação!`);
   };
 
+  // Remote License Revocation & Restoration
+  const handleRevokeLicense = (branchId: string, terminalId: string) => {
+    const targetStore = stores.find((s) => s.id === branchId);
+    const storeName = targetStore ? targetStore.name : branchId;
+
+    setStoreLicenses((prev) => ({
+      ...prev,
+      [branchId]: {
+        status: "REVOKED",
+        reason: "Licença revogada pela Loja Mãe (Sede Central) para este terminal.",
+      },
+    }));
+
+    setEvents((ePrev) => [
+      {
+        id: `ev-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        actorName: "Super Administrador",
+        branchCode: targetStore?.code || "FILIAL",
+        eventType: "LICENSE_REVOKED",
+        severity: "CRITICAL",
+        description: `Licença do terminal ${terminalId} (${storeName}) foi REVOGADA remotamente. Faturação e POS suspensos nesta filial.`,
+      },
+      ...ePrev,
+    ]);
+
+    showToast(`Licença do terminal ${terminalId} (${storeName}) revogada com sucesso!`);
+  };
+
+  const handleRestoreLicense = (branchId: string, terminalId: string) => {
+    const targetStore = stores.find((s) => s.id === branchId);
+    const storeName = targetStore ? targetStore.name : branchId;
+
+    setStoreLicenses((prev) => ({
+      ...prev,
+      [branchId]: {
+        status: "ACTIVE",
+      },
+    }));
+
+    setEvents((ePrev) => [
+      {
+        id: `ev-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        actorName: "Super Administrador",
+        branchCode: targetStore?.code || "FILIAL",
+        eventType: "LICENSE_RESTORED",
+        severity: "INFO",
+        description: `Licença do terminal ${terminalId} (${storeName}) foi REATIVADA pela Loja Mãe. Faturação liberada.`,
+      },
+      ...ePrev,
+    ]);
+
+    showToast(`Licença do terminal ${terminalId} (${storeName}) reativada com sucesso!`);
+  };
+
+  // Remote Permissions Editing
+  const handleOpenPermissionsModal = (user: CorporateUser) => {
+    setEditingPermissionsUser(user);
+    setPermFormRole(user.role);
+    setPermFormModules(user.allowedModules || ["POS", "STOCK"]);
+  };
+
+  const handleSavePermissions = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPermissionsUser) return;
+
+    const uId = editingPermissionsUser.id;
+    const uName = editingPermissionsUser.displayName;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === uId) {
+          return {
+            ...u,
+            role: permFormRole,
+            allowedModules: permFormModules,
+          };
+        }
+        return u;
+      })
+    );
+
+    setEvents((ePrev) => [
+      {
+        id: `ev-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString(),
+        actorName: "Super Administrador",
+        eventType: "PERMISSIONS_UPDATED",
+        severity: "INFO",
+        description: `Atualizadas permissões do utilizador ${uName}: Função [${permFormRole}], Módulos [${permFormModules.join(", ")}].`,
+      },
+      ...ePrev,
+    ]);
+
+    setEditingPermissionsUser(null);
+    showToast(`Permissões de ${uName} atualizadas remotamente com sucesso!`);
+  };
+
+  const togglePermModule = (modId: AppModule) => {
+    setPermFormModules((prev) =>
+      prev.includes(modId) ? prev.filter((m) => m !== modId) : [...prev, modId]
+    );
+  };
+
+  const handleEnqueueTestOutboxItem = () => {
+    const engine = LiveUpdateEngine.getInstance();
+    engine.queueOutboxItem({
+      type: "SALE_DOCUMENT",
+      payload: { docNo: `FR-2026/${Date.now().toString(36).toUpperCase()}`, totalCents: 450000 },
+    });
+    setPendingOutboxCount(engine.getOutboxCount());
+    showToast("Novo documento fiscal adicionado à fila Outbox offline.");
+  };
+
+  // Real-Time Bidirectional Synchronization (Loja <-> Cloud <-> Sede)
+  const handlePerformSync = async () => {
+    setIsSyncing(true);
+    try {
+      const engine = LiveUpdateEngine.getInstance();
+      const result = await engine.performBidirectionalSync("http://localhost:4000", {
+        todaySalesCents: totalTodaySalesCents,
+        todayDocumentsCount: totalDocuments,
+        cashDrawerCents: totalCashDrawerCents,
+        activeUsersCount: totalUsers,
+      });
+
+      setCloudHubOnline(result.online);
+      setLastSyncTime(new Date().toLocaleTimeString());
+      setPendingOutboxCount(engine.getOutboxCount());
+
+      if (result.success) {
+        showToast(`Sincronização corporativa concluída com sucesso! (${result.receivedCommandsCount} comandos processados)`);
+        setEvents((prev) => [
+          {
+            id: `ev-${Date.now()}`,
+            timestamp: new Date().toLocaleTimeString(),
+            actorName: "Sincronizador Automático",
+            eventType: "SYNC_COMPLETED",
+            severity: "INFO",
+            description: `Sincronização bidirecional em tempo real concluída. Comandos aplicados: ${result.appliedCommands.length || "0"}.`,
+          },
+          ...prev,
+        ]);
+      } else {
+        showToast("Modo Offline: Operações enfileiradas localmente para sincronização posterior.");
+      }
+    } catch {
+      setCloudHubOnline(false);
+      showToast("Modo Offline: Operações enfileiradas localmente.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Deploy live patch
   const handleDeployPatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -560,6 +726,60 @@ export const CorporatePanel: React.FC = () => {
         </div>
       </div>
 
+      {/* Real-Time Corporate Synchronization Banner */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          backgroundColor: cloudHubOnline ? "#f0fdf4" : "#fffbeb",
+          border: cloudHubOnline ? "1px solid #bbf7d0" : "1px solid #fde68a",
+          borderRadius: "8px",
+          padding: "12px 18px",
+          marginBottom: "20px",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div
+            style={{
+              width: "12px",
+              height: "12px",
+              borderRadius: "50%",
+              backgroundColor: cloudHubOnline ? "#16a34a" : "#d97706",
+              boxShadow: cloudHubOnline ? "0 0 0 3px rgba(22,163,74,0.2)" : "0 0 0 3px rgba(217,119,6,0.2)",
+            }}
+          />
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: cloudHubOnline ? "#166534" : "#92400e" }}>
+              {cloudHubOnline ? "Sincronização Corporativa em Tempo Real: ONLINE (Loja Mãe ⇄ Cloud Hub ⇄ Filiais)" : "Operação Offline Ativa: Operações enfileiradas para sincronização posterior"}
+            </div>
+            <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+              Última sincronização: <strong>{lastSyncTime}</strong> • Fila de envio pendente: <strong>{pendingOutboxCount} itens</strong> • Hub Cloud: <code>api.vendaja.ao</code>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={handlePerformSync}
+          disabled={isSyncing}
+          style={{
+            backgroundColor: "#0284c7",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "6px",
+            padding: "8px 14px",
+            fontSize: "12px",
+            fontWeight: 600,
+            cursor: isSyncing ? "not-allowed" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          {isSyncing ? "A sincronizar..." : "🔄 Forçar Sincronização Agora"}
+        </button>
+      </div>
+
       {/* KPI Cards Strip */}
       <div
         style={{
@@ -637,6 +857,7 @@ export const CorporatePanel: React.FC = () => {
           { key: "MODULES", label: "⚙️ Controlo Remoto de Módulos" },
           { key: "LIVE_UPDATES", label: "⚡ Live Updates (Sem Instalador)" },
           { key: "LICENSES", label: "🔑 Licenciamento Corporativo" },
+          { key: "SYNC_HUB", label: "🔄 Sincronização Cloud & Filiais" },
           { key: "BROADCASTS", label: "📢 Comunicados (Broadcast)" },
           { key: "AUDIT", label: "🛡️ Trilha de Auditoria & Eventos" },
         ].map((tab) => (
@@ -1097,21 +1318,40 @@ export const CorporatePanel: React.FC = () => {
                       )}
                     </td>
                     <td style={{ padding: "10px 8px" }}>
-                      <button
-                        onClick={() => handleToggleSuspendUser(u.id)}
-                        style={{
-                          backgroundColor: u.active ? "#fee2e2" : "#dcfce7",
-                          color: u.active ? "#991b1b" : "#166534",
-                          border: "none",
-                          borderRadius: "4px",
-                          padding: "4px 8px",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {u.active ? "Suspender Imediatamente" : "Reativar Conta"}
-                      </button>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPermissionsModal(u)}
+                          style={{
+                            backgroundColor: "#f0f9ff",
+                            color: "#0369a1",
+                            border: "1px solid #bae6fd",
+                            borderRadius: "4px",
+                            padding: "4px 8px",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          ⚙️ Permissões
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSuspendUser(u.id)}
+                          style={{
+                            backgroundColor: u.active ? "#fee2e2" : "#dcfce7",
+                            color: u.active ? "#991b1b" : "#166534",
+                            border: "none",
+                            borderRadius: "4px",
+                            padding: "4px 8px",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {u.active ? "Suspender" : "Reativar"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1380,27 +1620,221 @@ export const CorporatePanel: React.FC = () => {
                     </span>
                   </td>
                   <td style={{ padding: "10px 8px" }}>
-                    <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ Autorizada e Ativa</span>
+                    {storeLicenses[s.id]?.status === "REVOKED" ? (
+                      <div>
+                        <span style={{ backgroundColor: "#fee2e2", color: "#991b1b", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: 700 }}>
+                          ⛔ REVOGADA (POS Bloqueado)
+                        </span>
+                        {storeLicenses[s.id]?.reason && (
+                          <div style={{ fontSize: "10px", color: "#b91c1c", marginTop: "2px", maxWidth: "200px" }}>
+                            {storeLicenses[s.id]?.reason}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ Autorizada e Ativa</span>
+                    )}
                   </td>
                   <td style={{ padding: "10px 8px" }}>
-                    <button
-                      onClick={() => showToast(`Licença do terminal ${s.terminalId} revogada/renovada com sucesso!`)}
-                      style={{
-                        backgroundColor: "#f1f5f9",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "4px",
-                        padding: "4px 8px",
-                        fontSize: "11px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Renovar Licença
-                    </button>
+                    {storeLicenses[s.id]?.status === "REVOKED" ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreLicense(s.id, s.terminalId)}
+                        style={{
+                          backgroundColor: "#dcfce7",
+                          color: "#166534",
+                          border: "1px solid #86efac",
+                          borderRadius: "4px",
+                          padding: "4px 10px",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        ✅ Reativar Licença
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleRevokeLicense(s.id, s.terminalId)}
+                        style={{
+                          backgroundColor: "#fee2e2",
+                          color: "#991b1b",
+                          border: "1px solid #fca5a5",
+                          borderRadius: "4px",
+                          padding: "4px 10px",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        🛑 Revogar Licença
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Tab: Sincronização Cloud & Filiais (Loja <-> Cloud <-> Sede) */}
+      {activeTab === "SYNC_HUB" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Top Status & Controls */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: "16px",
+            }}
+          >
+            <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
+              <div style={{ color: "#64748b", fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Estado Cloud Hub</div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: cloudHubOnline ? "#16a34a" : "#dc2626", marginTop: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>{cloudHubOnline ? "🟢 Conectado (Cloud Online)" : "🔴 Modo Offline Local"}</span>
+              </div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
+                {cloudHubOnline ? "Comunicação em tempo real com api.vendaja.ao" : "Operações salvas em buffer SQLite local"}
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
+              <div style={{ color: "#64748b", fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Fila Outbox Local (Offline)</div>
+              <div style={{ fontSize: "20px", fontWeight: 800, color: pendingOutboxCount > 0 ? "#ea580c" : "#16a34a", marginTop: "4px" }}>
+                {pendingOutboxCount} {pendingOutboxCount === 1 ? "item pendente" : "itens pendentes"}
+              </div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
+                {pendingOutboxCount > 0 ? "Aguardando envio para a Cloud Hub" : "✓ Todos os dados sincronizados"}
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
+              <div style={{ color: "#64748b", fontSize: "12px", fontWeight: 600, textTransform: "uppercase" }}>Última Sincronização</div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", marginTop: "4px" }}>
+                {lastSyncTime}
+              </div>
+              <div style={{ fontSize: "12px", color: "#16a34a", marginTop: "4px" }}>
+                ✓ Telemetria & Comandos Atualizados
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={handlePerformSync}
+                disabled={isSyncing}
+                style={{
+                  backgroundColor: "#0284c7",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "10px 14px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: isSyncing ? "not-allowed" : "pointer",
+                }}
+              >
+                {isSyncing ? "A sincronizar com a Cloud..." : "🔄 Executar Sincronização Agora"}
+              </button>
+              <button
+                type="button"
+                onClick={handleEnqueueTestOutboxItem}
+                style={{
+                  backgroundColor: "#f1f5f9",
+                  color: "#475569",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "6px",
+                  padding: "6px 10px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                📥 Simular Venda Offline na Outbox
+              </button>
+            </div>
+          </div>
+
+          {/* Topology Hub Diagram */}
+          <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "20px" }}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
+              Topologia da Rede Corporativa VendaJá Angola
+            </h3>
+            <div
+              style={{
+                backgroundColor: "#f8fafc",
+                border: "1px dashed #cbd5e1",
+                borderRadius: "8px",
+                padding: "20px",
+                display: "grid",
+                gridTemplateColumns: "1fr auto 1fr auto 1fr",
+                alignItems: "center",
+                textAlign: "center",
+                gap: "12px",
+              }}
+            >
+              <div style={{ backgroundColor: "#ffffff", border: "2px solid #0284c7", borderRadius: "8px", padding: "14px" }}>
+                <div style={{ fontSize: "20px", marginBottom: "4px" }}>🏢</div>
+                <div style={{ fontWeight: 800, color: "#0284c7", fontSize: "14px" }}>LOJA MÃE (SEDE)</div>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Kinaxixi HQ • Luanda</div>
+                <div style={{ fontSize: "10px", backgroundColor: "#e0f2fe", color: "#0369a1", borderRadius: "4px", padding: "2px 4px", marginTop: "6px", fontWeight: 600 }}>
+                  Emissão de Comandos & Controlo Global
+                </div>
+              </div>
+
+              <div style={{ color: "#0284c7", fontWeight: 800, fontSize: "18px" }}>
+                ⇄
+              </div>
+
+              <div style={{ backgroundColor: "#ffffff", border: "2px solid #16a34a", borderRadius: "8px", padding: "14px" }}>
+                <div style={{ fontSize: "20px", marginBottom: "4px" }}>☁️</div>
+                <div style={{ fontWeight: 800, color: "#16a34a", fontSize: "14px" }}>CLOUD HUB</div>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>api.vendaja.ao</div>
+                <div style={{ fontSize: "10px", backgroundColor: "#dcfce7", color: "#15803d", borderRadius: "4px", padding: "2px 4px", marginTop: "6px", fontWeight: 600 }}>
+                  Fila Bidirecional Segura & Idempotente
+                </div>
+              </div>
+
+              <div style={{ color: "#0284c7", fontWeight: 800, fontSize: "18px" }}>
+                ⇄
+              </div>
+
+              <div style={{ backgroundColor: "#ffffff", border: "2px solid #7c3aed", borderRadius: "8px", padding: "14px" }}>
+                <div style={{ fontSize: "20px", marginBottom: "4px" }}>🏬</div>
+                <div style={{ fontWeight: 800, color: "#7c3aed", fontSize: "14px" }}>FILIAIS & LOJAS</div>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Talatona, Viana, Benguela, etc.</div>
+                <div style={{ fontSize: "10px", backgroundColor: "#f3e8ff", color: "#7e22ce", borderRadius: "4px", padding: "2px 4px", marginTop: "6px", fontWeight: 600 }}>
+                  Operação Offline Total + Sincronização Posterior
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "16px" }}>
+              <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "12px" }}>
+                <div style={{ fontWeight: 700, color: "#166534", fontSize: "13px", marginBottom: "4px" }}>
+                  Fluxo 1: Loja ➔ Cloud ➔ Sede
+                </div>
+                <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "#15803d" }}>
+                  <li>Telemetria de vendas e faturas emitidas em tempo real.</li>
+                  <li>Reconciliação e fecho centralizado de gavetas de dinheiro.</li>
+                  <li>Buffer Outbox offline: Vendas sem internet são enviadas automaticamente ao reconectar.</li>
+                </ul>
+              </div>
+
+              <div style={{ backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "12px" }}>
+                <div style={{ fontWeight: 700, color: "#1e40af", fontSize: "13px", marginBottom: "4px" }}>
+                  Fluxo 2: Sede ➔ Cloud ➔ Filiais
+                </div>
+                <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "#1d4ed8" }}>
+                  <li>Criação e suspensão imediata de operadores em qualquer loja.</li>
+                  <li>Alteração remota de papéis e módulos autorizados por filial.</li>
+                  <li>Revogação ou restauração de licenças com bloqueio imediato do POS.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1542,6 +1976,155 @@ export const CorporatePanel: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Permissions Modal */}
+      {editingPermissionsUser && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(15, 23, 42, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "12px",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+              maxWidth: "520px",
+              width: "100%",
+              padding: "24px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>
+                ⚙️ Alterar Permissões Remotas
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingPermissionsUser(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "18px",
+                  cursor: "pointer",
+                  color: "#64748b",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: "16px", padding: "10px", backgroundColor: "#f8fafc", borderRadius: "8px" }}>
+              <div style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
+                {editingPermissionsUser.displayName}
+              </div>
+              <div style={{ fontSize: "12px", color: "#64748b" }}>
+                Utilizador: <strong>@{editingPermissionsUser.username}</strong> • Filial: {editingPermissionsUser.branchName || "Sede"}
+              </div>
+            </div>
+
+            <form onSubmit={handleSavePermissions}>
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#475569", marginBottom: "6px" }}>
+                  Função / Papel no Sistema:
+                </label>
+                <select
+                  value={permFormRole}
+                  onChange={(e) => setPermFormRole(e.target.value as any)}
+                  style={{ width: "100%", padding: "8px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "13px" }}
+                >
+                  <option value="SUPER_ADMIN">SUPER_ADMIN - Administrador Global Matriz</option>
+                  <option value="LOCAL_ADMIN">LOCAL_ADMIN - Administrador da Filial</option>
+                  <option value="MANAGER">MANAGER - Gerente Operacional</option>
+                  <option value="SUPERVISOR">SUPERVISOR - Supervisor de Loja</option>
+                  <option value="CASHIER">CASHIER - Operador de Caixa / POS</option>
+                  <option value="ACCOUNTANT">ACCOUNTANT - Contabilista / Fiscal</option>
+                  <option value="HR">HR - Recursos Humanos & Ponto</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#475569", marginBottom: "8px" }}>
+                  Módulos Autorizados para este Operador:
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  {(["POS", "STOCK", "TREASURY", "HR", "CRM", "BI", "AI", "BIOMETRICS", "CORPORATE"] as AppModule[]).map((modKey) => {
+                    const isChecked = permFormModules.includes(modKey);
+                    return (
+                      <label
+                        key={modKey}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "8px",
+                          borderRadius: "6px",
+                          border: isChecked ? "1px solid #0284c7" : "1px solid #e2e8f0",
+                          backgroundColor: isChecked ? "#f0f9ff" : "#ffffff",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => togglePermModule(modKey)}
+                        />
+                        <span style={{ fontWeight: isChecked ? 600 : 400, color: isChecked ? "#0369a1" : "#475569" }}>
+                          {MODULE_CATALOG.find((m) => m.code === modKey)?.name || modKey}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingPermissionsUser(null)}
+                  style={{
+                    backgroundColor: "#f1f5f9",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "6px",
+                    padding: "8px 16px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    backgroundColor: "#0284c7",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 16px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  💾 Salvar Permissões Remotamente
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

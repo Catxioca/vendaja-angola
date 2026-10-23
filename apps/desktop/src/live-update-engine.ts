@@ -65,12 +65,18 @@ export class LiveUpdateEngine {
   private appliedPatches: Map<string, LivePatchPayload> = new Map();
   private dynamicModules: Set<AppModule> = new Set();
   private broadcasts: BroadcastNotification[] = [];
+  private outboxQueue: any[] = [];
+  private licenseStatus: "ACTIVE" | "REVOKED" = "ACTIVE";
+  private licenseRevokedReason?: string;
+  private isOnlineStatus: boolean = true;
+  private lastSyncTimestamp?: string;
   private listeners: Array<() => void> = [];
 
   private heartbeatInterval: any = null;
 
   private constructor() {
     this.loadPersistedPatches();
+    this.loadPersistedState();
   }
 
   public static getInstance(): LiveUpdateEngine {
@@ -339,6 +345,234 @@ export class LiveUpdateEngine {
     try {
       const list = Array.from(this.appliedPatches.values());
       window.localStorage.setItem("vendaja:applied_patches", JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+  }
+
+  // --- License Management ---
+  public getLicenseStatus(): { status: "ACTIVE" | "REVOKED"; reason?: string } {
+    return { status: this.licenseStatus, reason: this.licenseRevokedReason };
+  }
+
+  public isLicenseActive(): boolean {
+    return this.licenseStatus === "ACTIVE";
+  }
+
+  public setLicenseStatus(status: "ACTIVE" | "REVOKED", reason?: string): void {
+    this.licenseStatus = status;
+    this.licenseRevokedReason = reason;
+    this.persistState();
+    this.notifyListeners();
+  }
+
+  // --- Offline Outbox Management ---
+  public queueOutboxItem(entry: any): void {
+    this.outboxQueue.push({
+      ...entry,
+      queuedAt: new Date().toISOString(),
+      id: entry.id || `outbox-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    });
+    this.persistState();
+    this.notifyListeners();
+  }
+
+  public getOutboxCount(): number {
+    return this.outboxQueue.length;
+  }
+
+  public getOutboxItems(): any[] {
+    return [...this.outboxQueue];
+  }
+
+  public getSyncState(): {
+    isOnline: boolean;
+    lastSyncTimestamp?: string;
+    pendingOutboxCount: number;
+    licenseStatus: "ACTIVE" | "REVOKED";
+  } {
+    return {
+      isOnline: this.isOnlineStatus,
+      lastSyncTimestamp: this.lastSyncTimestamp,
+      pendingOutboxCount: this.outboxQueue.length,
+      licenseStatus: this.licenseStatus,
+    };
+  }
+
+  /**
+   * Unified Bidirectional Synchronization:
+   * Loja -> Cloud -> Sede and Sede -> Cloud -> Lojas
+   */
+  public async performBidirectionalSync(
+    apiUrl = "http://localhost:4000",
+    metrics?: {
+      todaySalesCents?: number;
+      todayDocumentsCount?: number;
+      cashDrawerCents?: number;
+      activeUsersCount?: number;
+    }
+  ): Promise<{
+    success: boolean;
+    online: boolean;
+    syncedOutboxCount: number;
+    receivedCommandsCount: number;
+    appliedCommands: string[];
+    error?: string;
+  }> {
+    const telemetry = this.getTelemetryPayload({
+      ...metrics,
+      pendingSyncCount: this.outboxQueue.length,
+    });
+
+    const payload = {
+      branchId: this.branchId,
+      telemetry,
+      outboxEntries: this.outboxQueue,
+    };
+
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/corporate/sync/bidirectional`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-company-id": this.companyId,
+          "x-actor-name": `Terminal ${this.terminalId} (${this.branchName})`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Sync server responded with ${res.status}`);
+      }
+
+      const data = await res.json();
+      this.isOnlineStatus = true;
+      this.lastSyncTimestamp = new Date().toISOString();
+
+      // 1. Flush successfully synced outbox entries
+      const syncedOutboxCount = this.outboxQueue.length;
+      this.outboxQueue = [];
+
+      // 2. Check license status returned by Headquarters
+      if (data.licenseStatus) {
+        this.licenseStatus = data.licenseStatus;
+      }
+
+      // 3. Process commands dispatched by Headquarters
+      const appliedCommands: string[] = [];
+      const pendingCommands = data.pendingCommands || [];
+
+      for (const cmd of pendingCommands) {
+        try {
+          if (cmd.commandType === "REVOKE_LICENSE") {
+            this.licenseStatus = "REVOKED";
+            this.licenseRevokedReason = cmd.payload?.reason || "Revogado pela Sede";
+            appliedCommands.push(`REVOKE_LICENSE: ${this.licenseRevokedReason}`);
+          } else if (cmd.commandType === "RESTORE_LICENSE") {
+            this.licenseStatus = "ACTIVE";
+            this.licenseRevokedReason = undefined;
+            appliedCommands.push("RESTORE_LICENSE: Ativado");
+          } else if (cmd.commandType === "SET_MODULE_STATUS") {
+            const { moduleCode, status } = cmd.payload || {};
+            if (moduleCode) {
+              const canonical = moduleCode.toUpperCase() as AppModule;
+              if (status === "ACTIVATE") {
+                this.dynamicModules.add(canonical);
+              } else {
+                this.dynamicModules.delete(canonical);
+              }
+              appliedCommands.push(`SET_MODULE_STATUS: ${canonical} [${status}]`);
+            }
+          } else if (cmd.commandType === "HOT_PATCH") {
+            if (cmd.payload) {
+              await this.applyLivePatch(cmd.payload);
+              appliedCommands.push(`HOT_PATCH: ${cmd.payload.patchVersion}`);
+            }
+          } else if (cmd.commandType === "BROADCAST") {
+            if (cmd.payload) {
+              this.receiveBroadcast(cmd.payload);
+              appliedCommands.push(`BROADCAST: ${cmd.payload.title}`);
+            }
+          } else if (cmd.commandType === "SUSPEND_USER") {
+            appliedCommands.push(`SUSPEND_USER: ${cmd.payload?.userId}`);
+          } else if (cmd.commandType === "CREATE_USER") {
+            appliedCommands.push(`CREATE_USER: ${cmd.payload?.username}`);
+          } else if (cmd.commandType === "UPDATE_PERMISSIONS") {
+            appliedCommands.push(`UPDATE_PERMISSIONS: ${cmd.payload?.userId}`);
+          }
+
+          // Acknowledge command
+          fetch(`${apiUrl}/api/v1/corporate/commands/${cmd.id}/ack`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-company-id": this.companyId,
+            },
+            body: JSON.stringify({ branchId: this.branchId }),
+          }).catch(() => {});
+        } catch (cmdErr) {
+          console.error("Error executing corporate command:", cmdErr);
+        }
+      }
+
+      this.persistState();
+      this.notifyListeners();
+
+      return {
+        success: true,
+        online: true,
+        syncedOutboxCount,
+        receivedCommandsCount: pendingCommands.length,
+        appliedCommands,
+      };
+    } catch (err: any) {
+      // Offline fallback: keep outbox queued
+      this.isOnlineStatus = false;
+      this.notifyListeners();
+      return {
+        success: false,
+        online: false,
+        syncedOutboxCount: 0,
+        receivedCommandsCount: 0,
+        appliedCommands: [],
+        error: err.message || "Servidor corporativo inacessível (Modo Offline Ativo)",
+      };
+    }
+  }
+
+  private loadPersistedState(): void {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+      const rawLicense = window.localStorage.getItem("vendaja:corp:license_status");
+      if (rawLicense) {
+        const parsed = JSON.parse(rawLicense);
+        this.licenseStatus = parsed.status || "ACTIVE";
+        this.licenseRevokedReason = parsed.reason;
+      }
+      const rawOutbox = window.localStorage.getItem("vendaja:corp:outbox");
+      if (rawOutbox) {
+        this.outboxQueue = JSON.parse(rawOutbox);
+      }
+      const rawLastSync = window.localStorage.getItem("vendaja:corp:last_sync");
+      if (rawLastSync) {
+        this.lastSyncTimestamp = rawLastSync;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private persistState(): void {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+      window.localStorage.setItem(
+        "vendaja:corp:license_status",
+        JSON.stringify({ status: this.licenseStatus, reason: this.licenseRevokedReason })
+      );
+      window.localStorage.setItem("vendaja:corp:outbox", JSON.stringify(this.outboxQueue));
+      if (this.lastSyncTimestamp) {
+        window.localStorage.setItem("vendaja:corp:last_sync", this.lastSyncTimestamp);
+      }
     } catch {
       // ignore
     }

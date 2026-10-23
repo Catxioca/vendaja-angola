@@ -334,3 +334,199 @@ corporateHeadquartersRouter.get("/events", async (req: Request, res: Response): 
     res.status(500).json({ error: "Falha ao obter stream de eventos.", details: error.message });
   }
 });
+
+/**
+ * PUT /api/v1/corporate/users/:id/permissions
+ * Remote granular permission & modules update
+ */
+corporateHeadquartersRouter.put("/users/:id/permissions", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = getCompanyId(req);
+    const actorName = getActorName(req);
+    const userId = String(req.params.id);
+    const { role, permissions, modules, branchId } = req.body || {};
+
+    if (!userId) {
+      res.status(400).json({ error: "userId obrigatório." });
+      return;
+    }
+
+    const result = await EnterpriseCorporateHeadquartersService.updateCorporateUserPermissions(
+      companyId,
+      userId,
+      { role, permissions, modules, branchId },
+      actorName
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao atualizar permissões do utilizador.", details: error.message });
+  }
+});
+
+/**
+ * POST /api/v1/corporate/licenses/:terminalId/revoke
+ * Remote license revocation / freeze for store terminal
+ */
+corporateHeadquartersRouter.post("/licenses/:terminalId/revoke", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = getCompanyId(req);
+    const actorName = getActorName(req);
+    const terminalId = String(req.params.terminalId);
+    const { branchId, reason } = req.body || {};
+
+    if (!terminalId || !branchId) {
+      res.status(400).json({ error: "terminalId e branchId são obrigatórios." });
+      return;
+    }
+
+    const result = await EnterpriseCorporateHeadquartersService.revokeStoreLicense(
+      companyId,
+      branchId,
+      terminalId,
+      reason,
+      actorName
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao revogar licença do terminal.", details: error.message });
+  }
+});
+
+/**
+ * POST /api/v1/corporate/licenses/:terminalId/restore
+ * Remote license restoration for store terminal
+ */
+corporateHeadquartersRouter.post("/licenses/:terminalId/restore", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = getCompanyId(req);
+    const actorName = getActorName(req);
+    const terminalId = String(req.params.terminalId);
+    const { branchId } = req.body || {};
+
+    if (!terminalId || !branchId) {
+      res.status(400).json({ error: "terminalId e branchId são obrigatórios." });
+      return;
+    }
+
+    const result = await EnterpriseCorporateHeadquartersService.restoreStoreLicense(
+      companyId,
+      branchId,
+      terminalId,
+      actorName
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao reativar licença do terminal.", details: error.message });
+  }
+});
+
+/**
+ * GET /api/v1/corporate/licenses/:terminalId/status
+ * Query store license status
+ */
+corporateHeadquartersRouter.get("/licenses/:terminalId/status", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = getCompanyId(req);
+    const terminalId = String(req.params.terminalId);
+    const branchId = String(req.query.branchId || "HQ");
+
+    const result = await EnterpriseCorporateHeadquartersService.getStoreLicenseStatus(
+      companyId,
+      branchId,
+      terminalId
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao consultar estado da licença.", details: error.message });
+  }
+});
+
+/**
+ * POST /api/v1/corporate/sync/bidirectional
+ * Unified real-time bidirectional sync (Loja <-> Cloud <-> Sede)
+ */
+corporateHeadquartersRouter.post("/sync/bidirectional", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = getCompanyId(req);
+    const actorName = getActorName(req);
+    const { branchId, telemetry, outboxEntries, lastAckCommandId } = req.body || {};
+
+    if (!branchId) {
+      res.status(400).json({ error: "branchId obrigatório para sincronização bidirecional." });
+      return;
+    }
+
+    const result = await EnterpriseCorporateHeadquartersService.syncBidirectionalStore(
+      companyId,
+      branchId,
+      { telemetry, outboxEntries, lastAckCommandId },
+      actorName
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha na sincronização corporativa bidirecional.", details: error.message });
+  }
+});
+
+/**
+ * GET /api/v1/corporate/commands/pending
+ * Branch queries pending corporate commands from Sede
+ */
+corporateHeadquartersRouter.get("/commands/pending", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = getCompanyId(req);
+    const branchId = String(req.query.branchId || "");
+    const afterTimestamp = req.query.afterTimestamp ? String(req.query.afterTimestamp) : undefined;
+
+    if (!branchId) {
+      res.status(400).json({ error: "branchId obrigatório." });
+      return;
+    }
+
+    const commands = await EnterpriseCorporateHeadquartersService.getPendingBranchCommands(
+      companyId,
+      branchId,
+      afterTimestamp
+    );
+
+    res.json({
+      branchId,
+      count: commands.length,
+      commands,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao consultar comandos pendentes.", details: error.message });
+  }
+});
+
+/**
+ * POST /api/v1/corporate/commands/:id/ack
+ * Branch acknowledges execution of a corporate command
+ */
+corporateHeadquartersRouter.post("/commands/:id/ack", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = getCompanyId(req);
+    const commandId = String(req.params.id);
+    const { branchId } = req.body || {};
+
+    if (!commandId || !branchId) {
+      res.status(400).json({ error: "commandId e branchId são obrigatórios." });
+      return;
+    }
+
+    const result = await EnterpriseCorporateHeadquartersService.acknowledgeBranchCommand(
+      companyId,
+      branchId,
+      commandId
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: "Falha ao confirmar comando corporativo.", details: error.message });
+  }
+});

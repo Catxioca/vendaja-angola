@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: vendaja-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install && npm run build:shared && npm --workspace @angola/backend run build
+    preDeployCommand: npx prisma migrate deploy --schema=apps/backend/prisma/schema.prisma
+    startCommand: node apps/backend/dist/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FISCAL_CONFIG_KEY
+        sync: false
+      - key: COMPANY_NIF
+        value: "5001234567"
+      - key: COMPANY_NAME
+        value: "VendaJá Angola Lda"
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: TRUST_PROXY
+        value: "true"

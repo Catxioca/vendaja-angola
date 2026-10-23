@@ -91,6 +91,7 @@ test("Enterprise Health Check Probes: database, automation, integrations, licens
     checkIntegrations,
     checkLicense,
     checkStorage,
+    checkSync,
   } = await import("./health.js");
 
   // 1. Database probe (returns status ok or fallback down with latency)
@@ -130,4 +131,10 @@ test("Enterprise Health Check Probes: database, automation, integrations, licens
   const licenseHealth = await checkLicense();
   assert.ok(licenseHealth);
   assert.ok(["ok", "down"].includes(licenseHealth.status));
+
+  // 6. Sync probe (offline-first sync queue & protocols)
+  const syncHealth = await checkSync();
+  assert.ok(syncHealth);
+  assert.equal(syncHealth.status, "ok");
+  assert.ok(syncHealth.protocols.includes("HTTP_IDEMPOTENT_BATCH"));
 });

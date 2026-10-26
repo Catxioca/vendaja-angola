@@ -12,7 +12,20 @@ import "./style.css";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("./sw.js").catch((error: unknown) => {
+    navigator.serviceWorker.register("./sw.js").then((reg) => {
+      void reg.update();
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if (newWorker) {
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "activated" && navigator.serviceWorker.controller) {
+              console.log("[pwa] New version activated, reloading for fresh bundle...");
+              window.location.reload();
+            }
+          });
+        }
+      });
+    }).catch((error: unknown) => {
       console.warn("[pwa] service worker unavailable", error);
     });
   });

@@ -17,7 +17,16 @@ if ("serviceWorker" in navigator) {
     });
   });
 }
-const api = () => (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__ ?? (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ?? "http://localhost:4000";
+const api = () => {
+  const custom = localStorage.getItem("vendaja_api_url") || localStorage.getItem("POS_API_URL") || (globalThis as { __POS_API_URL__?: string }).__POS_API_URL__;
+  if (custom) return custom;
+  const envUrl = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL;
+  if (envUrl) return envUrl;
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+    return "https://vendaja-api.onrender.com";
+  }
+  return "http://localhost:4000";
+};
 function Login({ onLogin }: { onLogin: () => void }) {
   const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [showBootstrap, setShowBootstrap] = useState(false);
   async function submit(event: FormEvent) {

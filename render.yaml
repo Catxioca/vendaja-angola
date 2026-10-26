@@ -8,7 +8,7 @@ services:
     plan: free
     region: frankfurt
     buildCommand: npm install && npm run build:shared && npm --workspace @angola/backend run build
-    preDeployCommand: npx prisma migrate deploy --schema=apps/backend/prisma/schema.prisma
+    preDeployCommand: node scripts/cloud-migrate.mjs
     startCommand: node apps/backend/dist/server.js
     healthCheckPath: /health
     autoDeploy: true
@@ -18,9 +18,9 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
-        sync: false
+        generateValue: true
       - key: FISCAL_CONFIG_KEY
-        sync: false
+        generateValue: true
       - key: COMPANY_NIF
         value: "5001234567"
       - key: COMPANY_NAME

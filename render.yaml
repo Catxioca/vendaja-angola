@@ -1,4 +1,7 @@
 services:
+  # ============================================================================
+  # BACKEND API: Web Service Node.js (VendaJá Angola Cloud API)
+  # ============================================================================
   - type: web
     name: vendaja-api
     runtime: node
@@ -26,3 +29,19 @@ services:
         value: "*"
       - key: TRUST_PROXY
         value: "true"
+
+  # ============================================================================
+  # FRONTEND WEB: Static Site (ERP Web, Portais Cliente/Fornecedor/RH, Copilot)
+  # ============================================================================
+  - type: static
+    name: vendaja-web
+    plan: free
+    buildCommand: npm install && npm run build:shared && npm --workspace @angola/web run build
+    staticPublishPath: ./apps/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://vendaja-api.onrender.com

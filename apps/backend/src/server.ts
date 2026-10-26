@@ -77,20 +77,39 @@ const isLoopbackOrLocalOrigin = (origin: string): boolean => {
     return false;
   }
 };
+const isAllowedDomainOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    const host = url.hostname.toLowerCase();
+    return (
+      host === "vendaja.ao" ||
+      host.endsWith(".vendaja.ao") ||
+      host.endsWith(".onrender.com") ||
+      host.endsWith(".pages.dev") ||
+      host.endsWith(".vercel.app")
+    );
+  } catch {
+    return false;
+  }
+};
 const allowedOrigins = (config.CORS_ORIGIN ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
-app.use(cors({
+const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (isLoopbackOrLocalOrigin(origin)) return callback(null, true);
     if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedDomainOrigin(origin)) return callback(null, true);
     if (allowedOrigins.length === 0 && config.NODE_ENV !== "production") return callback(null, true);
     return callback(null, false);
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
   allowedHeaders: [
     "Content-Type",
     "Authorization",
+    "Accept",
+    "Origin",
+    "X-Requested-With",
     "x-admin-authorization",
     "x-correlation-id",
     "x-company-id",
@@ -100,7 +119,10 @@ app.use(cors({
     "x-client-id",
     "x-client-secret",
   ],
-}));
+  optionsSuccessStatus: 204,
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 app.use("/health", healthRouter);
 app.use("/api/health", healthRouter);

@@ -7,9 +7,19 @@ interface Props {
 
 export function SupplierPortal({ apiUrl }: Props) {
   const [token, setToken] = useState<string | null>(localStorage.getItem("portal_supplier_token"));
-  const [nif, setNif] = useState("");
-  const [secret, setSecret] = useState("");
-  const [loginError, setLoginError] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register" | "recover">("login");
+  const [registerForm, setRegisterForm] = useState({
+    name: "",
+    nif: "",
+    email: "",
+    phone: "",
+    contactName: "",
+    iban: "",
+    address: "",
+  });
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [recoverIdentifier, setRecoverIdentifier] = useState("");
+  const [recoverMessage, setRecoverMessage] = useState("");
   const [activeTab, setActiveTab] = useState<"dashboard" | "orders" | "receipts" | "submit" | "profile">("dashboard");
 
   const [dashboard, setDashboard] = useState<any>(null);
@@ -57,6 +67,58 @@ export function SupplierPortal({ apiUrl }: Props) {
       setToken(data.token);
     } catch {
       setLoginError("Erro de comunicação com o servidor.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/portals/auth/supplier-register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(registerForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginError(data.error || "Falha no registo de fornecedor.");
+        return;
+      }
+      if (data.token) {
+        localStorage.setItem("portal_supplier_token", data.token);
+        setToken(data.token);
+      }
+      if (data.supplier?.accessCode) {
+        setGeneratedCode(data.supplier.accessCode);
+      }
+    } catch {
+      setLoginError("Erro de comunicação com o servidor ao submeter candidatura.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoverMessage("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/portals/auth/recover-access`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: recoverIdentifier, portalType: "supplier" }),
+      });
+      const data = await res.json();
+      if (data.message) {
+        setRecoverMessage(data.message);
+      } else {
+        setRecoverMessage("Pedido de recuperação processado com sucesso.");
+      }
+    } catch {
+      setRecoverMessage("Falha ao contactar servidor de recuperação.");
     } finally {
       setLoading(false);
     }
@@ -154,46 +216,223 @@ export function SupplierPortal({ apiUrl }: Props) {
 
   if (!token) {
     return (
-      <div className="portal-container" style={{ maxWidth: "420px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
-        <div style={{ background: "#fee2e2", border: "1px solid #ef4444", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>⚠️</span> <span>Sem autenticação. Introduza as suas credenciais para aceder ao portal.</span>
+      <div className="portal-container" style={{ maxWidth: "480px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ background: "#ecfdf5", border: "1px solid #10b981", color: "#065f46", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>🚛</span> <span>Portal do Fornecedor · Self-Service B2B VendaJá</span>
         </div>
-        <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>🚛 Portal do Fornecedor</h2>
-        <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda às suas ordens de compra, receções de mercadoria e submeta faturas comerciais.</p>
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <label style={{ fontSize: "12px", fontWeight: "600" }}>
-            NIF ou E-mail do Fornecedor
-            <input
-              type="text"
-              value={nif}
-              onChange={(e) => setNif(e.target.value)}
-              placeholder="Ex: 5409112233"
-              required
-              style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
-            />
-          </label>
-          <label style={{ fontSize: "12px", fontWeight: "600" }}>
-            Código de Acesso / Palavra-passe
-            <input
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              placeholder="Código de segurança"
-              required
-              style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
-            />
-          </label>
-          <button type="submit" disabled={loading} style={{ background: "#059669", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
-            {loading ? "A entrar..." : "Entrar no Portal"}
+
+        <div style={{ display: "flex", gap: "6px", borderBottom: "1px solid #e2e8f0", marginBottom: "20px" }}>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("login"); setLoginError(""); }}
+            style={{
+              padding: "8px 12px",
+              background: authMode === "login" ? "#059669" : "transparent",
+              color: authMode === "login" ? "#fff" : "#64748b",
+              border: "none",
+              borderRadius: "4px 4px 0 0",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Entrar
           </button>
-          {loginError && <p style={{ color: "#dc2626", fontSize: "13px" }}>{loginError}</p>}
-        </form>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("register"); setLoginError(""); }}
+            style={{
+              padding: "8px 12px",
+              background: authMode === "register" ? "#059669" : "transparent",
+              color: authMode === "register" ? "#fff" : "#64748b",
+              border: "none",
+              borderRadius: "4px 4px 0 0",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Candidatura / Registo
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("recover"); setRecoverMessage(""); }}
+            style={{
+              padding: "8px 12px",
+              background: authMode === "recover" ? "#059669" : "transparent",
+              color: authMode === "recover" ? "#fff" : "#64748b",
+              border: "none",
+              borderRadius: "4px 4px 0 0",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Recuperar Código
+          </button>
+        </div>
+
+        {authMode === "login" && (
+          <div>
+            <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>Entrar como Fornecedor</h2>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda às suas ordens de compra, receções e faturas.</p>
+            <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                NIF ou E-mail da Empresa
+                <input
+                  type="text"
+                  value={nif}
+                  onChange={(e) => setNif(e.target.value)}
+                  placeholder="Ex: 5409112233"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                Código de Acesso (Ex: VND-SUPP-XXXX) ou Palavra-passe
+                <input
+                  type="password"
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                  placeholder="Código de acesso do fornecedor"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <button type="submit" disabled={loading} style={{ background: "#059669", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
+                {loading ? "A entrar..." : "Entrar no Portal"}
+              </button>
+              {loginError && <p style={{ color: "#dc2626", fontSize: "13px" }}>{loginError}</p>}
+            </form>
+          </div>
+        )}
+
+        {authMode === "register" && (
+          <div>
+            <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>Registo de Fornecedor</h2>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Cadastre a sua empresa para receber encomendas e submeter faturas.</p>
+            <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                Razão Social / Nome da Empresa *
+                <input
+                  type="text"
+                  value={registerForm.name}
+                  onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
+                  placeholder="Ex: Luanda Distribuidora Lda"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                NIF da Empresa *
+                <input
+                  type="text"
+                  value={registerForm.nif}
+                  onChange={(e) => setRegisterForm({ ...registerForm, nif: e.target.value })}
+                  placeholder="Ex: 5418902123"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                E-mail Comercial *
+                <input
+                  type="email"
+                  value={registerForm.email}
+                  onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                  placeholder="vendas@fornecedor.ao"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                  Telefone / WhatsApp
+                  <input
+                    type="text"
+                    value={registerForm.phone}
+                    onChange={(e) => setRegisterForm({ ...registerForm, phone: e.target.value })}
+                    placeholder="+244 923 000 000"
+                    style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                  />
+                </label>
+                <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                  Contacto Principal
+                  <input
+                    type="text"
+                    value={registerForm.contactName}
+                    onChange={(e) => setRegisterForm({ ...registerForm, contactName: e.target.value })}
+                    placeholder="Nome do Gestor"
+                    style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                  />
+                </label>
+              </div>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                IBAN Bancário (para liquidação de faturas)
+                <input
+                  type="text"
+                  value={registerForm.iban}
+                  onChange={(e) => setRegisterForm({ ...registerForm, iban: e.target.value })}
+                  placeholder="AO06 0040 ..."
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                Endereço / Província
+                <input
+                  type="text"
+                  value={registerForm.address}
+                  onChange={(e) => setRegisterForm({ ...registerForm, address: e.target.value })}
+                  placeholder="Ex: Viana, Luanda"
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <button type="submit" disabled={loading} style={{ background: "#059669", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
+                {loading ? "A registar fornecedor..." : "Concluir Candidatura de Fornecedor"}
+              </button>
+              {loginError && <p style={{ color: "#dc2626", fontSize: "13px" }}>{loginError}</p>}
+            </form>
+          </div>
+        )}
+
+        {authMode === "recover" && (
+          <div>
+            <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>Recuperar Código de Acesso</h2>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Introduza o NIF ou e-mail da sua empresa fornecedora.</p>
+            <form onSubmit={handleRecover} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                NIF ou E-mail da Empresa
+                <input
+                  type="text"
+                  value={recoverIdentifier}
+                  onChange={(e) => setRecoverIdentifier(e.target.value)}
+                  placeholder="Ex: 5409112233 ou empresa@exemplo.ao"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <button type="submit" disabled={loading} style={{ background: "#059669", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
+                {loading ? "A recuperar..." : "Recuperar Código de Fornecedor"}
+              </button>
+              {recoverMessage && <p style={{ color: "#065f46", background: "#d1fae5", padding: "8px", borderRadius: "4px", fontSize: "13px" }}>{recoverMessage}</p>}
+            </form>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="portal-wrapper" style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
+      {generatedCode && (
+        <div style={{ background: "#dcfce7", border: "2px solid #22c55e", color: "#14532d", padding: "14px 18px", borderRadius: "8px", marginBottom: "20px" }}>
+          <h3 style={{ margin: "0 0 6px 0", fontSize: "16px" }}>🎉 Candidatura Registada com Sucesso!</h3>
+          <p style={{ margin: "0 0 6px 0", fontSize: "14px" }}>
+            O seu Código de Acesso Exclusivo de Fornecedor é: <strong style={{ fontSize: "16px", letterSpacing: "1px", background: "#fff", padding: "3px 8px", borderRadius: "4px", border: "1px solid #86efac" }}>{generatedCode}</strong>
+          </p>
+          <small>Guarde este código em local seguro. Precisará dele para futuros inícios de sessão no Portal do Fornecedor.</small>
+        </div>
+      )}
       {/* Top Bar */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#064e3b", color: "#fff", padding: "14px 20px", borderRadius: "8px", marginBottom: "20px" }}>
         <div>

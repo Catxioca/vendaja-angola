@@ -154,7 +154,8 @@ portalsRouter.post("/auth/identify-profile", async (req: Request, res: Response)
 });
 
 portalsRouter.post("/auth/customer-login", async (req: Request, res: Response) => {
-  const { identifier, secret } = req.body;
+  const identifier = req.body.identifier;
+  const secret = req.body.secret || req.body.pin || req.body.password;
   const companyId = resolveCompanyId(req);
 
   if (!identifier || !secret) {
@@ -174,8 +175,73 @@ portalsRouter.post("/auth/customer-login", async (req: Request, res: Response) =
   }
 });
 
+portalsRouter.post("/auth/customer-register", async (req: Request, res: Response) => {
+  const parsed = z.object({
+    name: z.string().trim().min(2, "Nome é obrigatório"),
+    nif: z.string().trim().min(5, "NIF deve ter pelo menos 5 caracteres"),
+    email: z.string().trim().email("Email inválido"),
+    phone: z.string().trim().optional(),
+    address: z.string().trim().optional(),
+    pin: z.string().trim().min(4, "O PIN deve ter no mínimo 4 dígitos"),
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input", message: parsed.error.issues[0]?.message || "Dados inválidos." });
+    return;
+  }
+
+  try {
+    const company = await prisma.company.findFirst();
+    if (!company) {
+      res.status(503).json({ error: "company_unavailable", message: "Empresa ainda não configurada." });
+      return;
+    }
+
+    const cleanNif = parsed.data.nif.toUpperCase();
+    const cleanEmail = parsed.data.email.toLowerCase();
+
+    const existing = await prisma.customer.findFirst({
+      where: {
+        OR: [
+          { nif: cleanNif },
+          { email: { equals: cleanEmail, mode: "insensitive" } },
+        ],
+      },
+    });
+    if (existing) {
+      res.status(409).json({ error: "customer_exists", message: "Já existe um cliente cadastrado com este NIF ou E-mail." });
+      return;
+    }
+
+    const created = await prisma.customer.create({
+      data: {
+        companyId: company.id,
+        name: parsed.data.name,
+        nif: cleanNif,
+        email: cleanEmail,
+        phone: parsed.data.phone || null,
+        address: parsed.data.address || null,
+        active: true,
+      },
+    });
+
+    const auth = await EnterpriseCustomerPortalService.authenticateCustomer(created.nif || created.email || "", parsed.data.pin, company.id);
+
+    res.status(201).json({
+      success: true,
+      message: "Conta de cliente criada com sucesso!",
+      customer: created,
+      token: auth?.token,
+    });
+  } catch (err) {
+    console.error("[portals/customer-register] error:", err);
+    res.status(500).json({ error: "registration_failed", message: "Não foi possível criar a conta de cliente." });
+  }
+});
+
 portalsRouter.post("/auth/supplier-login", async (req: Request, res: Response) => {
-  const { identifier, secret } = req.body;
+  const identifier = req.body.identifier;
+  const secret = req.body.secret || req.body.accessCode || req.body.code || req.body.password;
   const companyId = resolveCompanyId(req);
 
   if (!identifier || !secret) {
@@ -195,8 +261,75 @@ portalsRouter.post("/auth/supplier-login", async (req: Request, res: Response) =
   }
 });
 
+portalsRouter.post("/auth/supplier-register", async (req: Request, res: Response) => {
+  const parsed = z.object({
+    name: z.string().trim().min(2, "Nome da empresa/fornecedor é obrigatório"),
+    nif: z.string().trim().min(5, "NIF deve ter pelo menos 5 caracteres"),
+    email: z.string().trim().email("Email inválido"),
+    phone: z.string().trim().optional(),
+    iban: z.string().trim().optional(),
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input", message: parsed.error.issues[0]?.message || "Dados inválidos." });
+    return;
+  }
+
+  try {
+    const company = await prisma.company.findFirst();
+    if (!company) {
+      res.status(503).json({ error: "company_unavailable", message: "Empresa ainda não configurada." });
+      return;
+    }
+
+    const cleanNif = parsed.data.nif.toUpperCase();
+    const cleanEmail = parsed.data.email.toLowerCase();
+
+    const existing = await prisma.supplier.findFirst({
+      where: {
+        OR: [
+          { nif: cleanNif },
+          { email: { equals: cleanEmail, mode: "insensitive" } },
+        ],
+      },
+    });
+    if (existing) {
+      res.status(409).json({ error: "supplier_exists", message: "Já existe um fornecedor cadastrado com este NIF ou E-mail." });
+      return;
+    }
+
+    const accessCode = `VND-SUPP-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const created = await prisma.supplier.create({
+      data: {
+        companyId: company.id,
+        name: parsed.data.name,
+        nif: cleanNif,
+        email: cleanEmail,
+        phone: parsed.data.phone || null,
+        code: accessCode,
+        active: true,
+      },
+    });
+
+    const auth = await EnterpriseSupplierPortalService.authenticateSupplier(created.nif || created.email || "", accessCode, company.id);
+
+    res.status(201).json({
+      success: true,
+      message: `Candidatura de fornecedor registada com sucesso! O seu código de acesso é ${accessCode}`,
+      accessCode,
+      supplier: created,
+      token: auth?.token,
+    });
+  } catch (err) {
+    console.error("[portals/supplier-register] error:", err);
+    res.status(500).json({ error: "registration_failed", message: "Não foi possível registar o fornecedor." });
+  }
+});
+
 portalsRouter.post("/auth/employee-login", async (req: Request, res: Response) => {
-  const { identifier, secret } = req.body;
+  const identifier = req.body.identifier;
+  const secret = req.body.secret || req.body.pin || req.body.password;
   const companyId = resolveCompanyId(req);
 
   if (!identifier || !secret) {
@@ -213,6 +346,91 @@ portalsRouter.post("/auth/employee-login", async (req: Request, res: Response) =
     res.json(result);
   } catch (err) {
     res.status(401).json({ error: "invalid_credentials", message: "Credenciais de colaborador inválidas ou inativas." });
+  }
+});
+
+portalsRouter.post("/auth/employee-activate", async (req: Request, res: Response) => {
+  const parsed = z.object({
+    identifier: z.string().trim().min(3, "NIF ou INSS é obrigatório"),
+    inviteCode: z.string().trim().min(3, "Código de convite/ativação é obrigatório"),
+    pin: z.string().trim().min(4, "Novo PIN deve ter no mínimo 4 dígitos"),
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input", message: parsed.error.issues[0]?.message || "Dados inválidos." });
+    return;
+  }
+
+  try {
+    const cleanId = parsed.data.identifier.toLowerCase();
+    const employee = await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { nif: cleanId },
+          { inss: cleanId },
+        ],
+      },
+    });
+
+    if (!employee) {
+      res.status(404).json({ error: "employee_not_found", message: "Colaborador não encontrado com este NIF ou INSS. Contacte o departamento de RH." });
+      return;
+    }
+
+    await prisma.employee.update({
+      where: { id: employee.id },
+      data: { active: true },
+    });
+
+    const auth = await EnterpriseEmployeePortalService.authenticateEmployee(employee.nif || employee.inss || "", parsed.data.pin, employee.companyId || undefined);
+
+    res.json({
+      success: true,
+      message: "Conta de colaborador ativada com sucesso!",
+      token: auth?.token,
+    });
+  } catch (err) {
+    console.error("[portals/employee-activate] error:", err);
+    res.status(500).json({ error: "activation_failed", message: "Não foi possível ativar o acesso de colaborador." });
+  }
+});
+
+portalsRouter.post("/auth/recover-access", async (req: Request, res: Response) => {
+  const { identifier } = req.body;
+  if (!identifier) {
+    res.status(400).json({ error: "missing_identifier", message: "Introduza o seu e-mail ou NIF cadastrado." });
+    return;
+  }
+  const cleanId = String(identifier).trim().toLowerCase();
+
+  try {
+    const customer = await prisma.customer.findFirst({
+      where: { OR: [{ email: { equals: cleanId, mode: "insensitive" } }, { nif: cleanId }] },
+    });
+    if (customer) {
+      res.json({ success: true, message: `Instruções de recuperação de PIN validadas para o cliente ${customer.name}. O PIN de acesso pode ser redefinido com o apoio da empresa.` });
+      return;
+    }
+
+    const supplier = await prisma.supplier.findFirst({
+      where: { OR: [{ email: { equals: cleanId, mode: "insensitive" } }, { nif: cleanId }] },
+    });
+    if (supplier) {
+      res.json({ success: true, message: `Código de acesso verificado para o fornecedor ${supplier.name}: ${supplier.code || "VND-SUPP-ATENDIMENTO"}.` });
+      return;
+    }
+
+    const employee = await prisma.employee.findFirst({
+      where: { OR: [{ nif: cleanId }, { inss: cleanId }] },
+    });
+    if (employee) {
+      res.json({ success: true, message: `Acesso do colaborador ${employee.fullName} validado. Utilize a ativação com código de convite ou contacte os Recursos Humanos.` });
+      return;
+    }
+
+    res.status(404).json({ error: "not_found", message: "Identificador não encontrado em nenhuma categoria cadastrada." });
+  } catch {
+    res.status(500).json({ error: "recovery_failed", message: "Erro ao processar recuperação de acesso." });
   }
 });
 

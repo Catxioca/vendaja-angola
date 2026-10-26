@@ -7,17 +7,29 @@ interface Props {
 
 export function CustomerPortal({ apiUrl }: Props) {
   const [token, setToken] = useState<string | null>(localStorage.getItem("portal_customer_token"));
+  const [authMode, setAuthMode] = useState<"login" | "register" | "recover">("login");
   const [nif, setNif] = useState("");
   const [pin, setPin] = useState("");
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<"dashboard" | "statement" | "payments" | "profile">("dashboard");
+
+  // Registration Form State
+  const [regForm, setRegForm] = useState({
+    name: "",
+    nif: "",
+    email: "",
+    phone: "",
+    address: "",
+    pin: "",
+  });
+  const [recoverIdentifier, setRecoverIdentifier] = useState("");
 
   const [dashboard, setDashboard] = useState<any>(null);
   const [statement, setStatement] = useState<any>(null);
   const [generatedRef, setGeneratedRef] = useState<any>(null);
   const [refDocId, setRefDocId] = useState("");
   const [refAmountKz, setRefAmountKz] = useState("");
-  const [profileForm, setProfileForm] = useState({ phone: "", email: "", address: "" });
+  const [profileForm, setProfileForm] = useState({ phone: "", email: "", address: "", currentPin: "", newPin: "" });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -34,10 +46,11 @@ export function CustomerPortal({ apiUrl }: Props) {
       const res = await fetch(`${apiUrl}/api/v1/portals/auth/customer-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: nif, secret: pin }),
+        body: JSON.stringify({ identifier: nif, pin }),
       });
       if (!res.ok) {
-        setLoginError("Credenciais de cliente inválidas.");
+        const err = await res.json().catch(() => ({}));
+        setLoginError(err.message || "Credenciais de cliente inválidas.");
         return;
       }
       const data = await res.json();
@@ -45,6 +58,61 @@ export function CustomerPortal({ apiUrl }: Props) {
       setToken(data.token);
     } catch {
       setLoginError("Erro de comunicação com o servidor.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/portals/auth/customer-register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoginError(data.message || "Não foi possível criar a conta de cliente.");
+        return;
+      }
+      if (data.token) {
+        localStorage.setItem("portal_customer_token", data.token);
+        setToken(data.token);
+      } else {
+        setAuthMode("login");
+        setNif(regForm.nif);
+        setPin(regForm.pin);
+        setMessage("Conta criada com sucesso! Introduza o seu PIN para aceder.");
+      }
+    } catch {
+      setLoginError("Erro de comunicação ao criar conta.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/portals/auth/recover-access`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: recoverIdentifier }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoginError(data.message || "Não foi possível localizar o identificador.");
+        return;
+      }
+      setMessage(data.message || "Instruções de recuperação enviadas com sucesso.");
+      setAuthMode("login");
+    } catch {
+      setLoginError("Falha ao comunicar com o serviço de recuperação.");
     } finally {
       setLoading(false);
     }
@@ -131,40 +199,169 @@ export function CustomerPortal({ apiUrl }: Props) {
 
   if (!token) {
     return (
-      <div className="portal-container" style={{ maxWidth: "420px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
-        <div style={{ background: "#fee2e2", border: "1px solid #ef4444", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>⚠️</span> <span>Sem autenticação. Introduza as suas credenciais para aceder ao portal.</span>
+      <div className="portal-container" style={{ maxWidth: "480px", margin: "40px auto", padding: "28px", background: "#fff", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.08)", border: "1px solid #e2e8f0" }}>
+        <div style={{ textAlign: "center", marginBottom: "20px" }}>
+          <span style={{ fontSize: "36px" }}>🏢</span>
+          <h2 style={{ color: "#0f172a", margin: "8px 0 4px 0" }}>Portal do Cliente</h2>
+          <p style={{ color: "#64748b", fontSize: "13px", margin: 0 }}>Área exclusiva de clientes para consulta de faturas, extratos e pagamentos EMIS.</p>
         </div>
-        <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>🏢 Portal do Cliente</h2>
-        <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda às suas faturas, extrato de conta corrente e referências de pagamento.</p>
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <label style={{ fontSize: "12px", fontWeight: "600" }}>
-            NIF ou E-mail do Cliente
-            <input
-              type="text"
-              value={nif}
-              onChange={(e) => setNif(e.target.value)}
-              placeholder="Ex: 5401992831"
-              required
-              style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
-            />
-          </label>
-          <label style={{ fontSize: "12px", fontWeight: "600" }}>
-            PIN / Palavra-passe de Segurança
-            <input
-              type="password"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="PIN de 4 ou mais dígitos"
-              required
-              style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
-            />
-          </label>
-          <button type="submit" disabled={loading} style={{ background: "#2563eb", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
-            {loading ? "A entrar..." : "Entrar no Portal"}
+
+        {/* Auth Mode Toggle */}
+        <div style={{ display: "flex", gap: "6px", background: "#f1f5f9", padding: "4px", borderRadius: "8px", marginBottom: "20px" }}>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("login"); setLoginError(""); setMessage(""); }}
+            style={{ flex: 1, padding: "8px", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600, fontSize: "13px", background: authMode === "login" ? "#2563eb" : "transparent", color: authMode === "login" ? "#fff" : "#64748b" }}
+          >
+            Iniciar Sessão
           </button>
-          {loginError && <p style={{ color: "#dc2626", fontSize: "13px" }}>{loginError}</p>}
-        </form>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("register"); setLoginError(""); setMessage(""); }}
+            style={{ flex: 1, padding: "8px", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600, fontSize: "13px", background: authMode === "register" ? "#059669" : "transparent", color: authMode === "register" ? "#fff" : "#64748b" }}
+          >
+            Criar Conta
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("recover"); setLoginError(""); setMessage(""); }}
+            style={{ flex: 1, padding: "8px", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600, fontSize: "13px", background: authMode === "recover" ? "#0284c7" : "transparent", color: authMode === "recover" ? "#fff" : "#64748b" }}
+          >
+            Recuperar PIN
+          </button>
+        </div>
+
+        {message && <div style={{ background: "#f0fdf4", border: "1px solid #86efac", color: "#166534", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600" }}>{message}</div>}
+        {loginError && <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px" }}>{loginError}</div>}
+
+        {/* 1. Login Mode */}
+        {authMode === "login" && (
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+              NIF ou E-mail do Cliente
+              <input
+                type="text"
+                value={nif}
+                onChange={(e) => setNif(e.target.value)}
+                placeholder="Ex: 5401992831 ou cliente@empresa.ao"
+                required
+                style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </label>
+            <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+              PIN de Acesso
+              <input
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="Introduza o seu PIN (4+ dígitos)"
+                required
+                style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </label>
+            <button type="submit" disabled={loading} style={{ background: "#2563eb", color: "#fff", padding: "12px", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer", marginTop: "6px" }}>
+              {loading ? "A autenticar..." : "Entrar no Portal do Cliente"}
+            </button>
+          </form>
+        )}
+
+        {/* 2. Self-Registration Mode */}
+        {authMode === "register" && (
+          <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+              Nome Completo / Razão Social
+              <input
+                type="text"
+                value={regForm.name}
+                onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
+                placeholder="Ex: Manuel António Domingos ou Empresa Lda"
+                required
+                style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+                NIF / B.I.
+                <input
+                  type="text"
+                  value={regForm.nif}
+                  onChange={(e) => setRegForm({ ...regForm, nif: e.target.value })}
+                  placeholder="Ex: 5419998877"
+                  required
+                  style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+                />
+              </label>
+              <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+                Telemóvel
+                <input
+                  type="tel"
+                  value={regForm.phone}
+                  onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
+                  placeholder="+244 9..."
+                  style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+                />
+              </label>
+            </div>
+            <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+              Endereço de E-mail
+              <input
+                type="email"
+                value={regForm.email}
+                onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
+                placeholder="cliente@exemplo.ao"
+                required
+                style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </label>
+            <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+              Morada / Província
+              <input
+                type="text"
+                value={regForm.address}
+                onChange={(e) => setRegForm({ ...regForm, address: e.target.value })}
+                placeholder="Ex: Maianga, Luanda"
+                style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </label>
+            <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+              Definir PIN de Acesso (4 a 6 dígitos numéricos)
+              <input
+                type="password"
+                inputMode="numeric"
+                value={regForm.pin}
+                onChange={(e) => setRegForm({ ...regForm, pin: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                placeholder="••••••"
+                required
+                minLength={4}
+                maxLength={6}
+                style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </label>
+            <button type="submit" disabled={loading} style={{ background: "#059669", color: "#fff", padding: "12px", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer", marginTop: "6px" }}>
+              {loading ? "A criar conta..." : "Criar Conta de Cliente Imediatamente"}
+            </button>
+          </form>
+        )}
+
+        {/* 3. Recovery Mode */}
+        {authMode === "recover" && (
+          <form onSubmit={handleRecover} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+              NIF ou E-mail Cadastrado
+              <input
+                type="text"
+                value={recoverIdentifier}
+                onChange={(e) => setRecoverIdentifier(e.target.value)}
+                placeholder="Introduza o NIF ou e-mail da sua conta"
+                required
+                style={{ width: "100%", padding: "10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1", boxSizing: "border-box" }}
+              />
+            </label>
+            <button type="submit" disabled={loading} style={{ background: "#0284c7", color: "#fff", padding: "12px", border: "none", borderRadius: "6px", fontWeight: "700", cursor: "pointer", marginTop: "6px" }}>
+              {loading ? "A verificar..." : "Recuperar Acesso / PIN"}
+            </button>
+          </form>
+        )}
       </div>
     );
   }

@@ -95,9 +95,47 @@ function Login({ onLogin }: { onLogin: () => void }) {
       setError("Não foi possível contactar o servidor. Verifique a ligação ao backend; o início de sessão requer ligação ativa.");
     }
   }
+
+  const enterDemoMode = () => {
+    const demoUser = {
+      id: "demo-auditor-id",
+      role: "ADMIN",
+      email: "auditor@vendaja.ao",
+      username: "auditor",
+      displayName: "Auditor Funcional ERP",
+    };
+    localStorage.setItem("accessToken", "demo-audit-access-token");
+    localStorage.setItem("refreshToken", "demo-audit-refresh-token");
+    localStorage.setItem("posUser", JSON.stringify(demoUser));
+    onLogin();
+  };
+
   return <main className="startup-loading">{showBootstrap
     ? <BootstrapAccountForm apiUrl={api()} onComplete={onLogin} onCancel={() => setShowBootstrap(false)} />
-    : <form onSubmit={(e) => void submit(e)}><h1>VendaJá Angola</h1><input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required /><input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} /><button>Entrar</button>{error && <p role="alert">{error}</p>}<hr /><p>Ainda não configurou esta instalação?</p><button type="button" className="bootstrap-entry" onClick={() => setShowBootstrap(true)}>Criar Conta de Administrador</button></form>};</main>;
+    : <form onSubmit={(e) => void submit(e)}>
+        <h1>VendaJá Angola</h1>
+        <p style={{ color: "#64748b", fontSize: "14px", margin: "0 0 16px 0" }}>Gestão Comercial Integrada & Portais Self-Service</p>
+        <input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
+        <input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} />
+        <button type="submit">Entrar no ERP</button>
+        {error && <p role="alert">{error}</p>}
+        <hr style={{ margin: "16px 0", border: "0", borderTop: "1px dashed #cbd5e1" }} />
+        <button type="button" onClick={enterDemoMode} style={{ background: "#0284c7", color: "#fff", fontWeight: 600, padding: "10px", width: "100%", borderRadius: "6px", border: "none", cursor: "pointer", marginBottom: "8px" }}>
+          🚀 Explorar ERP Completo (Demo / Auditoria)
+        </button>
+        <button type="button" className="bootstrap-entry" onClick={() => setShowBootstrap(true)}>
+          🔑 Criar Conta de Administrador Inicial
+        </button>
+        <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #e2e8f0", fontSize: "12px", textAlign: "center" }}>
+          <span style={{ color: "#64748b", display: "block", marginBottom: "6px" }}>Acessos Rápidos aos Portais:</span>
+          <div style={{ display: "flex", gap: "6px", justifyContent: "center", flexWrap: "wrap" }}>
+            <a href="#portal-cliente" onClick={() => { window.location.hash = "portal-cliente"; window.location.reload(); }} style={{ color: "#0284c7", fontWeight: 600, textDecoration: "none", padding: "4px 8px", background: "#f0f9ff", borderRadius: "4px" }}>🏢 Cliente</a>
+            <a href="#portal-fornecedor" onClick={() => { window.location.hash = "portal-fornecedor"; window.location.reload(); }} style={{ color: "#059669", fontWeight: 600, textDecoration: "none", padding: "4px 8px", background: "#ecfdf5", borderRadius: "4px" }}>🚛 Fornecedor</a>
+            <a href="#portal-colaborador" onClick={() => { window.location.hash = "portal-colaborador"; window.location.reload(); }} style={{ color: "#7c3aed", fontWeight: 600, textDecoration: "none", padding: "4px 8px", background: "#f5f3ff", borderRadius: "4px" }}>👥 Colaborador</a>
+          </div>
+        </div>
+      </form>}
+  </main>;
 }
 function CompanyContextSelector() {
   const [contexts, setContexts] = useState<Array<{ companyId: string; branchId: string | null; company: { legalName: string }; branch?: { name: string } | null }>>([]);

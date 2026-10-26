@@ -7,6 +7,14 @@ interface Props {
 
 export function EmployeePortal({ apiUrl }: Props) {
   const [token, setToken] = useState<string | null>(localStorage.getItem("portal_employee_token"));
+  const [authMode, setAuthMode] = useState<"login" | "activate" | "recover">("login");
+  const [activateForm, setActivateForm] = useState({
+    identifier: "",
+    inviteCode: "",
+    newPin: "",
+  });
+  const [recoverIdentifier, setRecoverIdentifier] = useState("");
+  const [recoverMessage, setRecoverMessage] = useState("");
   const [nif, setNif] = useState("");
   const [pin, setPin] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -51,6 +59,55 @@ export function EmployeePortal({ apiUrl }: Props) {
       setToken(data.token);
     } catch {
       setLoginError("Erro de comunicação com o servidor.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleActivate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/portals/auth/employee-activate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(activateForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginError(data.error || "Código de convite ou identificador inválido.");
+        return;
+      }
+      if (data.token) {
+        localStorage.setItem("portal_employee_token", data.token);
+        setToken(data.token);
+      }
+    } catch {
+      setLoginError("Erro de comunicação ao ativar conta de colaborador.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoverMessage("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/portals/auth/recover-access`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: recoverIdentifier, portalType: "employee" }),
+      });
+      const data = await res.json();
+      if (data.message) {
+        setRecoverMessage(data.message);
+      } else {
+        setRecoverMessage("Pedido de recuperação processado.");
+      }
+    } catch {
+      setRecoverMessage("Falha ao comunicar com os serviços de RH.");
     } finally {
       setLoading(false);
     }
@@ -136,40 +193,168 @@ export function EmployeePortal({ apiUrl }: Props) {
 
   if (!token) {
     return (
-      <div className="portal-container" style={{ maxWidth: "420px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
-        <div style={{ background: "#fee2e2", border: "1px solid #ef4444", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>⚠️</span> <span>Sem autenticação. Introduza as suas credenciais para aceder ao portal.</span>
+      <div className="portal-container" style={{ maxWidth: "440px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ background: "#f5f3ff", border: "1px solid #c4b5fd", color: "#5b21b6", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>👥</span> <span>Portal do Colaborador · Self-Service RH VendaJá</span>
         </div>
-        <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>👥 Portal do Colaborador (RH)</h2>
-        <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda aos seus recibos de vencimento, saldo de férias e solicite ausências.</p>
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <label style={{ fontSize: "12px", fontWeight: "600" }}>
-            NIF ou N.º de Segurança Social (INSS)
-            <input
-              type="text"
-              value={nif}
-              onChange={(e) => setNif(e.target.value)}
-              placeholder="Ex: 5412998877"
-              required
-              style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
-            />
-          </label>
-          <label style={{ fontSize: "12px", fontWeight: "600" }}>
-            PIN Pessoal de Acesso (RH)
-            <input
-              type="password"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="PIN de acesso pessoal"
-              required
-              style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
-            />
-          </label>
-          <button type="submit" disabled={loading} style={{ background: "#7c3aed", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
-            {loading ? "A entrar..." : "Entrar no Portal RH"}
+
+        <div style={{ display: "flex", gap: "6px", borderBottom: "1px solid #e2e8f0", marginBottom: "20px" }}>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("login"); setLoginError(""); }}
+            style={{
+              padding: "8px 12px",
+              background: authMode === "login" ? "#7c3aed" : "transparent",
+              color: authMode === "login" ? "#fff" : "#64748b",
+              border: "none",
+              borderRadius: "4px 4px 0 0",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Entrar
           </button>
-          {loginError && <p style={{ color: "#dc2626", fontSize: "13px" }}>{loginError}</p>}
-        </form>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("activate"); setLoginError(""); }}
+            style={{
+              padding: "8px 12px",
+              background: authMode === "activate" ? "#7c3aed" : "transparent",
+              color: authMode === "activate" ? "#fff" : "#64748b",
+              border: "none",
+              borderRadius: "4px 4px 0 0",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Ativar com Convite
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAuthMode("recover"); setRecoverMessage(""); }}
+            style={{
+              padding: "8px 12px",
+              background: authMode === "recover" ? "#7c3aed" : "transparent",
+              color: authMode === "recover" ? "#fff" : "#64748b",
+              border: "none",
+              borderRadius: "4px 4px 0 0",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Recuperar PIN
+          </button>
+        </div>
+
+        {authMode === "login" && (
+          <div>
+            <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>Entrar no Portal RH</h2>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda aos seus recibos de vencimento, saldo de férias e dados de RH.</p>
+            <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                NIF ou N.º de Segurança Social (INSS)
+                <input
+                  type="text"
+                  value={nif}
+                  onChange={(e) => setNif(e.target.value)}
+                  placeholder="Ex: 5412998877"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                PIN Pessoal de Acesso (RH)
+                <input
+                  type="password"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  placeholder="PIN de 4 a 6 dígitos"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <button type="submit" disabled={loading} style={{ background: "#7c3aed", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
+                {loading ? "A entrar..." : "Entrar no Portal RH"}
+              </button>
+              {loginError && <p style={{ color: "#dc2626", fontSize: "13px" }}>{loginError}</p>}
+            </form>
+          </div>
+        )}
+
+        {authMode === "activate" && (
+          <div>
+            <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>Ativar Conta com Convite</h2>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Introduza o código de convite fornecido pelo departamento de Recursos Humanos.</p>
+            <form onSubmit={handleActivate} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                NIF ou N.º de Segurança Social (INSS)
+                <input
+                  type="text"
+                  value={activateForm.identifier}
+                  onChange={(e) => setActivateForm({ ...activateForm, identifier: e.target.value })}
+                  placeholder="Ex: 5412998877"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                Código de Convite da Empresa
+                <input
+                  type="text"
+                  value={activateForm.inviteCode}
+                  onChange={(e) => setActivateForm({ ...activateForm, inviteCode: e.target.value })}
+                  placeholder="Ex: RH-INV-9921"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                Defina o seu Novo PIN Pessoal (4 a 6 dígitos)
+                <input
+                  type="password"
+                  value={activateForm.newPin}
+                  onChange={(e) => setActivateForm({ ...activateForm, newPin: e.target.value })}
+                  placeholder="Ex: 123456"
+                  required
+                  minLength={4}
+                  maxLength={6}
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <button type="submit" disabled={loading} style={{ background: "#7c3aed", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
+                {loading ? "A ativar..." : "Ativar e Aceder ao Portal RH"}
+              </button>
+              {loginError && <p style={{ color: "#dc2626", fontSize: "13px" }}>{loginError}</p>}
+            </form>
+          </div>
+        )}
+
+        {authMode === "recover" && (
+          <div>
+            <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>Recuperar PIN Pessoal</h2>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Introduza o seu NIF ou número de INSS registado na empresa.</p>
+            <form onSubmit={handleRecover} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                NIF ou N.º de Segurança Social (INSS)
+                <input
+                  type="text"
+                  value={recoverIdentifier}
+                  onChange={(e) => setRecoverIdentifier(e.target.value)}
+                  placeholder="Ex: 5412998877"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <button type="submit" disabled={loading} style={{ background: "#7c3aed", color: "#fff", padding: "10px", border: "none", borderRadius: "4px", fontWeight: "600", cursor: "pointer", marginTop: "8px" }}>
+                {loading ? "A processar..." : "Solicitar Recuperação"}
+              </button>
+              {recoverMessage && <p style={{ color: "#5b21b6", background: "#ede9fe", padding: "8px", borderRadius: "4px", fontSize: "13px" }}>{recoverMessage}</p>}
+            </form>
+          </div>
+        )}
       </div>
     );
   }

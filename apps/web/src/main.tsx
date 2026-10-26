@@ -6,6 +6,10 @@ import { BootstrapAccountForm } from "./BootstrapAccountForm";
 import { CustomerPortal } from "./CustomerPortal";
 import { SupplierPortal } from "./SupplierPortal";
 import { EmployeePortal } from "./EmployeePortal";
+import { HrPortal } from "./HrPortal";
+import { CommercialPortal } from "./CommercialPortal";
+import { AdminPortal } from "./AdminPortal";
+import { DesktopErpApp } from "./desktop/renderer.js";
 import { MobileErpApp } from "./MobileErpApp";
 import { CopilotWidget } from "./CopilotWidget";
 import "./style.css";
@@ -47,7 +51,36 @@ function Login({ onLogin }: { onLogin: () => void }) {
     setError("");
     try {
       const response = await fetch(`${api()}/api/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier, password }) });
-      if (response.status === 401 || response.status === 403) { setError("Credenciais inválidas."); return; }
+      if (response.status === 401 || response.status === 403) {
+        // Automatic Multi-Profile Detection
+        try {
+          const profileCheck = await fetch(`${api()}/api/v1/portals/auth/identify-profile`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ identifier }),
+          });
+          if (profileCheck.ok) {
+            const p = await profileCheck.json();
+            if (p.profileType === "SUPPLIER") {
+              setError("Esta conta pertence ao Portal do Fornecedor. A redirecionar...");
+              setTimeout(() => { window.location.hash = "portal-fornecedor"; window.location.reload(); }, 1200);
+              return;
+            }
+            if (p.profileType === "CUSTOMER") {
+              setError("Esta conta pertence ao Portal do Cliente. A redirecionar...");
+              setTimeout(() => { window.location.hash = "portal-cliente"; window.location.reload(); }, 1200);
+              return;
+            }
+            if (p.profileType === "EMPLOYEE") {
+              setError("Esta conta pertence ao Portal do Colaborador. A redirecionar...");
+              setTimeout(() => { window.location.hash = "portal-colaborador"; window.location.reload(); }, 1200);
+              return;
+            }
+          }
+        } catch { /* proceed */ }
+        setError("Credenciais de utilizador inválidas.");
+        return;
+      }
       if (!response.ok) { setError(`O servidor não está disponível para iniciar sessão (HTTP ${response.status}). Tente novamente mais tarde.`); return; }
       const data = await response.json();
       localStorage.setItem("accessToken", data.accessToken);
@@ -260,23 +293,50 @@ function Reports() {
   const rows = Array.isArray(data?.rows) ? data.rows as Array<Record<string, unknown>> : [];
   return <section><h2>Relatórios comerciais</h2><div className="customer-fields"><select value={type} onChange={e => setType(e.target.value)}>{[["sales", "Vendas"], ["products", "Produtos"], ["stock", "Stock"], ["purchases", "Compras"], ["expenses", "Despesas"], ["receivables", "Contas a receber"], ["payables", "Contas a pagar"], ["summary", "Resumo financeiro"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input type="date" value={from} onChange={e => setFrom(e.target.value)} /><input type="date" value={to} onChange={e => setTo(e.target.value)} /><button onClick={() => void load()}>Aplicar filtros</button></div>{error && <p className="error-message">{error}</p>}{data && type === "sales" && <div className="cards"><article><small>Documentos</small><strong>{String(data.documents ?? 0)}</strong></article><article><small>Total</small><strong>{formatKwanza(Number(data.totalCents ?? 0))}</strong></article><article><small>Ticket médio</small><strong>{formatKwanza(Number(data.averageTicketCents ?? 0))}</strong></article></div>}{data && type === "summary" && <div className="cards"><article><small>Vendas</small><strong>{formatKwanza(Number(data.salesCents ?? 0))}</strong></article><article><small>Compras</small><strong>{formatKwanza(Number(data.purchasesCents ?? 0))}</strong></article><article><small>Despesas</small><strong>{formatKwanza(Number(data.expensesCents ?? 0))}</strong></article></div>}<table><thead><tr>{rows[0] ? Object.keys(rows[0]).slice(0, 8).map(key => <th key={key}>{key}</th>) : <th>Resultado</th>}</tr></thead><tbody>{rows.slice(0, 200).map((row, index) => <tr key={index}>{Object.keys(row).slice(0, 8).map(key => <td key={key}>{typeof row[key] === "object" ? JSON.stringify(row[key]) : String(row[key] ?? "—")}</td>)}</tr>)}{!rows.length && <tr><td>Sem dados no período selecionado.</td></tr>}</tbody></table></section>;
 }
-type OmnichannelView = "erp" | "customer-portal" | "supplier-portal" | "employee-portal" | "mobile-erp" | "copilot";
+type OmnichannelView =
+  | "erp"
+  | "portal-cliente"
+  | "customer-portal"
+  | "portal-fornecedor"
+  | "supplier-portal"
+  | "portal-colaborador"
+  | "employee-portal"
+  | "portal-rh"
+  | "portal-comercial"
+  | "portal-admin"
+  | "mobile-erp"
+  | "copilot";
+
+const ALL_VIEWS: OmnichannelView[] = [
+  "erp",
+  "portal-cliente",
+  "customer-portal",
+  "portal-fornecedor",
+  "supplier-portal",
+  "portal-colaborador",
+  "employee-portal",
+  "portal-rh",
+  "portal-comercial",
+  "portal-admin",
+  "mobile-erp",
+  "copilot",
+];
 
 function Boot() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [view, setView] = useState<OmnichannelView>(() => {
     const hash = (typeof window !== "undefined" ? window.location.hash.replace("#", "") : "") as OmnichannelView;
-    if (["erp", "customer-portal", "supplier-portal", "employee-portal", "mobile-erp", "copilot"].includes(hash)) return hash;
+    if (ALL_VIEWS.includes(hash)) return hash;
     const saved = localStorage.getItem("vendaja_omnichannel_view") as OmnichannelView;
-    if (["erp", "customer-portal", "supplier-portal", "employee-portal", "mobile-erp", "copilot"].includes(saved)) return saved;
+    if (ALL_VIEWS.includes(saved)) return saved;
     return "erp";
   });
 
   useEffect(() => {
     const handleHash = () => {
       const next = window.location.hash.replace("#", "") as OmnichannelView;
-      if (["erp", "customer-portal", "supplier-portal", "employee-portal", "mobile-erp", "copilot"].includes(next)) {
+      if (ALL_VIEWS.includes(next)) {
         setView(next);
       }
     };
@@ -304,6 +364,13 @@ function Boot() {
 
   if (error) return <main className="startup-error"><h1>Armazenamento local indisponível</h1><p>{error.message}</p><button onClick={() => window.location.reload()}>Recarregar</button></main>;
   if (!ready) return <main className="startup-loading"><div className="spinner" /><p>A iniciar o armazenamento offline…</p></main>;
+
+  const isCustomer = view === "portal-cliente" || view === "customer-portal";
+  const isSupplier = view === "portal-fornecedor" || view === "supplier-portal";
+  const isEmployee = view === "portal-colaborador" || view === "employee-portal";
+  const isHr = view === "portal-rh";
+  const isCommercial = view === "portal-comercial";
+  const isAdmin = view === "portal-admin";
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -343,12 +410,13 @@ function Boot() {
               background: view === "erp" ? "#0284c7" : "#1e293b",
               color: view === "erp" ? "#ffffff" : "#cbd5e1",
             }}
+            title="Acesso completo ao ERP (PDV, Stock, Contabilidade, Finanças)"
           >
-            💼 ERP Comercial
+            💼 ERP Completo
           </button>
           <button
             type="button"
-            onClick={() => changeView("customer-portal")}
+            onClick={() => changeView("portal-cliente")}
             style={{
               padding: "5px 12px",
               borderRadius: "6px",
@@ -356,15 +424,16 @@ function Boot() {
               cursor: "pointer",
               fontWeight: 600,
               fontSize: "12px",
-              background: view === "customer-portal" ? "#0284c7" : "#1e293b",
-              color: view === "customer-portal" ? "#ffffff" : "#cbd5e1",
+              background: isCustomer ? "#0284c7" : "#1e293b",
+              color: isCustomer ? "#ffffff" : "#cbd5e1",
             }}
+            title="Extrato de conta corrente, faturas e pagamentos Multicaixa"
           >
             🏢 Portal do Cliente
           </button>
           <button
             type="button"
-            onClick={() => changeView("supplier-portal")}
+            onClick={() => changeView("portal-fornecedor")}
             style={{
               padding: "5px 12px",
               borderRadius: "6px",
@@ -372,15 +441,16 @@ function Boot() {
               cursor: "pointer",
               fontWeight: 600,
               fontSize: "12px",
-              background: view === "supplier-portal" ? "#0284c7" : "#1e293b",
-              color: view === "supplier-portal" ? "#ffffff" : "#cbd5e1",
+              background: isSupplier ? "#0284c7" : "#1e293b",
+              color: isSupplier ? "#ffffff" : "#cbd5e1",
             }}
+            title="Ordens de compra, receções e submissão de faturas"
           >
             🚛 Portal do Fornecedor
           </button>
           <button
             type="button"
-            onClick={() => changeView("employee-portal")}
+            onClick={() => changeView("portal-colaborador")}
             style={{
               padding: "5px 12px",
               borderRadius: "6px",
@@ -388,13 +458,66 @@ function Boot() {
               cursor: "pointer",
               fontWeight: 600,
               fontSize: "12px",
-              background: view === "employee-portal" ? "#0284c7" : "#1e293b",
-              color: view === "employee-portal" ? "#ffffff" : "#cbd5e1",
+              background: isEmployee ? "#0284c7" : "#1e293b",
+              color: isEmployee ? "#ffffff" : "#cbd5e1",
             }}
+            title="Recibos de vencimento, férias e faltas do colaborador"
           >
-            👥 Portal do Colaborador (RH)
+            👥 Portal do Colaborador
           </button>
-                    <button
+          <button
+            type="button"
+            onClick={() => changeView("portal-rh")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: isHr ? "#4f46e5" : "#1e293b",
+              color: isHr ? "#ffffff" : "#cbd5e1",
+            }}
+            title="Gestão de recursos humanos, quadro de pessoal e salários"
+          >
+            🧑‍💼 Portal de RH
+          </button>
+          <button
+            type="button"
+            onClick={() => changeView("portal-comercial")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: isCommercial ? "#0369a1" : "#1e293b",
+              color: isCommercial ? "#ffffff" : "#cbd5e1",
+            }}
+            title="Pipeline de vendas, volume faturado e clientes"
+          >
+            📊 Portal Comercial
+          </button>
+          <button
+            type="button"
+            onClick={() => changeView("portal-admin")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: isAdmin ? "#0f172a" : "#1e293b",
+              borderBottom: isAdmin ? "2px solid #38bdf8" : "none",
+              color: isAdmin ? "#38bdf8" : "#cbd5e1",
+            }}
+            title="Governança, filiais, utilizadores e logs de auditoria"
+          >
+            ⚙️ Administração
+          </button>
+          <button
             type="button"
             onClick={() => changeView("copilot")}
             style={{
@@ -407,10 +530,11 @@ function Boot() {
               background: view === "copilot" ? "#8b5cf6" : "#1e293b",
               color: view === "copilot" ? "#ffffff" : "#cbd5e1",
             }}
+            title="Assistente com Inteligência Artificial para gestão empresarial"
           >
-            🤖 VendaJá Copilot (IA)
+            🤖 Copilot (IA)
           </button>
-<button
+          <button
             type="button"
             onClick={() => changeView("mobile-erp")}
             style={{
@@ -423,8 +547,9 @@ function Boot() {
               background: view === "mobile-erp" ? "#0284c7" : "#1e293b",
               color: view === "mobile-erp" ? "#ffffff" : "#cbd5e1",
             }}
+            title="Aplicação executiva para Android e iOS"
           >
-            📱 Mobile ERP App
+            📱 Mobile ERP
           </button>
           {localStorage.getItem("accessToken") && (
             <button
@@ -455,12 +580,15 @@ function Boot() {
         </nav>
       </header>
       <div style={{ flex: 1 }}>
-        {view === "customer-portal" && <CustomerPortal apiUrl={api()} />}
-        {view === "supplier-portal" && <SupplierPortal apiUrl={api()} />}
-        {view === "employee-portal" && <EmployeePortal apiUrl={api()} />}
+        {isCustomer && <CustomerPortal apiUrl={api()} />}
+        {isSupplier && <SupplierPortal apiUrl={api()} />}
+        {isEmployee && <EmployeePortal apiUrl={api()} />}
+        {isHr && <HrPortal apiUrl={api()} />}
+        {isCommercial && <CommercialPortal apiUrl={api()} />}
+        {isAdmin && <AdminPortal apiUrl={api()} />}
         {view === "mobile-erp" && (localStorage.getItem("accessToken") ? <MobileErpApp apiUrl={api()} /> : <Login onLogin={() => setReady(true)} />)}
         {view === "copilot" && (localStorage.getItem("accessToken") ? <CopilotWidget apiUrl={api()} /> : <Login onLogin={() => setReady(true)} />)}
-        {view === "erp" && (localStorage.getItem("accessToken") ? <Dashboard /> : <Login onLogin={() => setReady(true)} />)}
+        {view === "erp" && <DesktopErpApp onSwitchPortal={(p) => changeView(p as OmnichannelView)} />}
       </div>
     </div>
   );

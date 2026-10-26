@@ -182,7 +182,7 @@ export class EnterpriseEmployeePortalService {
       }
     }
 
-    if (!employee) throw new Error("employee_not_found");
+    if (!employee) return null;
 
     const token = jwt.sign(
       {

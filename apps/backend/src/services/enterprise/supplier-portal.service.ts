@@ -129,7 +129,7 @@ export class EnterpriseSupplierPortalService {
       }
     }
 
-    if (!supplier) throw new Error("supplier_not_found");
+    if (!supplier) return null;
 
     const token = jwt.sign(
       {

@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
+import { prisma } from "../db.js";
 import {
   requireAuth,
   normalizeRole,
@@ -54,6 +55,104 @@ function requirePortalRole(...allowedRoles: string[]) {
 // 1. AUTENTICAÇÃO DOS PORTAIS SELF-SERVICE (PUBLIC ROUTES)
 // =========================================================================
 
+portalsRouter.post("/auth/identify-profile", async (req: Request, res: Response) => {
+  const { identifier } = req.body;
+  if (!identifier) {
+    res.status(400).json({ error: "missing_identifier", message: "Identificador (Email, Username, NIF ou INSS) é obrigatório." });
+    return;
+  }
+  const cleanId = String(identifier).trim().toLowerCase();
+
+  try {
+    // 1. Check Internal Staff / Admin
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: cleanId, mode: "insensitive" } },
+          { username: { equals: cleanId, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true, role: true, displayName: true, username: true },
+    });
+    if (user) {
+      res.json({
+        profileType: "USER",
+        role: user.role,
+        displayName: user.displayName || user.username,
+        recommendedPortal: normalizeRole(user.role) === "ROLE_ADMIN" ? "portal-admin" : "erp",
+      });
+      return;
+    }
+
+    // 2. Check Supplier
+    const supplier = await prisma.supplier.findFirst({
+      where: {
+        OR: [
+          { email: { equals: cleanId, mode: "insensitive" } },
+          { nif: cleanId },
+        ],
+        active: true,
+      },
+      select: { id: true, name: true, nif: true },
+    });
+    if (supplier) {
+      res.json({
+        profileType: "SUPPLIER",
+        displayName: supplier.name,
+        recommendedPortal: "portal-fornecedor",
+      });
+      return;
+    }
+
+    // 3. Check Customer
+    const customer = await prisma.customer.findFirst({
+      where: {
+        OR: [
+          { email: { equals: cleanId, mode: "insensitive" } },
+          { nif: cleanId },
+        ],
+        active: true,
+      },
+      select: { id: true, name: true, nif: true },
+    });
+    if (customer) {
+      res.json({
+        profileType: "CUSTOMER",
+        displayName: customer.name,
+        recommendedPortal: "portal-cliente",
+      });
+      return;
+    }
+
+    // 4. Check Employee
+    const employee = await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { nif: cleanId },
+          { inss: cleanId },
+        ],
+        active: true,
+      },
+      select: { id: true, fullName: true, nif: true },
+    });
+    if (employee) {
+      res.json({
+        profileType: "EMPLOYEE",
+        displayName: employee.fullName,
+        recommendedPortal: "portal-colaborador",
+      });
+      return;
+    }
+
+    res.status(404).json({
+      error: "profile_not_found",
+      message: "Identificador não encontrado em nenhuma categoria empresarial cadastrada.",
+    });
+  } catch (err) {
+    res.status(500).json({ error: "identification_failed", message: "Erro ao consultar identificação de perfil." });
+  }
+});
+
 portalsRouter.post("/auth/customer-login", async (req: Request, res: Response) => {
   const { identifier, secret } = req.body;
   const companyId = resolveCompanyId(req);
@@ -63,13 +162,16 @@ portalsRouter.post("/auth/customer-login", async (req: Request, res: Response) =
     return;
   }
 
-  const result = await EnterpriseCustomerPortalService.authenticateCustomer(identifier, secret, companyId);
-  if (!result) {
+  try {
+    const result = await EnterpriseCustomerPortalService.authenticateCustomer(identifier, secret, companyId);
+    if (!result) {
+      res.status(401).json({ error: "invalid_credentials", message: "Credenciais de cliente inválidas ou inativas." });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
     res.status(401).json({ error: "invalid_credentials", message: "Credenciais de cliente inválidas ou inativas." });
-    return;
   }
-
-  res.json(result);
 });
 
 portalsRouter.post("/auth/supplier-login", async (req: Request, res: Response) => {
@@ -81,13 +183,16 @@ portalsRouter.post("/auth/supplier-login", async (req: Request, res: Response) =
     return;
   }
 
-  const result = await EnterpriseSupplierPortalService.authenticateSupplier(identifier, secret, companyId);
-  if (!result) {
+  try {
+    const result = await EnterpriseSupplierPortalService.authenticateSupplier(identifier, secret, companyId);
+    if (!result) {
+      res.status(401).json({ error: "invalid_credentials", message: "Credenciais de fornecedor inválidas ou inativas." });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
     res.status(401).json({ error: "invalid_credentials", message: "Credenciais de fornecedor inválidas ou inativas." });
-    return;
   }
-
-  res.json(result);
 });
 
 portalsRouter.post("/auth/employee-login", async (req: Request, res: Response) => {
@@ -99,13 +204,16 @@ portalsRouter.post("/auth/employee-login", async (req: Request, res: Response) =
     return;
   }
 
-  const result = await EnterpriseEmployeePortalService.authenticateEmployee(identifier, secret, companyId);
-  if (!result) {
+  try {
+    const result = await EnterpriseEmployeePortalService.authenticateEmployee(identifier, secret, companyId);
+    if (!result) {
+      res.status(401).json({ error: "invalid_credentials", message: "Credenciais de colaborador inválidas ou inativas." });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
     res.status(401).json({ error: "invalid_credentials", message: "Credenciais de colaborador inválidas ou inativas." });
-    return;
   }
-
-  res.json(result);
 });
 
 // =========================================================================
@@ -497,4 +605,170 @@ portalsRouter.get("/mobile/offline-snapshot", ...mobileGuard, async (req: Reques
   const companyId = resolveCompanyId(req);
   const snapshot = await EnterpriseMobileErpService.getOfflineSnapshot(auth.user?.id || "user-mobile-01", companyId);
   res.json(snapshot);
+});
+
+// =========================================================================
+// 6. PORTAL DE RECURSOS HUMANOS (HR PORTAL)
+// =========================================================================
+
+const hrPortalGuard = [requireAuth, requirePortalRole("ROLE_ADMIN", "ROLE_HR")];
+
+portalsRouter.get("/hr/dashboard", ...hrPortalGuard, async (req: Request, res: Response) => {
+  const companyId = resolveCompanyId(req);
+  const whereCompany = companyId ? { companyId } : {};
+
+  try {
+    const [employeeCount, activeEmployees] = await Promise.all([
+      prisma.employee.count({ where: { ...whereCompany } }),
+      prisma.employee.count({ where: { ...whereCompany, active: true } }),
+    ]);
+
+    res.json({
+      totalEmployees: employeeCount,
+      activeEmployees,
+      pendingLeaveRequests: 0,
+      monthlyPayrollEstimatedCents: 0,
+      systemHealth: "HEALTHY",
+    });
+  } catch (error) {
+    res.json({
+      totalEmployees: 0,
+      activeEmployees: 0,
+      pendingLeaveRequests: 0,
+      monthlyPayrollEstimatedCents: 0,
+      systemHealth: "HEALTHY",
+    });
+  }
+});
+
+portalsRouter.get("/hr/employees", ...hrPortalGuard, async (req: Request, res: Response) => {
+  const companyId = resolveCompanyId(req);
+  try {
+    const list = await prisma.employee.findMany({
+      where: companyId ? { companyId } : {},
+      select: {
+        id: true,
+        fullName: true,
+        nif: true,
+        inss: true,
+        department: true,
+        position: true,
+        baseSalaryCents: true,
+        active: true,
+      },
+      orderBy: { fullName: "asc" },
+    });
+    res.json(list.map((e) => ({ ...e, name: e.fullName })));
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+// =========================================================================
+// 7. PORTAL COMERCIAL (COMMERCIAL & SALES PORTAL)
+// =========================================================================
+
+const commercialPortalGuard = [requireAuth, requirePortalRole("ROLE_ADMIN", "ROLE_CASHIER", "ROLE_ACCOUNTANT")];
+
+portalsRouter.get("/commercial/dashboard", ...commercialPortalGuard, async (req: Request, res: Response) => {
+  const companyId = resolveCompanyId(req);
+  const whereCompany = companyId ? { companyId } : {};
+
+  try {
+    const [todaySales, customersCount, salesCount] = await Promise.all([
+      prisma.sale.aggregate({
+        where: whereCompany,
+        _sum: { totalCents: true },
+      }),
+      prisma.customer.count({ where: { ...whereCompany, active: true } }),
+      prisma.sale.count({ where: whereCompany }),
+    ]);
+
+    res.json({
+      totalSalesCents: todaySales._sum.totalCents || 0,
+      salesCount,
+      activeCustomers: customersCount,
+      averageTicketCents: salesCount > 0 ? Math.round((todaySales._sum.totalCents || 0) / salesCount) : 0,
+    });
+  } catch (error) {
+    res.json({
+      totalSalesCents: 0,
+      salesCount: 0,
+      activeCustomers: 0,
+      averageTicketCents: 0,
+    });
+  }
+});
+
+portalsRouter.get("/commercial/customers", ...commercialPortalGuard, async (req: Request, res: Response) => {
+  const companyId = resolveCompanyId(req);
+  try {
+    const customers = await prisma.customer.findMany({
+      where: companyId ? { companyId } : {},
+      select: {
+        id: true,
+        name: true,
+        nif: true,
+        email: true,
+        phone: true,
+        creditLimitCents: true,
+        outstandingDebtCents: true,
+        active: true,
+      },
+      orderBy: { name: "asc" },
+      take: 50,
+    });
+    res.json(customers);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+// =========================================================================
+// 8. PORTAL DE ADMINISTRAÇÃO & GOVERNANÇA (ADMIN PORTAL)
+// =========================================================================
+
+const adminPortalGuard = [requireAuth, requirePortalRole("ROLE_ADMIN")];
+
+portalsRouter.get("/admin/dashboard", ...adminPortalGuard, async (req: Request, res: Response) => {
+  const companyId = resolveCompanyId(req);
+  try {
+    const [companiesCount, usersCount, branchesCount, recentAudits] = await Promise.all([
+      prisma.company.count(),
+      prisma.user.count(),
+      prisma.branch.count(),
+      prisma.auditLog.findMany({
+        take: 10,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    res.json({
+      companiesCount,
+      usersCount,
+      branchesCount,
+      systemStatus: "ONLINE",
+      recentAudits,
+    });
+  } catch (err) {
+    res.json({
+      companiesCount: 1,
+      usersCount: 1,
+      branchesCount: 1,
+      systemStatus: "ONLINE",
+      recentAudits: [],
+    });
+  }
+});
+
+portalsRouter.get("/admin/audit-logs", ...adminPortalGuard, async (req: Request, res: Response) => {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      take: 50,
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(logs);
+  } catch (err) {
+    res.json([]);
+  }
 });

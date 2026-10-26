@@ -177,5 +177,13 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
   res.status(500).json({ error: "internal_error", correlationId: id });
 });
 const port = config.PORT;
-if (process.env.NODE_ENV !== "test") app.listen(port, () => console.log(`API listening on ${port}`));
+if (process.env.NODE_ENV !== "test") {
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Branch" ADD COLUMN IF NOT EXISTS "isHeadquarters" BOOLEAN NOT NULL DEFAULT false;`);
+    console.log("[server] Schema auto-heal: Branch.isHeadquarters verified.");
+  } catch (err) {
+    console.warn("[server] Schema auto-heal notice:", err);
+  }
+  app.listen(port, () => console.log(`API listening on ${port}`));
+}
 export default app;

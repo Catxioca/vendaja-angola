@@ -69,6 +69,14 @@ authRouter.post("/bootstrap", async (req, res) => {
     });
     return;
   }
+
+  // Self-healing schema check: ensure Branch.isHeadquarters exists before inserting
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Branch" ADD COLUMN IF NOT EXISTS "isHeadquarters" BOOLEAN NOT NULL DEFAULT false;`);
+  } catch (schemaErr) {
+    console.warn("[auth/bootstrap] Schema auto-heal notice:", schemaErr);
+  }
+
   try {
     const user = await prisma.$transaction(async (tx) => {
       const existingAdmin = await tx.user.findFirst({

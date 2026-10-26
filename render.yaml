@@ -9,7 +9,7 @@ services:
     region: frankfurt
     buildCommand: npm install && npm run build:shared && npm --workspace @angola/backend run build
     preDeployCommand: node scripts/cloud-migrate.mjs
-    startCommand: node apps/backend/dist/server.js
+    startCommand: node scripts/cloud-migrate.mjs && node apps/backend/dist/server.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:

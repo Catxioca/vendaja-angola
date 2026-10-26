@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "start": "node scripts/cloud-migrate.mjs && node apps/backend/dist/server.js",
     "build": "npm run build -ws --if-present",
     "typecheck": "npm run build:shared && npm run typecheck -ws --if-present",
     "dev:backend": "npm --workspace @angola/backend run dev",

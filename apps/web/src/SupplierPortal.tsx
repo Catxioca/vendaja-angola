@@ -7,6 +7,9 @@ interface Props {
 
 export function SupplierPortal({ apiUrl }: Props) {
   const [token, setToken] = useState<string | null>(localStorage.getItem("portal_supplier_token"));
+  const [nif, setNif] = useState("");
+  const [secret, setSecret] = useState("");
+  const [loginError, setLoginError] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "register" | "recover">("login");
   const [registerForm, setRegisterForm] = useState({
     name: "",

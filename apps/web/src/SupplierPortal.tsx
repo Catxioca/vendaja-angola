@@ -81,11 +81,11 @@ export function SupplierPortal({ apiUrl }: Props) {
         const d = await dashRes.json();
         setDashboard(d);
         setProfileForm({
-          contactName: "Eng. Carlos Morais",
-          phone: "+244 923 555 444",
-          email: "encomendas@angolalog.ao",
-          address: "Pólo Industrial de Viana, Armazém 12, Luanda",
-          iban: "AO06.0006.0000.4433.2211.0099.1",
+          contactName: d.contactName || "",
+          phone: d.phone || "",
+          email: d.email || "",
+          address: d.address || "",
+          iban: d.iban || "",
         });
       }
       if (ordersRes.ok) setOrders(await ordersRes.json());
@@ -109,7 +109,7 @@ export function SupplierPortal({ apiUrl }: Props) {
           amountCents,
           issueDate: submitForm.issueDate,
           notes: submitForm.notes,
-          fileAttachmentUrl: submitForm.fileAttachmentUrl || "https://storage.vendaja.ao/uploads/doc.pdf",
+          fileAttachmentUrl: submitForm.fileAttachmentUrl || undefined,
         }),
       });
 
@@ -155,6 +155,9 @@ export function SupplierPortal({ apiUrl }: Props) {
   if (!token) {
     return (
       <div className="portal-container" style={{ maxWidth: "420px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ background: "#fee2e2", border: "1px solid #ef4444", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>⚠️</span> <span>Sem autenticação. Introduza as suas credenciais para aceder ao portal.</span>
+        </div>
         <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>🚛 Portal do Fornecedor</h2>
         <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda às suas ordens de compra, receções de mercadoria e submeta faturas comerciais.</p>
         <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -273,19 +276,25 @@ export function SupplierPortal({ apiUrl }: Props) {
               </tr>
             </thead>
             <tbody>
-              {orders.map((o) => (
-                <tr key={o.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                  <td style={{ padding: "10px", fontWeight: "600" }}>{o.number}</td>
-                  <td style={{ padding: "10px", color: "#64748b" }}>{new Date(o.date).toLocaleDateString("pt-AO")}</td>
-                  <td style={{ padding: "10px" }}>{o.linesCount} artigos</td>
-                  <td style={{ padding: "10px", textAlign: "right", fontWeight: "700" }}>{formatKwanza(o.totalCostCents)}</td>
-                  <td style={{ padding: "10px" }}>
-                    <span style={{ background: o.status === "DELIVERED" ? "#dcfce7" : "#dbeafe", color: o.status === "DELIVERED" ? "#166534" : "#1e40af", padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
-                      {o.status === "DELIVERED" ? "Entregue" : "Aprovada / Em Aberto"}
-                    </span>
-                  </td>
+              {orders.length ? (
+                orders.map((o) => (
+                  <tr key={o.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "10px", fontWeight: "600" }}>{o.number}</td>
+                    <td style={{ padding: "10px", color: "#64748b" }}>{new Date(o.date).toLocaleDateString("pt-AO")}</td>
+                    <td style={{ padding: "10px" }}>{o.linesCount} artigos</td>
+                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700" }}>{formatKwanza(o.totalCostCents)}</td>
+                    <td style={{ padding: "10px" }}>
+                      <span style={{ background: o.status === "DELIVERED" ? "#dcfce7" : "#dbeafe", color: o.status === "DELIVERED" ? "#166534" : "#1e40af", padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
+                        {o.status === "DELIVERED" ? "Entregue" : "Aprovada / Em Aberto"}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} style={{ padding: "16px", textAlign: "center", color: "#64748b" }}>Sem ordens de compra emitidas.</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -305,18 +314,24 @@ export function SupplierPortal({ apiUrl }: Props) {
               </tr>
             </thead>
             <tbody>
-              {receipts.map((r) => (
-                <tr key={r.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                  <td style={{ padding: "10px", fontWeight: "600" }}>{r.number}</td>
-                  <td style={{ padding: "10px" }}>{r.orderNumber}</td>
-                  <td style={{ padding: "10px", color: "#64748b" }}>{new Date(r.date).toLocaleDateString("pt-AO")}</td>
-                  <td style={{ padding: "10px" }}>
-                    <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
-                      Conferida e Registada
-                    </span>
-                  </td>
+              {receipts.length ? (
+                receipts.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "10px", fontWeight: "600" }}>{r.number}</td>
+                    <td style={{ padding: "10px" }}>{r.orderNumber}</td>
+                    <td style={{ padding: "10px", color: "#64748b" }}>{new Date(r.date).toLocaleDateString("pt-AO")}</td>
+                    <td style={{ padding: "10px" }}>
+                      <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
+                        Conferida e Registada
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} style={{ padding: "16px", textAlign: "center", color: "#64748b" }}>Sem receções de mercadoria registadas.</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

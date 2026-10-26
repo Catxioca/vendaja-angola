@@ -91,26 +91,27 @@ authRouter.post("/bootstrap", async (req, res) => {
         throw new Error("bootstrap_unavailable");
       }
 
-      await tx.systemBootstrap.upsert({
-        where: { id: "primary" },
-        create: { id: "primary" },
-        update: {},
-      });
-
       const company = await tx.company.create({
         data: {
           legalName: parsed.data.company.legalName,
           nif: (parsed.data.company.nif as string | undefined) ?? null,
+          branches: {
+            create: {
+              code: parsed.data.company.branchCode,
+              name: parsed.data.company.branchName,
+              isHeadquarters: true,
+            },
+          },
+        },
+        include: {
+          branches: true,
         },
       });
-      const branch = await tx.branch.create({
-        data: {
-          companyId: company.id,
-          code: parsed.data.company.branchCode,
-          name: parsed.data.company.branchName,
-          isHeadquarters: true,
-        },
-      });
+      const branch = company.branches[0];
+      if (!branch) {
+        throw new Error("branch_creation_failed");
+      }
+
       const created = await tx.user.create({
         data: {
           username: parsed.data.admin.username,
@@ -121,27 +122,32 @@ authRouter.post("/bootstrap", async (req, res) => {
           role: "ROLE_ADMIN",
         },
       });
-      await tx.company.update({
-        where: { id: company.id },
-        data: { bootstrapAdminUserId: created.id },
-      });
-      await tx.companyMembership.create({
-        data: {
-          userId: created.id,
-          companyId: company.id,
-          branchId: branch.id,
-          role: "ROLE_ADMIN",
-          modules: ["POS", "STOCK", "HR", "ACCOUNTING", "DASHBOARD", "SETTINGS"],
-        },
-      });
-      await tx.systemBootstrap.update({
-        where: { id: "primary" },
-        data: { companyId: company.id, userId: created.id },
-      });
+
+      await Promise.all([
+        tx.company.update({
+          where: { id: company.id },
+          data: { bootstrapAdminUserId: created.id },
+        }),
+        tx.companyMembership.create({
+          data: {
+            userId: created.id,
+            companyId: company.id,
+            branchId: branch.id,
+            role: "ROLE_ADMIN",
+            modules: ["POS", "STOCK", "HR", "ACCOUNTING", "DASHBOARD", "SETTINGS"],
+          },
+        }),
+        tx.systemBootstrap.upsert({
+          where: { id: "primary" },
+          create: { id: "primary", companyId: company.id, userId: created.id },
+          update: { companyId: company.id, userId: created.id },
+        }),
+      ]);
+
       return { user: created, company, branch };
     }, {
-      timeout: 30000,
-      maxWait: 10000,
+      timeout: 60000,
+      maxWait: 20000,
       isolationLevel: "ReadCommitted",
     });
 
@@ -307,7 +313,16 @@ authRouter.post("/login", async (req, res) => {
     res.status(429).json({ error: "too_many_attempts", retryAfterMs: rateLimit.remaining });
     return;
   }
-  const user = await prisma.user.findFirst({ where: { OR: [{ email: normalizedIdentifier }, { username: normalizedIdentifier }] } });
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: normalizedIdentifier, mode: "insensitive" } },
+        { username: { equals: identifier, mode: "insensitive" } },
+        { username: identifier },
+        { email: normalizedIdentifier },
+      ],
+    },
+  });
 
   // Account lockout check
   if (user?.lockedUntil && user.lockedUntil > new Date()) {

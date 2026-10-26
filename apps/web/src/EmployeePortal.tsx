@@ -18,9 +18,9 @@ export function EmployeePortal({ apiUrl }: Props) {
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [leaveForm, setLeaveForm] = useState({
     type: "VACATION",
-    startDate: "2026-12-01",
-    endDate: "2026-12-05",
-    daysCount: 5,
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: new Date().toISOString().slice(0, 10),
+    daysCount: 1,
     justification: "",
   });
   const [profileForm, setProfileForm] = useState({ phone: "", email: "", address: "", iban: "" });
@@ -75,10 +75,10 @@ export function EmployeePortal({ apiUrl }: Props) {
         const d = await dashRes.json();
         setDashboard(d);
         setProfileForm({
-          phone: "+244 923 111 999",
-          email: "teresa.carvalho@empresa.ao",
-          address: "Condomínio Kinaxixi, Torre B, Luanda",
-          iban: d.iban || "AO06.0040.0000.9988.7766.5544.3",
+          phone: d.phone || "",
+          email: d.email || "",
+          address: d.address || "",
+          iban: d.iban || "",
         });
       }
       if (payslipsRes.ok) {
@@ -137,6 +137,9 @@ export function EmployeePortal({ apiUrl }: Props) {
   if (!token) {
     return (
       <div className="portal-container" style={{ maxWidth: "420px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ background: "#fee2e2", border: "1px solid #ef4444", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>⚠️</span> <span>Sem autenticação. Introduza as suas credenciais para aceder ao portal.</span>
+        </div>
         <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>👥 Portal do Colaborador (RH)</h2>
         <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda aos seus recibos de vencimento, saldo de férias e solicite ausências.</p>
         <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -246,25 +249,31 @@ export function EmployeePortal({ apiUrl }: Props) {
           <div style={{ background: "#fff", padding: "16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
             <h4 style={{ margin: "0 0 12px 0" }}>Histórico de Recibos de Vencimento</h4>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {payslips.map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => setSelectedPayslip(p)}
-                  style={{
-                    padding: "10px",
-                    borderRadius: "6px",
-                    border: selectedPayslip?.id === p.id ? "2px solid #7c3aed" : "1px solid #e2e8f0",
-                    background: selectedPayslip?.id === p.id ? "#f5f3ff" : "#fff",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "600" }}>
-                    <span>{p.month}</span>
-                    <span style={{ color: "#047857" }}>{formatKwanza(p.netSalaryCents)}</span>
+              {payslips.length ? (
+                payslips.map((p) => (
+                  <div
+                    key={p.id}
+                    onClick={() => setSelectedPayslip(p)}
+                    style={{
+                      padding: "10px",
+                      borderRadius: "6px",
+                      border: selectedPayslip?.id === p.id ? "2px solid #7c3aed" : "1px solid #e2e8f0",
+                      background: selectedPayslip?.id === p.id ? "#f5f3ff" : "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "600" }}>
+                      <span>{p.month}</span>
+                      <span style={{ color: "#047857" }}>{formatKwanza(p.netSalaryCents)}</span>
+                    </div>
+                    <small style={{ color: "#64748b" }}>Líquido a receber</small>
                   </div>
-                  <small style={{ color: "#64748b" }}>Líquido a receber</small>
+                ))
+              ) : (
+                <div style={{ padding: "16px", textAlign: "center", color: "#64748b", fontSize: "13px" }}>
+                  Sem recibos de vencimento emitidos.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -427,18 +436,24 @@ export function EmployeePortal({ apiUrl }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {leaveRequests.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                    <td style={{ padding: "8px" }}>{r.startDate} a {r.endDate}</td>
-                    <td style={{ padding: "8px" }}>{r.typeLabel}</td>
-                    <td style={{ padding: "8px", fontWeight: "600" }}>{r.daysCount} d</td>
-                    <td style={{ padding: "8px" }}>
-                      <span style={{ background: r.status === "APPROVED" ? "#dcfce7" : "#fef3c7", color: r.status === "APPROVED" ? "#166534" : "#b45309", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
-                        {r.status === "APPROVED" ? "Aprovado" : "Pendente"}
-                      </span>
-                    </td>
+                {leaveRequests.length ? (
+                  leaveRequests.map((r) => (
+                    <tr key={r.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      <td style={{ padding: "8px" }}>{r.startDate} a {r.endDate}</td>
+                      <td style={{ padding: "8px" }}>{r.typeLabel}</td>
+                      <td style={{ padding: "8px", fontWeight: "600" }}>{r.daysCount} d</td>
+                      <td style={{ padding: "8px" }}>
+                        <span style={{ background: r.status === "APPROVED" ? "#dcfce7" : "#fef3c7", color: r.status === "APPROVED" ? "#166534" : "#b45309", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
+                          {r.status === "APPROVED" ? "Aprovado" : "Pendente"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} style={{ padding: "16px", textAlign: "center", color: "#64748b" }}>Sem pedidos de ausência registados.</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

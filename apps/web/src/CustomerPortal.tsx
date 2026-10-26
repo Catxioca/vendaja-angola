@@ -15,6 +15,8 @@ export function CustomerPortal({ apiUrl }: Props) {
   const [dashboard, setDashboard] = useState<any>(null);
   const [statement, setStatement] = useState<any>(null);
   const [generatedRef, setGeneratedRef] = useState<any>(null);
+  const [refDocId, setRefDocId] = useState("");
+  const [refAmountKz, setRefAmountKz] = useState("");
   const [profileForm, setProfileForm] = useState({ phone: "", email: "", address: "" });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -84,12 +86,15 @@ export function CustomerPortal({ apiUrl }: Props) {
     }
   };
 
-  const handleGenerateReference = async (docId = "doc-ft-2026-001", amountCents = 8_500_000_00) => {
+  const handleGenerateReference = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!refDocId || !refAmountKz) return;
+    const amountCents = Math.round(Number(refAmountKz.replace(/\./g, "").replace(",", ".")) * 100);
     try {
       const res = await fetch(`${apiUrl}/api/v1/portals/customer/payment-reference`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ documentId: docId, amountCents }),
+        body: JSON.stringify({ documentId: refDocId, amountCents }),
       });
       if (res.ok) {
         setGeneratedRef(await res.json());
@@ -127,6 +132,9 @@ export function CustomerPortal({ apiUrl }: Props) {
   if (!token) {
     return (
       <div className="portal-container" style={{ maxWidth: "420px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ background: "#fee2e2", border: "1px solid #ef4444", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>⚠️</span> <span>Sem autenticação. Introduza as suas credenciais para aceder ao portal.</span>
+        </div>
         <h2 style={{ color: "#0f172a", marginBottom: "8px" }}>🏢 Portal do Cliente</h2>
         <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "20px" }}>Aceda às suas faturas, extrato de conta corrente e referências de pagamento.</p>
         <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -243,18 +251,24 @@ export function CustomerPortal({ apiUrl }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {dashboard.recentDocuments.map((doc: any) => (
-                    <tr key={doc.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "8px", fontWeight: "600" }}>{doc.number}</td>
-                      <td style={{ padding: "8px", color: "#64748b" }}>{new Date(doc.date).toLocaleDateString("pt-AO")}</td>
-                      <td style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>{formatKwanza(doc.totalCents)}</td>
-                      <td style={{ padding: "8px" }}>
-                        <span style={{ background: doc.status === "SETTLED" ? "#dcfce7" : "#fef3c7", color: doc.status === "SETTLED" ? "#15803d" : "#b45309", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
-                          {doc.status === "SETTLED" ? "Liquidado" : "Pendente"}
-                        </span>
-                      </td>
+                  {dashboard.recentDocuments?.length ? (
+                    dashboard.recentDocuments.map((doc: any) => (
+                      <tr key={doc.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                        <td style={{ padding: "8px", fontWeight: "600" }}>{doc.number}</td>
+                        <td style={{ padding: "8px", color: "#64748b" }}>{new Date(doc.date).toLocaleDateString("pt-AO")}</td>
+                        <td style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>{formatKwanza(doc.totalCents)}</td>
+                        <td style={{ padding: "8px" }}>
+                          <span style={{ background: doc.status === "SETTLED" ? "#dcfce7" : "#fef3c7", color: doc.status === "SETTLED" ? "#15803d" : "#b45309", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>
+                            {doc.status === "SETTLED" ? "Liquidado" : "Pendente"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} style={{ padding: "16px", textAlign: "center", color: "#64748b" }}>Sem faturas ou documentos comerciais emitidos.</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -271,15 +285,21 @@ export function CustomerPortal({ apiUrl }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {dashboard.recentPayments.map((p: any) => (
-                    <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "8px", color: "#64748b" }}>{new Date(p.receivedAt).toLocaleDateString("pt-AO")}</td>
-                      <td style={{ padding: "8px" }}>
-                        <b>{p.paymentMethod}</b> <small style={{ color: "#64748b" }}>({p.reference || "N/A"})</small>
-                      </td>
-                      <td style={{ padding: "8px", textAlign: "right", fontWeight: "700", color: "#047857" }}>{formatKwanza(p.amountCents)}</td>
+                  {dashboard.recentPayments?.length ? (
+                    dashboard.recentPayments.map((p: any) => (
+                      <tr key={p.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                        <td style={{ padding: "8px", color: "#64748b" }}>{new Date(p.receivedAt).toLocaleDateString("pt-AO")}</td>
+                        <td style={{ padding: "8px" }}>
+                          <b>{p.paymentMethod}</b> <small style={{ color: "#64748b" }}>({p.reference || "N/A"})</small>
+                        </td>
+                        <td style={{ padding: "8px", textAlign: "right", fontWeight: "700", color: "#047857" }}>{formatKwanza(p.amountCents)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} style={{ padding: "16px", textAlign: "center", color: "#64748b" }}>Sem pagamentos recebidos registados.</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -314,23 +334,29 @@ export function CustomerPortal({ apiUrl }: Props) {
               </tr>
             </thead>
             <tbody>
-              {statement.entries.map((e: any) => (
-                <tr key={e.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                  <td style={{ padding: "10px" }}>{new Date(e.date).toLocaleDateString("pt-AO")}</td>
-                  <td style={{ padding: "10px" }}>
-                    <span style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>{e.documentType}</span>
-                  </td>
-                  <td style={{ padding: "10px", fontWeight: "600" }}>{e.documentNumber}</td>
-                  <td style={{ padding: "10px", color: "#475569" }}>{e.description}</td>
-                  <td style={{ padding: "10px", textAlign: "right", color: e.debitCents > 0 ? "#b91c1c" : "#94a3b8" }}>
-                    {e.debitCents > 0 ? formatKwanza(e.debitCents) : "—"}
-                  </td>
-                  <td style={{ padding: "10px", textAlign: "right", color: e.creditCents > 0 ? "#15803d" : "#94a3b8" }}>
-                    {e.creditCents > 0 ? formatKwanza(e.creditCents) : "—"}
-                  </td>
-                  <td style={{ padding: "10px", textAlign: "right", fontWeight: "700" }}>{formatKwanza(e.runningBalanceCents)}</td>
+              {statement.entries?.length ? (
+                statement.entries.map((e: any) => (
+                  <tr key={e.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <td style={{ padding: "10px" }}>{new Date(e.date).toLocaleDateString("pt-AO")}</td>
+                    <td style={{ padding: "10px" }}>
+                      <span style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", fontSize: "11px", fontWeight: "600" }}>{e.documentType}</span>
+                    </td>
+                    <td style={{ padding: "10px", fontWeight: "600" }}>{e.documentNumber}</td>
+                    <td style={{ padding: "10px", color: "#475569" }}>{e.description}</td>
+                    <td style={{ padding: "10px", textAlign: "right", color: e.debitCents > 0 ? "#b91c1c" : "#94a3b8" }}>
+                      {e.debitCents > 0 ? formatKwanza(e.debitCents) : "—"}
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "right", color: e.creditCents > 0 ? "#15803d" : "#94a3b8" }}>
+                      {e.creditCents > 0 ? formatKwanza(e.creditCents) : "—"}
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700" }}>{formatKwanza(e.runningBalanceCents)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} style={{ padding: "16px", textAlign: "center", color: "#64748b" }}>Sem movimentos na conta corrente.</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -342,13 +368,57 @@ export function CustomerPortal({ apiUrl }: Props) {
           {/* Multicaixa GPO Generator */}
           <div style={{ background: "#fff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
             <h3 style={{ margin: "0 0 8px 0" }}>💳 Pagamento por Referência Multicaixa</h3>
-            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Gere uma referência oficial para liquidação no ATM Multicaixa ou via Multicaixa Express.</p>
-            <button
-              onClick={() => void handleGenerateReference("doc-ft-2026-001", 8_500_000_00)}
-              style={{ background: "#059669", color: "#fff", border: "none", padding: "10px 16px", borderRadius: "4px", fontWeight: "600", cursor: "pointer" }}
-            >
-              Gerar Referência Multicaixa (8.500.000 Kz)
-            </button>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Gere uma referência oficial EMIS para liquidação no ATM Multicaixa ou via Multicaixa Express.</p>
+            <form onSubmit={handleGenerateReference} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                Documento Comercial
+                {dashboard?.recentDocuments?.length ? (
+                  <select
+                    value={refDocId}
+                    onChange={(e) => {
+                      setRefDocId(e.target.value);
+                      const selected = dashboard.recentDocuments.find((d: any) => d.id === e.target.value);
+                      if (selected) setRefAmountKz((selected.totalCents / 100).toLocaleString("pt-AO"));
+                    }}
+                    style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                    required
+                  >
+                    <option value="">Selecione o documento...</option>
+                    {dashboard.recentDocuments.map((d: any) => (
+                      <option key={d.id} value={d.id}>
+                        {d.number} - {formatKwanza(d.totalCents)} ({d.status === "SETTLED" ? "Liquidado" : "Pendente"})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={refDocId}
+                    onChange={(e) => setRefDocId(e.target.value)}
+                    placeholder="N.º ou identificador do documento"
+                    required
+                    style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                  />
+                )}
+              </label>
+              <label style={{ fontSize: "12px", fontWeight: "600" }}>
+                Montante a Liquidar (Kz)
+                <input
+                  type="text"
+                  value={refAmountKz}
+                  onChange={(e) => setRefAmountKz(e.target.value)}
+                  placeholder="Ex: 8500000"
+                  required
+                  style={{ width: "100%", padding: "8px", marginTop: "4px", borderRadius: "4px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <button
+                type="submit"
+                style={{ background: "#059669", color: "#fff", border: "none", padding: "10px 16px", borderRadius: "4px", fontWeight: "600", cursor: "pointer", alignSelf: "flex-start" }}
+              >
+                Gerar Referência Multicaixa
+              </button>
+            </form>
 
             {generatedRef && (
               <div style={{ marginTop: "20px", padding: "16px", background: "#f0fdf4", border: "1px dashed #059669", borderRadius: "6px" }}>
@@ -377,18 +447,14 @@ export function CustomerPortal({ apiUrl }: Props) {
 
           {/* Bank Transfer Details */}
           <div style={{ background: "#fff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-            <h3 style={{ margin: "0 0 8px 0" }}>🏦 Transferência Bancária Direta</h3>
-            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Pode liquidar as suas faturas diretamente para as contas institucionais:</p>
+            <h3 style={{ margin: "0 0 8px 0" }}>🏦 Transferência Bancária</h3>
+            <p style={{ color: "#64748b", fontSize: "13px", marginBottom: "16px" }}>Coordenadas bancárias institucionais:</p>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <div style={{ padding: "12px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
-                <b>Banco Angolano de Investimentos (BAI)</b>
-                <div style={{ fontSize: "13px", color: "#334155", marginTop: "4px" }}>IBAN: <code>AO06.0040.0000.1234.5678.9012.3</code></div>
-                <small style={{ color: "#64748b" }}>Titular: VendaJá Angola Enterprise Lda.</small>
-              </div>
-              <div style={{ padding: "12px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
-                <b>Banco de Fomento Angola (BFA)</b>
-                <div style={{ fontSize: "13px", color: "#334155", marginTop: "4px" }}>IBAN: <code>AO06.0006.0000.9876.5432.1098.7</code></div>
-                <small style={{ color: "#64748b" }}>Titular: VendaJá Angola Enterprise Lda.</small>
+                <b>Contas Institucionais</b>
+                <div style={{ fontSize: "13px", color: "#334155", marginTop: "4px" }}>
+                  Por razões de segurança e validação documental, consulte o IBAN oficial impresso na sua fatura pró-forma / comercial ou solicite a confirmação direta à tesouraria da empresa licenciada.
+                </div>
               </div>
             </div>
           </div>

@@ -86,6 +86,7 @@ export class EnterpriseMobileErpService {
    * Retrieves Real-Time Executive Dashboard for Mobile Managers
    */
   public static async getExecutiveDashboard(companyId?: string) {
+    const isTest = process.env.NODE_ENV !== "production";
     try {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);

@@ -15,19 +15,21 @@ import {
 export const authRouter = Router();
 authRouter.use(distributedRateLimit({ name: "auth", limit: 30, windowMs: 60_000 }));
 
+const emptyToUndefined = (val: unknown) => typeof val === "string" ? (val.trim() || undefined) : val;
+
 export const bootstrapInput = z.object({
   company: z.object({
-    legalName: z.string().trim().min(2).max(160),
-    nif: z.string().trim().min(5).max(32).optional(),
-    branchCode: z.string().trim().min(1).max(32).regex(/^[A-Za-z0-9._-]+$/).default("MAIN"),
-    branchName: z.string().trim().min(2).max(160).default("Sede"),
+    legalName: z.string().trim().min(2, "O nome da empresa deve ter pelo menos 2 caracteres.").max(160),
+    nif: z.preprocess(emptyToUndefined, z.string().min(5, "O NIF deve ter pelo menos 5 caracteres.").max(32).optional()),
+    branchCode: z.string().trim().min(1).max(32).regex(/^[A-Za-z0-9._-]+$/, "O código da filial só pode conter letras, números, hífen ou ponto.").default("MAIN"),
+    branchName: z.string().trim().min(2, "O nome da filial deve ter pelo menos 2 caracteres.").max(160).default("Sede"),
   }),
   admin: z.object({
-    username: z.string().trim().min(3).max(80).regex(/^[A-Za-z0-9._-]+$/),
-    email: z.string().email(),
-    displayName: z.string().trim().min(2).max(160),
-    password: z.string().min(12).max(256),
-    pin: z.string().regex(/^\d{4,6}$/).optional(),
+    username: z.string().trim().min(3, "O nome de utilizador deve ter pelo menos 3 caracteres.").max(80).regex(/^[A-Za-z0-9._-]+$/, "O nome de utilizador não pode conter espaços nem caracteres especiais."),
+    email: z.string().trim().email("Introduza um endereço de e-mail válido."),
+    displayName: z.string().trim().min(2, "O nome completo deve ter pelo menos 2 caracteres.").max(160),
+    password: z.string().min(12, "A password deve ter pelo menos 12 caracteres.").max(256),
+    pin: z.preprocess(emptyToUndefined, z.string().regex(/^\d{4,6}$/, "O PIN deve ter entre 4 e 6 dígitos numéricos.").optional()),
   }),
 });
 
@@ -35,36 +37,119 @@ export const bootstrapInput = z.object({
  * It never trusts a client role and uses an atomic company claim to prevent
  * concurrent first-admin creation. */
 authRouter.get("/bootstrap/status", async (_req, res) => {
-  const state = await prisma.systemBootstrap.findUnique({ where: { id: "primary" }, select: { completedAt: true } });
-  res.json({ bootstrapAllowed: !state });
+  const adminExists = await prisma.user.findFirst({
+    where: { role: { in: ["ADMIN", "admin", "ROLE_ADMIN"] } },
+    select: { id: true },
+  });
+  res.json({ bootstrapAllowed: !adminExists });
 });
 
 authRouter.post("/bootstrap", async (req, res) => {
   const parsed = bootstrapInput.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "invalid_bootstrap_request", details: parsed.error.flatten() }); return; }
+  if (!parsed.success) {
+    const errorDetails = parsed.error.flatten();
+    const firstErrorMessage = Object.values(errorDetails.fieldErrors)
+      .flat()
+      .concat(errorDetails.formErrors)
+      .filter(Boolean)[0] ?? "Dados de configuração inicial inválidos.";
+    res.status(400).json({
+      error: "invalid_bootstrap_request",
+      message: firstErrorMessage,
+      details: errorDetails,
+    });
+    return;
+  }
   try {
     const user = await prisma.$transaction(async (tx) => {
-      // The primary-key claim serializes concurrent first-install requests.
-      await tx.systemBootstrap.create({ data: { id: "primary" } });
-      const company = await tx.company.create({ data: { legalName: parsed.data.company.legalName, nif: parsed.data.company.nif ?? null } });
-      const branch = await tx.branch.create({ data: { companyId: company.id, code: parsed.data.company.branchCode, name: parsed.data.company.branchName } });
-      const created = await tx.user.create({ data: { username: parsed.data.admin.username, email: parsed.data.admin.email.toLowerCase(), displayName: parsed.data.admin.displayName, passwordHash: await hashPassword(parsed.data.admin.password), ...(parsed.data.admin.pin ? { pinHash: await hashPassword(parsed.data.admin.pin) } : {}), role: "ROLE_ADMIN" } });
-      await tx.company.update({ where: { id: company.id }, data: { bootstrapAdminUserId: created.id } });
-      await tx.companyMembership.create({ data: { userId: created.id, companyId: company.id, branchId: branch.id, role: "ROLE_ADMIN", modules: ["POS", "STOCK", "HR", "ACCOUNTING", "DASHBOARD", "SETTINGS"] } });
-      await tx.systemBootstrap.update({ where: { id: "primary" }, data: { companyId: company.id, userId: created.id } });
+      const existingAdmin = await tx.user.findFirst({
+        where: { role: { in: ["ADMIN", "admin", "ROLE_ADMIN"] } },
+        select: { id: true },
+      });
+      if (existingAdmin) {
+        throw new Error("bootstrap_unavailable");
+      }
+
+      await tx.systemBootstrap.upsert({
+        where: { id: "primary" },
+        create: { id: "primary" },
+        update: {},
+      });
+
+      const company = await tx.company.create({
+        data: {
+          legalName: parsed.data.company.legalName,
+          nif: (parsed.data.company.nif as string | undefined) ?? null,
+        },
+      });
+      const branch = await tx.branch.create({
+        data: {
+          companyId: company.id,
+          code: parsed.data.company.branchCode,
+          name: parsed.data.company.branchName,
+        },
+      });
+      const created = await tx.user.create({
+        data: {
+          username: parsed.data.admin.username,
+          email: parsed.data.admin.email.toLowerCase(),
+          displayName: parsed.data.admin.displayName,
+          passwordHash: await hashPassword(parsed.data.admin.password),
+          ...(parsed.data.admin.pin ? { pinHash: await hashPassword(parsed.data.admin.pin as string) } : {}),
+          role: "ROLE_ADMIN",
+        },
+      });
+      await tx.company.update({
+        where: { id: company.id },
+        data: { bootstrapAdminUserId: created.id },
+      });
+      await tx.companyMembership.create({
+        data: {
+          userId: created.id,
+          companyId: company.id,
+          branchId: branch.id,
+          role: "ROLE_ADMIN",
+          modules: ["POS", "STOCK", "HR", "ACCOUNTING", "DASHBOARD", "SETTINGS"],
+        },
+      });
+      await tx.systemBootstrap.update({
+        where: { id: "primary" },
+        data: { companyId: company.id, userId: created.id },
+      });
       await audit("ADMIN_BOOTSTRAPPED", created.id, "COMPANY", company.id, { branchId: branch.id }, tx);
       return { user: created, company, branch };
     }, { isolationLevel: "Serializable" });
+
     const tokens = issueTokens(user.user);
     await persistRefreshToken(user.user.id, tokens.refreshToken);
-    res.status(201).json({ ...tokens, token: tokens.accessToken, user: { id: user.user.id, username: user.user.username, email: user.user.email, displayName: user.user.displayName, role: "ROLE_ADMIN" }, context: { companyId: user.company.id, branchId: user.branch.id } });
+    res.status(201).json({
+      ...tokens,
+      token: tokens.accessToken,
+      user: {
+        id: user.user.id,
+        username: user.user.username,
+        email: user.user.email,
+        displayName: user.user.displayName,
+        role: "ROLE_ADMIN",
+      },
+      context: {
+        companyId: user.company.id,
+        branchId: user.branch.id,
+      },
+    });
   } catch (error) {
+    const isUnavailable = error instanceof Error && error.message === "bootstrap_unavailable";
     const uniqueViolation = typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "P2002";
-    const code = uniqueViolation ? "bootstrap_unavailable" : error instanceof Error ? error.message : "bootstrap_failed";
-    const status = code === "bootstrap_unavailable" ? 409 : 400;
-    res.status(status).json({ error: code });
+    const code = (isUnavailable || uniqueViolation) ? "bootstrap_unavailable" : error instanceof Error ? error.message : "bootstrap_failed";
+    const status = (isUnavailable || uniqueViolation) ? 409 : 400;
+    res.status(status).json({
+      error: code,
+      message: (isUnavailable || uniqueViolation)
+        ? "A instalação já foi inicializada e já possui um administrador configurado."
+        : "Não foi possível concluir a configuração inicial. Verifique os dados introduzidos.",
+    });
   }
 });
+
 authRouter.post("/verify-admin-pin", requireAuth, async (req, res) => {
   const actor = (req as AuthRequest).user;
   const parsed = z.object({ credential: z.string().min(1), mode: z.enum(["password", "pin"]).default("pin") }).safeParse(req.body);

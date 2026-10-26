@@ -344,13 +344,13 @@ export function createSampleCommercialDocument(
   };
 
   const customer: DocumentCustomerInfo = {
-    name: "Sonangol Distribuidora & Logística, S.A.",
-    nif: "5000182749",
+    name: "Consumidor Final / Cliente Geral",
+    nif: "999999999",
     address: "Rua Rainha Ginga, n.º 29",
     city: "Luanda",
     province: "Luanda",
     phone: "+244 222 334 455",
-    email: "compras@sonangol.co.ao",
+    email: "cliente@empresa.ao",
     customerCode: "CLI-0042",
   };
 
@@ -545,7 +545,7 @@ export function createSampleCommercialDocument(
           vehiclePlate: "LD-22-44-AB",
           driverName: "Mateus Silva",
           departureAddress: "VendaJá Armazém 1 - Viana",
-          deliveryAddress: "Sonangol - Rua Rainha Ginga, Luanda",
+          deliveryAddress: "Armazém Central - Rua Rainha Ginga, Luanda",
           departureDateTime: new Date().toISOString(),
         },
         operator: { name: "Expedição Armazém", terminalId: "EXP-01" },
@@ -777,7 +777,7 @@ export function createSampleCommercialDocument(
           driverName: "João Baptista Afonso",
           driverIdDoc: "BI 003928172LA041",
           departureAddress: "Armazém Central VendaJá - Viana, Km 14, Luanda",
-          deliveryAddress: "Sonangol Logística - Estrada de Cacuaco, Luanda",
+          deliveryAddress: "Centro Logístico Geral - Estrada de Cacuaco, Luanda",
           departureDateTime: new Date().toISOString(),
           arrivalDateTime: new Date(Date.now() + 14400000).toISOString(),
           transitCodeAGT: "AGT-TRANS-2026/049182",

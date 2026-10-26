@@ -293,16 +293,7 @@ export const defaultLicensedModules: AppModule[] = [
   "SETTINGS",
 ];
 
-export const isDemoMode = (): boolean => {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      return window.localStorage.getItem("vendaja-demo-mode") === "true";
-    }
-  } catch {
-    // ignore
-  }
-  return false;
-};
+export const isDemoMode = (): boolean => false;
 
 export const normalizeRole = (role: string): string => {
   const value = (role || "").toUpperCase();

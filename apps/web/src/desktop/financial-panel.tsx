@@ -133,11 +133,7 @@ export function EnterpriseFinancialPanel({
       { bucket: "61_90", label: "61 a 90 Dias Vencido", totalCents: 2_000_000_00, customersCount: 1 },
       { bucket: "OVER_90", label: "Mais de 90 Dias (Duvidoso)", totalCents: 2_200_000_00, customersCount: 1 },
     ],
-    customers: [
-      { customerId: "cust-01", customerName: "Sonangol Distribuição, EP", nif: "5418002931", creditLimitCents: 50_000_000_00, outstandingDebtCents: 18_500_000_00, availableCreditCents: 31_500_000_00, status: "NORMAL" },
-      { customerId: "cust-02", customerName: "Angola Telecom, EP", nif: "5403019842", creditLimitCents: 20_000_000_00, outstandingDebtCents: 15_200_000_00, availableCreditCents: 4_800_000_00, status: "OVERDUE" },
-      { customerId: "cust-03", customerName: "Empresa de Transportes Kwanza, Lda", nif: "5409988771", creditLimitCents: 5_000_000_00, outstandingDebtCents: 0, availableCreditCents: 5_000_000_00, status: "NORMAL" },
-    ],
+    customers: [],
   } : {
     totalOutstandingCents: 0,
     totalOverdueCents: 0,
@@ -157,11 +153,7 @@ export function EnterpriseFinancialPanel({
     overdueCents: 1_850_000_00,
     dueWithin7DaysCents: 4_200_000_00,
     dueWithin30DaysCents: 2_500_000_00,
-    obligations: [
-      { id: "ap-01", supplierName: "ENDE - Distribuição de Electricidade", supplierNif: "5401123456", invoiceNumber: "FAT-ENDE-2026/10", daysUntilDue: 5, remainingCents: 4_200_000_00, status: "PENDING", priority: "HIGH" },
-      { id: "ap-02", supplierName: "EPAL - Empresa de Águas de Luanda", supplierNif: "5402987654", invoiceNumber: "FAT-EPAL-2026/09", daysUntilDue: -4, remainingCents: 1_850_000_00, status: "OVERDUE", priority: "HIGH" },
-      { id: "ap-03", supplierName: "Unitel SA - Serviços de Telecom", supplierNif: "5403112233", invoiceNumber: "FAT-UNI-884920", daysUntilDue: 18, remainingCents: 2_500_000_00, status: "PENDING", priority: "MEDIUM" },
-    ],
+    obligations: [],
   } : {
     totalPayableCents: 0,
     overdueCents: 0,
@@ -707,7 +699,7 @@ export function EnterpriseFinancialPanel({
               <button
                 type="button"
                 onClick={() => {
-                  setStatementText(`OFXHEADER:100\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>AOA</CURDEF><BANKTRANLIST><STMTTRN><TRNTYPE>CREDIT</TRNTYPE><DTPOSTED>20261018</DTPOSTED><TRNAMT>5000000.00</TRNAMT><FITID>TXN-BAI-01</FITID><NAME>PAGAMENTO CLIENTE SONANGOL</NAME></STMTTRN><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20261019</DTPOSTED><TRNAMT>-1850000.00</TRNAMT><FITID>TXN-BAI-02</FITID><NAME>DEBITO FORNECEDOR EPAL</NAME></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>150000000.00</BALAMT></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`);
+                  setStatementText(`OFXHEADER:100\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>AOA</CURDEF><BANKTRANLIST><STMTTRN><TRNTYPE>CREDIT</TRNTYPE><DTPOSTED>20261018</DTPOSTED><TRNAMT>5000000.00</TRNAMT><FITID>TXN-BAI-01</FITID><NAME>PAGAMENTO CLIENTE TRANSFERENCIA</NAME></STMTTRN><STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20261019</DTPOSTED><TRNAMT>-1850000.00</TRNAMT><FITID>TXN-BAI-02</FITID><NAME>DEBITO FORNECEDOR SERVICOS</NAME></STMTTRN></BANKTRANLIST><LEDGERBAL><BALAMT>150000000.00</BALAMT></LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`);
                 }}
                 style={{ padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "#f8fafc", cursor: "pointer", fontSize: "12px" }}
               >
@@ -743,14 +735,11 @@ export function EnterpriseFinancialPanel({
                   } catch {
                     setParsedStatement({
                       statementDate: new Date().toISOString(),
-                      openingBalanceCents: 146_850_000_00,
-                      closingBalanceCents: 150_000_000_00,
-                      lines: [
-                        { transactionDate: "2026-10-18", description: "PAGAMENTO CLIENTE SONANGOL", amountCents: 5_000_000_00, direction: "IN", fitid: "TXN-BAI-01" },
-                        { transactionDate: "2026-10-19", description: "DEBITO FORNECEDOR EPAL", amountCents: 1_850_000_00, direction: "OUT", fitid: "TXN-BAI-02" },
-                      ],
+                      openingBalanceCents: 0,
+                      closingBalanceCents: 0,
+                      lines: [],
                     });
-                    setFeedback("Extrato bancário analisado localmente.");
+                    setFeedback("Nenhuma linha de extrato encontrada ou erro ao processar ficheiro.");
                   } finally {
                     setLoading(false);
                   }

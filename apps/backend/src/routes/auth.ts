@@ -147,15 +147,20 @@ authRouter.post("/bootstrap", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("[auth/bootstrap] execution error:", error);
     const isUnavailable = error instanceof Error && error.message === "bootstrap_unavailable";
     const uniqueViolation = typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "P2002";
-    const code = (isUnavailable || uniqueViolation) ? "bootstrap_unavailable" : error instanceof Error ? error.message : "bootstrap_failed";
-    const status = (isUnavailable || uniqueViolation) ? 409 : 400;
-    res.status(status).json({
-      error: code,
-      message: (isUnavailable || uniqueViolation)
-        ? "A instalação já foi inicializada e já possui um administrador configurado."
-        : "Não foi possível concluir a configuração inicial. Verifique os dados introduzidos.",
+    if (isUnavailable || uniqueViolation) {
+      res.status(409).json({
+        error: "bootstrap_unavailable",
+        message: "A instalação já foi inicializada e já possui um administrador configurado.",
+      });
+      return;
+    }
+    const message = error instanceof Error ? error.message : "Não foi possível concluir a configuração inicial.";
+    res.status(500).json({
+      error: "bootstrap_failed",
+      message,
     });
   }
 });

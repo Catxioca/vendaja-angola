@@ -26,8 +26,8 @@ export const bootstrapInput = z.object({
     legalName: z.string().trim().min(2, "O nome da empresa deve ter pelo menos 2 caracteres.").max(160),
     nif: z.preprocess(emptyToUndefined, z.string().min(5, "O NIF deve ter pelo menos 5 caracteres.").max(32).optional()),
     branchCode: z.preprocess(
-      (val) => typeof val === "string" ? val.trim().toUpperCase().replace(/[^A-Z0-9._-]/g, "") || "MAIN" : "MAIN",
-      z.string().min(1).max(32).default("MAIN")
+      (val) => typeof val === "string" ? val.trim().toUpperCase() : "MAIN",
+      z.string().min(1).max(32).regex(/^[A-Z0-9._-]+$/, "O código da filial deve conter apenas letras, números, ponto, hífen ou underscore.").default("MAIN")
     ),
     branchName: z.string().trim().min(2, "O nome da filial deve ter pelo menos 2 caracteres.").max(160).default("Sede"),
   }),
@@ -78,6 +78,10 @@ authRouter.post("/bootstrap", async (req, res) => {
   }
 
   try {
+    // PRE-COMPUTE BCRYPT HASHES OUTSIDE TRANSACTION TO PREVENT TIMEOUTS
+    const adminPasswordHash = await hashPassword(parsed.data.admin.password);
+    const adminPinHash = parsed.data.admin.pin ? await hashPassword(parsed.data.admin.pin as string) : undefined;
+
     const user = await prisma.$transaction(async (tx) => {
       const existingAdmin = await tx.user.findFirst({
         where: { role: { in: ["ADMIN", "admin", "ROLE_ADMIN"] } },
@@ -104,6 +108,7 @@ authRouter.post("/bootstrap", async (req, res) => {
           companyId: company.id,
           code: parsed.data.company.branchCode,
           name: parsed.data.company.branchName,
+          isHeadquarters: true,
         },
       });
       const created = await tx.user.create({
@@ -111,8 +116,8 @@ authRouter.post("/bootstrap", async (req, res) => {
           username: parsed.data.admin.username,
           email: parsed.data.admin.email.toLowerCase(),
           displayName: parsed.data.admin.displayName,
-          passwordHash: await hashPassword(parsed.data.admin.password),
-          ...(parsed.data.admin.pin ? { pinHash: await hashPassword(parsed.data.admin.pin as string) } : {}),
+          passwordHash: adminPasswordHash,
+          ...(adminPinHash ? { pinHash: adminPinHash } : {}),
           role: "ROLE_ADMIN",
         },
       });
@@ -133,9 +138,17 @@ authRouter.post("/bootstrap", async (req, res) => {
         where: { id: "primary" },
         data: { companyId: company.id, userId: created.id },
       });
-      await audit("ADMIN_BOOTSTRAPPED", created.id, "COMPANY", company.id, { branchId: branch.id }, tx);
       return { user: created, company, branch };
-    }, { isolationLevel: "Serializable" });
+    }, {
+      timeout: 30000,
+      maxWait: 10000,
+      isolationLevel: "ReadCommitted",
+    });
+
+    // Record audit outside transaction to avoid lock contention
+    void audit("ADMIN_BOOTSTRAPPED", user.user.id, "COMPANY", user.company.id, { branchId: user.branch.id }).catch((err) => {
+      console.warn("[bootstrap] audit recording warning:", err);
+    });
 
     const tokens = issueTokens(user.user);
     await persistRefreshToken(user.user.id, tokens.refreshToken);
@@ -215,11 +228,13 @@ authRouter.post("/users", requireAuth, requireCompanyContext, async (req, res) =
   if (!parsed.success || !parsed.data.password || (parsed.data.pin && !/^\d{4,6}$/.test(parsed.data.pin))) { res.status(400).json({ error: "invalid_user", message: "Nome de utilizador, senha forte e dados válidos são obrigatórios." }); return; }
   try {
     const tenant = companyContext(req);
+    const pwdHash = await hashPassword(parsed.data.password!);
+    const pinHashVal = parsed.data.pin ? await hashPassword(parsed.data.pin) : undefined;
     const user = await prisma.$transaction(async (tx) => {
-      const created = await tx.user.create({ data: { username: parsed.data.username, email: parsed.data.email.toLowerCase(), displayName: parsed.data.displayName, role: parsed.data.role, passwordHash: await hashPassword(parsed.data.password!), ...(parsed.data.pin ? { pinHash: await hashPassword(parsed.data.pin) } : {}) }, select: { id: true, username: true, email: true, displayName: true, role: true, nif: true, phone: true, createdAt: true } });
+      const created = await tx.user.create({ data: { username: parsed.data.username, email: parsed.data.email.toLowerCase(), displayName: parsed.data.displayName, role: parsed.data.role, passwordHash: pwdHash, ...(pinHashVal ? { pinHash: pinHashVal } : {}) }, select: { id: true, username: true, email: true, displayName: true, role: true, nif: true, phone: true, createdAt: true } });
       await tx.companyMembership.create({ data: { userId: created.id, companyId: tenant.companyId, branchId: tenant.branchId, role: parsed.data.role } });
       return created;
-    });
+    }, { timeout: 30000, maxWait: 10000 });
     await audit("USER_CREATED", (req as AuthRequest).user?.id, "USER", user.id, { role: user.role });
     res.status(201).json(user);
   } catch (error) { console.error("[users] create failed", error); res.status(409).json({ error: "user_create_failed", message: "Não foi possível criar o utilizador." }); }
@@ -234,11 +249,13 @@ authRouter.patch("/users/:id", requireAuth, requireCompanyContext, async (req, r
     const membership = await prisma.companyMembership.findFirst({ where: { userId: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId, active: true } });
     if (!membership) { res.status(404).json({ error: "user_not_found" }); return; }
     const { password, role, ...userFields } = fields;
+    const updatedPwdHash = password ? await hashPassword(password) : undefined;
+    const updatedPinHash = pin ? await hashPassword(pin) : undefined;
     const user = await prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({ where: { id: membership.userId }, data: { ...userFields, ...(userFields.email ? { email: userFields.email.toLowerCase() } : {}), ...(password ? { passwordHash: await hashPassword(password) } : {}), ...(pin ? { pinHash: await hashPassword(pin) } : {}) }, select: { id: true, username: true, email: true, displayName: true, role: true, nif: true, phone: true, createdAt: true } });
+      const updated = await tx.user.update({ where: { id: membership.userId }, data: { ...userFields, ...(userFields.email ? { email: userFields.email.toLowerCase() } : {}), ...(updatedPwdHash ? { passwordHash: updatedPwdHash } : {}), ...(updatedPinHash ? { pinHash: updatedPinHash } : {}) }, select: { id: true, username: true, email: true, displayName: true, role: true, nif: true, phone: true, createdAt: true } });
       if (role) await tx.companyMembership.update({ where: { id: membership.id }, data: { role } });
       return updated;
-    });
+    }, { timeout: 30000, maxWait: 10000 });
     await audit("USER_UPDATED", (req as AuthRequest).user?.id, "USER", user.id, { role: user.role });
     res.json(user);
   } catch (error) { console.error("[users] update failed", error); res.status(409).json({ error: "user_update_failed", message: "Não foi possível atualizar o utilizador." }); }
@@ -303,9 +320,24 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
-  const validCredential = user && parsed.data.mode === "pin"
-    ? !!user.pinHash && parsed.data.password.length === 6 && await verifyPassword(parsed.data.password, user.pinHash)
-    : !!user && await verifyPassword(parsed.data.password, user.passwordHash);
+  let validCredential = false;
+  let verifiedMode = parsed.data.mode;
+  if (user) {
+    if (parsed.data.mode === "pin") {
+      if (user.pinHash && await verifyPassword(parsed.data.password, user.pinHash)) {
+        validCredential = true;
+        verifiedMode = "pin";
+      }
+    } else {
+      if (user.passwordHash && await verifyPassword(parsed.data.password, user.passwordHash)) {
+        validCredential = true;
+        verifiedMode = "password";
+      } else if (user.pinHash && /^\d{4,6}$/.test(parsed.data.password) && await verifyPassword(parsed.data.password, user.pinHash)) {
+        validCredential = true;
+        verifiedMode = "pin";
+      }
+    }
+  }
 
   if (!user || !validCredential) {
     if (user) {
@@ -383,6 +415,11 @@ authRouter.post("/login", async (req, res) => {
     metadata: { authMethod: parsed.data.mode, mfaUsed: user.mfaEnabled },
   });
 
+  const activeMembership = await prisma.companyMembership.findFirst({
+    where: { userId: user.id, active: true },
+    include: { company: true, branch: true },
+  });
+
   res.json({
     ...tokens,
     token: tokens.accessToken,
@@ -392,9 +429,15 @@ authRouter.post("/login", async (req, res) => {
       username: user.username,
       displayName: user.displayName,
       role: user.role,
-      authMethod: parsed.data.mode,
+      authMethod: verifiedMode,
       mfaEnabled: user.mfaEnabled,
     },
+    context: activeMembership ? {
+      companyId: activeMembership.companyId,
+      branchId: activeMembership.branchId,
+      companyName: activeMembership.company?.legalName,
+      branchName: activeMembership.branch?.name,
+    } : null,
   });
 });
 authRouter.post("/logout", requireAuth, async (req, res) => {

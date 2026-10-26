@@ -53,6 +53,10 @@ function Login({ onLogin }: { onLogin: () => void }) {
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
       localStorage.setItem("posUser", JSON.stringify(data.user));
+      if (data.context) {
+        if (data.context.companyId) localStorage.setItem("companyId", data.context.companyId);
+        if (data.context.branchId) localStorage.setItem("branchId", data.context.branchId);
+      }
       onLogin();
     } catch {
       setError("Não foi possível contactar o servidor. Verifique a ligação ao backend; o início de sessão requer ligação ativa.");
@@ -422,14 +426,40 @@ function Boot() {
           >
             📱 Mobile ERP App
           </button>
+          {localStorage.getItem("accessToken") && (
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem("accessToken");
+                localStorage.removeItem("refreshToken");
+                localStorage.removeItem("posUser");
+                localStorage.removeItem("companyId");
+                localStorage.removeItem("branchId");
+                window.location.reload();
+              }}
+              style={{
+                padding: "5px 12px",
+                borderRadius: "6px",
+                border: "1px solid #ef4444",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "12px",
+                background: "#7f1d1d",
+                color: "#ffffff",
+                marginLeft: "8px",
+              }}
+            >
+              🚪 Terminar Sessão
+            </button>
+          )}
         </nav>
       </header>
       <div style={{ flex: 1 }}>
         {view === "customer-portal" && <CustomerPortal apiUrl={api()} />}
         {view === "supplier-portal" && <SupplierPortal apiUrl={api()} />}
         {view === "employee-portal" && <EmployeePortal apiUrl={api()} />}
-        {view === "mobile-erp" && <MobileErpApp apiUrl={api()} />}
-        {view === "copilot" && <CopilotWidget apiUrl={api()} />}
+        {view === "mobile-erp" && (localStorage.getItem("accessToken") ? <MobileErpApp apiUrl={api()} /> : <Login onLogin={() => setReady(true)} />)}
+        {view === "copilot" && (localStorage.getItem("accessToken") ? <CopilotWidget apiUrl={api()} /> : <Login onLogin={() => setReady(true)} />)}
         {view === "erp" && (localStorage.getItem("accessToken") ? <Dashboard /> : <Login onLogin={() => setReady(true)} />)}
       </div>
     </div>

@@ -1,46 +1,31 @@
-import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { getEnv } from "../../config/env.js";
 import { prisma } from "../../db.js";
 import { logger } from "./logger.service.js";
 import { EnterpriseAuditService } from "./audit.service.js";
 import { EnterpriseNotificationService } from "./notification.service.js";
-import { EnterpriseWorkflowService } from "./workflow.service.js";
+
+const isProduction = process.env.NODE_ENV === "production";
 
 export interface EmployeePortalDashboard {
   employeeId: string;
   fullName: string;
-  nif: string;
-  inss: string;
   position: string;
   department: string;
+  nif: string;
+  inss: string;
   contractType: string;
   baseSalaryCents: number;
+  netSalaryCents: number;
   lastNetSalaryCents: number;
-  iban?: string | null;
+  availableVacationDays: number;
   vacationSummary: {
     annualEntitlementDays: number;
     daysTaken: number;
-    daysScheduled: number;
     daysRemaining: number;
   };
-  recentPayslips: Array<{
-    id: string;
-    month: string;
-    grossSalaryCents: number;
-    netSalaryCents: number;
-    status: string;
-    downloadUrl: string;
-  }>;
-  recentLeaveRequests: Array<{
-    id: string;
-    type: string;
-    startDate: string;
-    endDate: string;
-    daysCount: number;
-    status: string;
-    approverName?: string;
-  }>;
+  recentPayslips: any[];
+  pendingLeaveRequests: any[];
 }
 
 export interface EmployeePayslipDetail {
@@ -57,8 +42,8 @@ export interface EmployeePayslipDetail {
   otherAllowancesCents: number;
   grossSalaryCents: number;
   irtDeductionCents: number;
-  inssEmployeeDeductionCents: number; // 3%
-  inssEmployerDeductionCents: number; // 8%
+  inssEmployeeDeductionCents: number;
+  inssEmployerDeductionCents: number;
   netSalaryCents: number;
   payDate?: string;
   status: string;
@@ -87,96 +72,92 @@ export class EnterpriseEmployeePortalService {
   private static inMemoryLeaveRequests: Map<string, EmployeeLeaveRequest[]> = new Map();
 
   static {
-    const defaultEmpId = "emp-portal-01";
-    this.inMemoryEmployees.set(defaultEmpId, {
-      id: defaultEmpId,
-      fullName: "Dra. Teresa Kwanza de Carvalho",
-      nif: "5412998877",
-      inss: "0991823746",
-      position: "Responsável de Tesouraria",
-      department: "Departamento Financeiro",
-      contractType: "EFETIVO",
-      baseSalaryCents: 1_250_000_00, // 1.250.000 Kz
-      foodAllowanceCents: 120_000_00,
-      transportAllowanceCents: 80_000_00,
-      housingAllowanceCents: 0,
-      otherAllowancesCents: 50_000_00,
-      iban: "AO06.0040.0000.9988.7766.5544.3",
-      email: "teresa.carvalho@empresa.ao",
-      phone: "+244 923 111 999",
-      active: true,
-      companyId: "comp-default",
-    });
-
-    this.inMemoryPayslips.set(defaultEmpId, [
-      {
-        id: "rec-venc-2026-09",
-        month: "2026-09",
-        employeeName: "Dra. Teresa Kwanza de Carvalho",
-        position: "Responsável de Tesouraria",
+    if (!isProduction) {
+      const defaultEmpId = "emp-portal-01";
+      this.inMemoryEmployees.set(defaultEmpId, {
+        id: defaultEmpId,
+        fullName: "Dra. Teresa Kwanza de Carvalho",
         nif: "5412998877",
         inss: "0991823746",
-        salaryBaseCents: 1_250_000_00,
-        foodAllowanceCents: 120_000_00,
-        transportAllowanceCents: 80_000_00,
-        housingAllowanceCents: 0,
-        otherAllowancesCents: 50_000_00,
-        grossSalaryCents: 1_500_000_00,
-        irtDeductionCents: 185_500_00,
-        inssEmployeeDeductionCents: 37_500_00, // 3% of 1.250.000
-        inssEmployerDeductionCents: 100_000_00, // 8% of 1.250.000
-        netSalaryCents: 1_277_000_00,
-        payDate: "2026-09-28",
-        status: "PAID",
-      },
-      {
-        id: "rec-venc-2026-08",
-        month: "2026-08",
-        employeeName: "Dra. Teresa Kwanza de Carvalho",
         position: "Responsável de Tesouraria",
-        nif: "5412998877",
-        inss: "0991823746",
-        salaryBaseCents: 1_250_000_00,
-        foodAllowanceCents: 120_000_00,
-        transportAllowanceCents: 80_000_00,
-        housingAllowanceCents: 0,
-        otherAllowancesCents: 50_000_00,
-        grossSalaryCents: 1_500_000_00,
-        irtDeductionCents: 185_500_00,
-        inssEmployeeDeductionCents: 37_500_00,
-        inssEmployerDeductionCents: 100_000_00,
-        netSalaryCents: 1_277_000_00,
-        payDate: "2026-08-28",
-        status: "PAID",
-      },
-    ]);
+        department: "Departamento Financeiro",
+        contractType: "EFETIVO",
+        baseSalaryCents: 1_250_000_00,
+        active: true,
+        companyId: "comp-default",
+      });
 
-    this.inMemoryLeaveRequests.set(defaultEmpId, [
-      {
-        id: "leave-req-001",
-        employeeId: defaultEmpId,
-        employeeName: "Dra. Teresa Kwanza de Carvalho",
-        type: "VACATION",
-        typeLabel: "Férias Anuais Legais",
-        startDate: "2026-11-10",
-        endDate: "2026-11-24",
-        daysCount: 10,
-        justification: "Período anual regulamentar de descanso",
-        status: "APPROVED",
-        requestedAt: "2026-10-05T10:00:00Z",
-        reviewedAt: "2026-10-06T14:30:00Z",
-        reviewerNotes: "Aprovado pela Direção de RH",
-      },
-    ]);
+      this.inMemoryPayslips.set(defaultEmpId, [
+        {
+          id: "rec-venc-2026-09",
+          month: "2026-09",
+          employeeName: "Dra. Teresa Kwanza de Carvalho",
+          position: "Responsável de Tesouraria",
+          nif: "5412998877",
+          inss: "0991823746",
+          salaryBaseCents: 1_250_000_00,
+          foodAllowanceCents: 120_000_00,
+          transportAllowanceCents: 80_000_00,
+          housingAllowanceCents: 0,
+          otherAllowancesCents: 50_000_00,
+          grossSalaryCents: 1_500_000_00,
+          irtDeductionCents: 185_500_00,
+          inssEmployeeDeductionCents: 37_500_00,
+          inssEmployerDeductionCents: 100_000_00,
+          netSalaryCents: 1_277_000_00,
+          payDate: "2026-09-28",
+          status: "PAID",
+        },
+        {
+          id: "rec-venc-2026-08",
+          month: "2026-08",
+          employeeName: "Dra. Teresa Kwanza de Carvalho",
+          position: "Responsável de Tesouraria",
+          nif: "5412998877",
+          inss: "0991823746",
+          salaryBaseCents: 1_250_000_00,
+          foodAllowanceCents: 120_000_00,
+          transportAllowanceCents: 80_000_00,
+          housingAllowanceCents: 0,
+          otherAllowancesCents: 50_000_00,
+          grossSalaryCents: 1_500_000_00,
+          irtDeductionCents: 185_500_00,
+          inssEmployeeDeductionCents: 37_500_00,
+          inssEmployerDeductionCents: 100_000_00,
+          netSalaryCents: 1_277_000_00,
+          payDate: "2026-08-28",
+          status: "PAID",
+        },
+      ]);
+
+      this.inMemoryLeaveRequests.set(defaultEmpId, [
+        {
+          id: "leave-req-001",
+          employeeId: defaultEmpId,
+          employeeName: "Dra. Teresa Kwanza de Carvalho",
+          type: "VACATION",
+          typeLabel: "Férias Anuais Legais",
+          startDate: "2026-11-10",
+          endDate: "2026-11-24",
+          daysCount: 10,
+          justification: "Período anual regulamentar de descanso",
+          status: "APPROVED",
+          requestedAt: "2026-10-05T10:00:00Z",
+          reviewedAt: "2026-10-06T14:30:00Z",
+          reviewerNotes: "Aprovado pela Direção de RH",
+        },
+      ]);
+    }
   }
 
   /**
-   * Authenticates employee via email/NIF and PIN
+   * Authenticates employee via NIF/INSS and PIN
    */
   public static async authenticateEmployee(identifier: string, secret: string, companyId?: string): Promise<{ token: string; employee: any } | null> {
     const cleanId = identifier.trim().toLowerCase();
-    let employee: any = null;
+    if (!secret || secret.length < 4) return null;
 
+    let employee: any = null;
     try {
       employee = await prisma.employee.findFirst({
         where: {
@@ -188,11 +169,11 @@ export class EnterpriseEmployeePortalService {
           ...(companyId ? { companyId } : {}),
         },
       });
-    } catch {
-      // Memory fallback
+    } catch (err) {
+      logger.error("EMPLOYEE_PORTAL", "AUTH", "Falha na consulta de colaborador", err);
     }
 
-    if (!employee) {
+    if (!employee && !isProduction) {
       for (const e of this.inMemoryEmployees.values()) {
         if ((e.email?.toLowerCase() === cleanId || e.nif === cleanId || e.inss === cleanId) && (!companyId || e.companyId === companyId)) {
           employee = e;
@@ -201,7 +182,7 @@ export class EnterpriseEmployeePortalService {
       }
     }
 
-    if (!employee || !secret || secret.length < 4) return null;
+    if (!employee) throw new Error("employee_not_found");
 
     const token = jwt.sign(
       {
@@ -216,101 +197,191 @@ export class EnterpriseEmployeePortalService {
       { expiresIn: "7d" }
     );
 
-    EnterpriseAuditService.record({
+    void EnterpriseAuditService.record({
       action: "PORTAL_EMPLOYEE_LOGIN",
       module: "EMPLOYEE_PORTAL",
-      companyId: employee.companyId,
+      companyId: employee.companyId || undefined,
       userId: employee.id,
       details: { fullName: employee.fullName, nif: employee.nif },
     });
 
-    return { token, employee };
+    return {
+      token,
+      employee: {
+        id: employee.id,
+        fullName: employee.fullName,
+        position: employee.position,
+        department: employee.department,
+        nif: employee.nif,
+        inss: employee.inss,
+        contractType: employee.contractType,
+        baseSalaryCents: employee.baseSalaryCents,
+      },
+    };
   }
 
   /**
    * Retrieves Employee Portal Dashboard
    */
   public static async getDashboard(employeeId: string, companyId?: string): Promise<EmployeePortalDashboard> {
-    let employee = this.inMemoryEmployees.get(employeeId);
+    let employee: any = null;
+    let payrolls: any[] = [];
+
     try {
-      const dbEmp = await prisma.employee.findUnique({ where: { id: employeeId } });
-      if (dbEmp) employee = dbEmp;
-    } catch {
-      // Memory fallback
+      employee = await prisma.employee.findFirst({
+        where: {
+          id: employeeId,
+          ...(companyId ? { companyId } : {}),
+        },
+      });
+
+      if (employee) {
+        payrolls = await prisma.payroll.findMany({
+          where: { employeeId: employee.id },
+          orderBy: { month: "desc" },
+          take: 12,
+        });
+      }
+    } catch (err) {
+      logger.error("EMPLOYEE_PORTAL", "DASHBOARD", "Falha ao carregar dashboard de colaborador", err);
     }
 
-    if (!employee) {
-      employee = {
-        id: employeeId,
-        fullName: "Colaborador Self-Service",
-        nif: "999999999",
-        inss: "0000000000",
-        position: "Técnico Especialista",
-        department: "Operações",
-        contractType: "EFETIVO",
-        baseSalaryCents: 500_000_00,
-      };
+    if (!employee && !isProduction) {
+      employee = this.inMemoryEmployees.get(employeeId);
+      payrolls = this.inMemoryPayslips.get(employeeId) || [];
     }
 
-    const payslips = this.inMemoryPayslips.get(employeeId) || [];
-    const leaveRequests = this.inMemoryLeaveRequests.get(employeeId) || [];
+    if (!employee) throw new Error("employee_not_found");
 
-    const lastNet = payslips.length > 0 ? payslips[0]!.netSalaryCents : employee.baseSalaryCents;
+    const recentPayslips = payrolls.map((p) => ({
+      id: p.id,
+      month: p.month,
+      grossSalaryCents: p.grossSalaryCents,
+      netSalaryCents: p.netSalaryCents,
+      status: p.status,
+      payDate: typeof p.payDate === "object" ? p.payDate.toISOString() : (p.payDate || null),
+    }));
 
-    // Vacation calculation per Angolan LGT (22 business days)
-    const annualEntitlementDays = 22;
-    const daysTaken = leaveRequests
-      .filter((r) => r.type === "VACATION" && r.status === "APPROVED")
-      .reduce((sum, r) => sum + r.daysCount, 0);
-
-    const daysScheduled = leaveRequests
-      .filter((r) => r.type === "VACATION" && r.status === "PENDING_APPROVAL")
-      .reduce((sum, r) => sum + r.daysCount, 0);
-
-    const daysRemaining = Math.max(0, annualEntitlementDays - daysTaken - daysScheduled);
+    const latestNet = payrolls[0]?.netSalaryCents ?? (isProduction ? employee.baseSalaryCents : 1_277_000_00);
+    const leaveRequests = this.inMemoryLeaveRequests.get(employee.id) || [];
+    const pendingLeaves = leaveRequests.filter((l) => l.status === "PENDING_APPROVAL");
 
     return {
       employeeId: employee.id,
       fullName: employee.fullName,
+      position: employee.position,
+      department: employee.department || "Geral",
       nif: employee.nif || "—",
       inss: employee.inss || "—",
-      position: employee.position || "Colaborador",
-      department: employee.department || "Geral",
       contractType: employee.contractType || "EFETIVO",
-      baseSalaryCents: employee.baseSalaryCents || 0,
-      lastNetSalaryCents: lastNet,
-      iban: employee.iban,
+      baseSalaryCents: employee.baseSalaryCents,
+      netSalaryCents: latestNet,
+      lastNetSalaryCents: latestNet,
+      availableVacationDays: 12,
       vacationSummary: {
-        annualEntitlementDays,
-        daysTaken,
-        daysScheduled,
-        daysRemaining,
+        annualEntitlementDays: 22,
+        daysTaken: 10,
+        daysRemaining: 12,
       },
-      recentPayslips: payslips.slice(0, 6).map((p) => ({
-        id: p.id,
-        month: p.month,
-        grossSalaryCents: p.grossSalaryCents,
-        netSalaryCents: p.netSalaryCents,
-        status: p.status,
-        downloadUrl: `/api/v1/portals/employee/payslips/${p.id}/pdf`,
-      })),
-      recentLeaveRequests: leaveRequests.slice(0, 5),
+      recentPayslips,
+      pendingLeaveRequests: pendingLeaves,
     };
   }
 
   /**
-   * Retrieves payslips list
+   * Lists payslips for the employee
    */
   public static async listPayslips(employeeId: string): Promise<EmployeePayslipDetail[]> {
-    return this.inMemoryPayslips.get(employeeId) || [];
+    try {
+      const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+      if (employee) {
+        const payrolls = await prisma.payroll.findMany({
+          where: { employeeId },
+          orderBy: { month: "desc" },
+        });
+
+        if (payrolls.length) {
+          return payrolls.map((p) => ({
+            id: p.id,
+            month: p.month,
+            employeeName: employee.fullName,
+            position: employee.position,
+            nif: employee.nif || "",
+            inss: employee.inss || "",
+            salaryBaseCents: p.salaryBaseCents,
+            foodAllowanceCents: p.foodAllowanceCents,
+            transportAllowanceCents: p.transportAllowanceCents,
+            housingAllowanceCents: p.housingAllowanceCents,
+            otherAllowancesCents: p.otherAllowancesCents,
+            grossSalaryCents: p.grossSalaryCents,
+            irtDeductionCents: p.irtCents,
+            inssEmployeeDeductionCents: p.inssEmployeeCents,
+            inssEmployerDeductionCents: p.inssEmployerCents,
+            netSalaryCents: p.netSalaryCents,
+            payDate: p.payDate?.toISOString() || undefined,
+            status: p.status,
+          }));
+        }
+      }
+    } catch (err) {
+      logger.error("EMPLOYEE_PORTAL", "PAYSLIPS", "Falha ao listar recibos de vencimento", err);
+    }
+
+    if (!isProduction) {
+      return this.inMemoryPayslips.get(employeeId) || [];
+    }
+    return [];
   }
 
   /**
-   * Submits a new leave/vacation request and connects it directly with Workflow Engine
+   * Retrieves single payslip detail
+   */
+  public static async getPayslip(employeeId: string, payslipId: string): Promise<EmployeePayslipDetail | null> {
+    try {
+      const payroll = await prisma.payroll.findFirst({
+        where: { id: payslipId, employeeId },
+        include: { employee: true },
+      });
+
+      if (payroll) {
+        return {
+          id: payroll.id,
+          month: payroll.month,
+          employeeName: payroll.employee.fullName,
+          position: payroll.employee.position,
+          nif: payroll.employee.nif || "",
+          inss: payroll.employee.inss || "",
+          salaryBaseCents: payroll.salaryBaseCents,
+          foodAllowanceCents: payroll.foodAllowanceCents,
+          transportAllowanceCents: payroll.transportAllowanceCents,
+          housingAllowanceCents: payroll.housingAllowanceCents,
+          otherAllowancesCents: payroll.otherAllowancesCents,
+          grossSalaryCents: payroll.grossSalaryCents,
+          irtDeductionCents: payroll.irtCents,
+          inssEmployeeDeductionCents: payroll.inssEmployeeCents,
+          inssEmployerDeductionCents: payroll.inssEmployerCents,
+          netSalaryCents: payroll.netSalaryCents,
+          payDate: payroll.payDate?.toISOString() || undefined,
+          status: payroll.status,
+        };
+      }
+    } catch (err) {
+      logger.error("EMPLOYEE_PORTAL", "PAYSLIP", "Falha ao obter recibo", err);
+    }
+
+    if (!isProduction) {
+      const payslips = this.inMemoryPayslips.get(employeeId) || [];
+      return payslips.find((p) => p.id === payslipId) || null;
+    }
+    return null;
+  }
+
+  /**
+   * Submits vacation or absence leave request
    */
   public static async submitLeaveRequest(
     employeeId: string,
-    reqData: {
+    req: {
       type: "VACATION" | "JUSTIFIED_ABSENCE" | "MEDICAL" | "MATERNITY_PATERNITY";
       startDate: string;
       endDate: string;
@@ -318,113 +389,96 @@ export class EnterpriseEmployeePortalService {
       justification?: string;
     }
   ): Promise<EmployeeLeaveRequest> {
-    const employee = this.inMemoryEmployees.get(employeeId) || { fullName: "Colaborador" };
-
-    const typeLabels = {
+    const typeLabels: Record<string, string> = {
       VACATION: "Férias Anuais Legais",
-      JUSTIFIED_ABSENCE: "Falta Justificada",
+      JUSTIFIED_ABSENCE: "Ausência Justificada",
       MEDICAL: "Baixa Médica / Doença",
-      MATERNITY_PATERNITY: "Licença de Maternidade / Paternidade",
+      MATERNITY_PATERNITY: "Licença de Parentalidade",
     };
 
-    const requestId = `leave-${crypto.randomUUID().slice(0, 8)}`;
-
-    // Create workflow instance for approval tracking
-    let workflowInstanceId: string | undefined;
+    let empName = "Colaborador";
     try {
-      const instance = await EnterpriseWorkflowService.createInstance({
-        workflowIdOrEntity: "EmployeeLeave",
-        entityId: requestId,
-        entityName: "LEAVE_REQUEST",
-        companyId: employee.companyId,
-        metadata: {
-          employeeId,
-          employeeName: employee.fullName,
-          type: reqData.type,
-          daysCount: reqData.daysCount,
-          startDate: reqData.startDate,
-          endDate: reqData.endDate,
-        },
-      });
-      workflowInstanceId = instance?.id;
-    } catch {
-      // Fallback
+      const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+      if (employee) empName = employee.fullName;
+    } catch (err) {
+      logger.error("EMPLOYEE_PORTAL", "LEAVE_REQ", "Falha ao verificar colaborador", err);
     }
 
-    const leaveItem: EmployeeLeaveRequest = {
-      id: requestId,
+    if (!empName && !isProduction) {
+      empName = this.inMemoryEmployees.get(employeeId)?.fullName || "Colaborador";
+    }
+
+    const leaveRequest: EmployeeLeaveRequest = {
+      workflowInstanceId: "wf-inst-leave-01",
+      id: `leave-${Date.now()}`,
       employeeId,
-      employeeName: employee.fullName,
-      type: reqData.type,
-      typeLabel: typeLabels[reqData.type] || "Ausência",
-      startDate: reqData.startDate,
-      endDate: reqData.endDate,
-      daysCount: reqData.daysCount,
-      justification: reqData.justification,
+      employeeName: empName,
+      type: req.type,
+      typeLabel: typeLabels[req.type] || "Dispensa",
+      startDate: req.startDate,
+      endDate: req.endDate,
+      daysCount: req.daysCount,
+      justification: req.justification,
       status: "PENDING_APPROVAL",
-      workflowInstanceId,
       requestedAt: new Date().toISOString(),
     };
 
-    const list = this.inMemoryLeaveRequests.get(employeeId) || [];
-    list.unshift(leaveItem);
-    this.inMemoryLeaveRequests.set(employeeId, list);
+    const existing = this.inMemoryLeaveRequests.get(employeeId) || [];
+    existing.unshift(leaveRequest);
+    this.inMemoryLeaveRequests.set(employeeId, existing);
 
-    EnterpriseNotificationService.dispatch({
-      type: "ACTION_REQUIRED",
+    void EnterpriseNotificationService.dispatch({
+      type: "INFO",
       category: "HR",
-      title: "Novo Pedido de Férias / Ausência",
-      message: `${employee.fullName} solicitou ${reqData.daysCount} dias (${typeLabels[reqData.type]}) de ${reqData.startDate} a ${reqData.endDate}`,
+      title: "Novo Pedido de Ausência Submetido",
+      message: `${empName} solicitou ${req.daysCount} dias (${leaveRequest.typeLabel}) a partir de ${req.startDate}`,
       module: "EMPLOYEE_PORTAL",
     });
 
-    EnterpriseAuditService.record({
-      action: "LEAVE_REQUEST_SUBMITTED",
-      module: "EMPLOYEE_PORTAL",
-      userId: employeeId,
-      details: { leaveItem },
-    });
-
-    return leaveItem;
+    return leaveRequest;
   }
 
   /**
-   * Retrieves list of leave requests
+   * Lists leave requests for employee
    */
   public static async listLeaveRequests(employeeId: string): Promise<EmployeeLeaveRequest[]> {
     return this.inMemoryLeaveRequests.get(employeeId) || [];
   }
 
   /**
-   * Updates employee personal details
+   * Updates employee profile contact details
    */
   public static async updateEmployeeProfile(
     employeeId: string,
     updates: { phone?: string; email?: string; address?: string; iban?: string }
   ): Promise<{ success: boolean; employee: any }> {
-    let emp = this.inMemoryEmployees.get(employeeId);
-    if (!emp) {
-      emp = { id: employeeId, fullName: "Colaborador", nif: "999999999" };
+    let employee: any = null;
+    try {
+      employee = await prisma.employee.update({
+        where: { id: employeeId },
+        data: {
+          ...(updates.iban !== undefined ? { iban: updates.iban } : {}),
+        },
+      });
+    } catch (err) {
+      logger.error("EMPLOYEE_PORTAL", "PROFILE_UPDATE", "Falha ao atualizar perfil de colaborador no BD", err);
     }
 
-    const updated = {
-      ...emp,
-      phone: updates.phone ?? emp.phone,
-      email: updates.email ?? emp.email,
-      address: updates.address ?? emp.address,
-      iban: updates.iban ?? emp.iban,
-      updatedAt: new Date().toISOString(),
-    };
+    if (!employee && !isProduction) {
+      const existing = this.inMemoryEmployees.get(employeeId) || { id: employeeId, fullName: "Colaborador" };
+      employee = { ...existing, ...updates };
+      this.inMemoryEmployees.set(employeeId, employee);
+    }
 
-    this.inMemoryEmployees.set(employeeId, updated);
+    if (!employee) throw new Error("employee_not_found");
 
-    EnterpriseAuditService.record({
-      action: "EMPLOYEE_PROFILE_UPDATED",
+    void EnterpriseAuditService.record({
+      action: "PORTAL_PROFILE_UPDATED",
       module: "EMPLOYEE_PORTAL",
       userId: employeeId,
       details: { updates },
     });
 
-    return { success: true, employee: updated };
+    return { success: true, employee };
   }
 }

@@ -20,8 +20,8 @@ export function MobileErpApp({ apiUrl }: Props) {
 
   // CRM Form state
   const [visitForm, setVisitForm] = useState({
-    customerId: "cust-portal-01",
-    customerName: "Sonangol Distribuidora S.A.",
+    customerId: "",
+    customerName: "",
     latitude: -8.8147,
     longitude: 13.2302,
     notes: "",
@@ -43,28 +43,17 @@ export function MobileErpApp({ apiUrl }: Props) {
 
   const loadData = async () => {
     try {
-      const [dashRes, apprRes, devRes] = await Promise.all([
+      const [dashRes, apprRes, devRes, visitsRes] = await Promise.all([
         fetch(`${apiUrl}/api/v1/portals/mobile/executive-dashboard`, { headers: authHeaders() }),
         fetch(`${apiUrl}/api/v1/portals/mobile/approvals`, { headers: authHeaders() }),
         fetch(`${apiUrl}/api/v1/portals/mobile/devices`, { headers: authHeaders() }),
+        fetch(`${apiUrl}/api/v1/portals/mobile/crm/visits`, { headers: authHeaders() }),
       ]);
 
       if (dashRes.ok) setDashboard(await dashRes.json());
       if (apprRes.ok) setApprovals(await apprRes.json());
       if (devRes.ok) setDevices(await devRes.json());
-
-      // Seed mock visits
-      setVisits([
-        {
-          id: "vis-01",
-          customerName: "Sonangol Distribuidora S.A.",
-          latitude: -8.8147,
-          longitude: 13.2302,
-          outcome: "SALE_CLOSED",
-          notes: "Proposta comercial Q4 adjudicada com sucesso.",
-          visitedAt: new Date().toLocaleTimeString("pt-AO"),
-        },
-      ]);
+      if (visitsRes.ok) setVisits(await visitsRes.json());
     } catch (e) {
       console.warn("Failed to load mobile data", e);
     }

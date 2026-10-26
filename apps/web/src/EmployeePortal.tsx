@@ -7,8 +7,8 @@ interface Props {
 
 export function EmployeePortal({ apiUrl }: Props) {
   const [token, setToken] = useState<string | null>(localStorage.getItem("portal_employee_token"));
-  const [nif, setNif] = useState("5412998877");
-  const [pin, setPin] = useState("pin2026");
+  const [nif, setNif] = useState("");
+  const [pin, setPin] = useState("");
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<"dashboard" | "payslips" | "leave" | "profile">("dashboard");
 

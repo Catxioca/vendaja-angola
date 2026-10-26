@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import {
   requireAuth,
@@ -29,8 +29,29 @@ function getParam(req: Request, paramName: string): string {
   return val ? String(val) : "";
 }
 
+/**
+ * Strict RBAC middleware for portal-specific endpoints
+ */
+function requirePortalRole(...allowedRoles: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const auth = req as AuthRequest;
+    const userRole = normalizeRole(auth.user?.role || auth.context?.role);
+
+    // Administrative overrides
+    if (userRole === "ROLE_ADMIN" || allowedRoles.includes(userRole)) {
+      next();
+      return;
+    }
+
+    res.status(403).json({
+      error: "forbidden",
+      message: "Acesso não autorizado para o seu perfil.",
+    });
+  };
+}
+
 // =========================================================================
-// 1. AUTENTICAÇÃO DOS PORTAIS SELF-SERVICE
+// 1. AUTENTICAÇÃO DOS PORTAIS SELF-SERVICE (PUBLIC ROUTES)
 // =========================================================================
 
 portalsRouter.post("/auth/customer-login", async (req: Request, res: Response) => {
@@ -38,7 +59,7 @@ portalsRouter.post("/auth/customer-login", async (req: Request, res: Response) =
   const companyId = resolveCompanyId(req);
 
   if (!identifier || !secret) {
-    res.status(400).json({ error: "missing_credentials", message: "Identificador e palavra-passe / PIN são obrigatórios." });
+    res.status(400).json({ error: "missing_credentials", message: "Identificador (Email ou NIF) e PIN são obrigatórios." });
     return;
   }
 
@@ -56,7 +77,7 @@ portalsRouter.post("/auth/supplier-login", async (req: Request, res: Response) =
   const companyId = resolveCompanyId(req);
 
   if (!identifier || !secret) {
-    res.status(400).json({ error: "missing_credentials", message: "Identificador e palavra-passe / PIN são obrigatórios." });
+    res.status(400).json({ error: "missing_credentials", message: "Identificador (Email ou NIF) e credencial de acesso são obrigatórios." });
     return;
   }
 
@@ -74,7 +95,7 @@ portalsRouter.post("/auth/employee-login", async (req: Request, res: Response) =
   const companyId = resolveCompanyId(req);
 
   if (!identifier || !secret) {
-    res.status(400).json({ error: "missing_credentials", message: "NIF/INSS e PIN são obrigatórios." });
+    res.status(400).json({ error: "missing_credentials", message: "NIF ou INSS e PIN de acesso são obrigatórios." });
     return;
   }
 
@@ -91,7 +112,9 @@ portalsRouter.post("/auth/employee-login", async (req: Request, res: Response) =
 // 2. PORTAL DO CLIENTE (CUSTOMER SELF-SERVICE)
 // =========================================================================
 
-portalsRouter.get("/customer/dashboard", requireAuth, async (req: Request, res: Response) => {
+const customerGuard = [requireAuth, requirePortalRole("ROLE_PORTAL_CUSTOMER", "ROLE_ACCOUNTANT")];
+
+portalsRouter.get("/customer/dashboard", ...customerGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const customerId = (auth.user as any)?.customerId || auth.user?.id;
   const companyId = resolveCompanyId(req);
@@ -102,10 +125,14 @@ portalsRouter.get("/customer/dashboard", requireAuth, async (req: Request, res: 
   }
 
   const dashboard = await EnterpriseCustomerPortalService.getDashboard(customerId, companyId);
+  if (!dashboard) {
+    res.status(404).json({ error: "customer_not_found", message: "Conta de cliente não encontrada." });
+    return;
+  }
   res.json(dashboard);
 });
 
-portalsRouter.get("/customer/statement", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/customer/statement", ...customerGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const customerId = (auth.user as any)?.customerId || auth.user?.id;
   const { from, to } = req.query;
@@ -122,7 +149,7 @@ portalsRouter.get("/customer/statement", requireAuth, async (req: Request, res: 
   res.json(statement);
 });
 
-portalsRouter.post("/customer/payment-reference", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.post("/customer/payment-reference", ...customerGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const customerId = (auth.user as any)?.customerId || auth.user?.id;
   const { documentId, amountCents } = req.body;
@@ -133,10 +160,14 @@ portalsRouter.post("/customer/payment-reference", requireAuth, async (req: Reque
   }
 
   const reference = await EnterpriseCustomerPortalService.generatePaymentReference(customerId, documentId, amountCents);
+  if (!reference) {
+    res.status(404).json({ error: "document_not_found", message: "Documento de faturação não encontrado para este cliente." });
+    return;
+  }
   res.json(reference);
 });
 
-portalsRouter.patch("/customer/profile", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.patch("/customer/profile", ...customerGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const customerId = (auth.user as any)?.customerId || auth.user?.id;
   const { phone, email, address } = req.body;
@@ -147,6 +178,10 @@ portalsRouter.patch("/customer/profile", requireAuth, async (req: Request, res: 
   }
 
   const result = await EnterpriseCustomerPortalService.updateCustomerProfile(customerId, { phone, email, address });
+  if (!result) {
+    res.status(404).json({ error: "customer_not_found", message: "Não foi possível atualizar o perfil do cliente." });
+    return;
+  }
   res.json(result);
 });
 
@@ -154,7 +189,9 @@ portalsRouter.patch("/customer/profile", requireAuth, async (req: Request, res: 
 // 3. PORTAL DO FORNECEDOR (SUPPLIER SELF-SERVICE)
 // =========================================================================
 
-portalsRouter.get("/supplier/dashboard", requireAuth, async (req: Request, res: Response) => {
+const supplierGuard = [requireAuth, requirePortalRole("ROLE_PORTAL_SUPPLIER", "ROLE_ACCOUNTANT")];
+
+portalsRouter.get("/supplier/dashboard", ...supplierGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const supplierId = (auth.user as any)?.supplierId || auth.user?.id;
   const companyId = resolveCompanyId(req);
@@ -165,31 +202,35 @@ portalsRouter.get("/supplier/dashboard", requireAuth, async (req: Request, res: 
   }
 
   const dashboard = await EnterpriseSupplierPortalService.getDashboard(supplierId, companyId);
+  if (!dashboard) {
+    res.status(404).json({ error: "supplier_not_found", message: "Conta de fornecedor não encontrada." });
+    return;
+  }
   res.json(dashboard);
 });
 
-portalsRouter.get("/supplier/orders", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/supplier/orders", ...supplierGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const supplierId = (auth.user as any)?.supplierId || auth.user?.id;
   const orders = await EnterpriseSupplierPortalService.listPurchaseOrders(supplierId);
   res.json(orders);
 });
 
-portalsRouter.get("/supplier/receipts", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/supplier/receipts", ...supplierGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const supplierId = (auth.user as any)?.supplierId || auth.user?.id;
   const receipts = await EnterpriseSupplierPortalService.listGoodsReceipts(supplierId);
   res.json(receipts);
 });
 
-portalsRouter.get("/supplier/payments", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/supplier/payments", ...supplierGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const supplierId = (auth.user as any)?.supplierId || auth.user?.id;
   const payments = await EnterpriseSupplierPortalService.listPayments(supplierId);
   res.json(payments);
 });
 
-portalsRouter.post("/supplier/submit-document", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.post("/supplier/submit-document", ...supplierGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const supplierId = (auth.user as any)?.supplierId || auth.user?.id;
   const { documentType, documentNumber, amountCents, issueDate, notes, fileAttachmentUrl } = req.body;
@@ -211,7 +252,7 @@ portalsRouter.post("/supplier/submit-document", requireAuth, async (req: Request
   res.status(201).json(submitted);
 });
 
-portalsRouter.patch("/supplier/profile", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.patch("/supplier/profile", ...supplierGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const supplierId = (auth.user as any)?.supplierId || auth.user?.id;
   const { phone, email, address, contactName, iban } = req.body;
@@ -222,6 +263,10 @@ portalsRouter.patch("/supplier/profile", requireAuth, async (req: Request, res: 
   }
 
   const result = await EnterpriseSupplierPortalService.updateSupplierProfile(supplierId, { phone, email, address, contactName, iban });
+  if (!result) {
+    res.status(404).json({ error: "supplier_not_found", message: "Não foi possível atualizar o perfil do fornecedor." });
+    return;
+  }
   res.json(result);
 });
 
@@ -229,7 +274,9 @@ portalsRouter.patch("/supplier/profile", requireAuth, async (req: Request, res: 
 // 4. PORTAL DO COLABORADOR (RH SELF-SERVICE)
 // =========================================================================
 
-portalsRouter.get("/employee/dashboard", requireAuth, async (req: Request, res: Response) => {
+const employeeGuard = [requireAuth, requirePortalRole("ROLE_PORTAL_EMPLOYEE", "ROLE_HR")];
+
+portalsRouter.get("/employee/dashboard", ...employeeGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const employeeId = (auth.user as any)?.employeeId || auth.user?.id;
   const companyId = resolveCompanyId(req);
@@ -240,17 +287,33 @@ portalsRouter.get("/employee/dashboard", requireAuth, async (req: Request, res: 
   }
 
   const dashboard = await EnterpriseEmployeePortalService.getDashboard(employeeId, companyId);
+  if (!dashboard) {
+    res.status(404).json({ error: "employee_not_found", message: "Ficha de colaborador não encontrada." });
+    return;
+  }
   res.json(dashboard);
 });
 
-portalsRouter.get("/employee/payslips", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/employee/payslips", ...employeeGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const employeeId = (auth.user as any)?.employeeId || auth.user?.id;
   const payslips = await EnterpriseEmployeePortalService.listPayslips(employeeId);
   res.json(payslips);
 });
 
-portalsRouter.post("/employee/leave-requests", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/employee/payslips/:id", ...employeeGuard, async (req: Request, res: Response) => {
+  const auth = req as AuthRequest;
+  const employeeId = (auth.user as any)?.employeeId || auth.user?.id;
+  const payslipId = getParam(req, "id");
+  const payslip = await EnterpriseEmployeePortalService.getPayslip(employeeId, payslipId);
+  if (!payslip) {
+    res.status(404).json({ error: "payslip_not_found", message: "Recibo de vencimento não encontrado." });
+    return;
+  }
+  res.json(payslip);
+});
+
+portalsRouter.post("/employee/leave-requests", ...employeeGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const employeeId = (auth.user as any)?.employeeId || auth.user?.id;
   const { type, startDate, endDate, daysCount, justification } = req.body;
@@ -268,17 +331,22 @@ portalsRouter.post("/employee/leave-requests", requireAuth, async (req: Request,
     justification,
   });
 
+  if (!request) {
+    res.status(400).json({ error: "leave_request_failed", message: "Não foi possível registar o pedido de ausência." });
+    return;
+  }
+
   res.status(201).json(request);
 });
 
-portalsRouter.get("/employee/leave-requests", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/employee/leave-requests", ...employeeGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const employeeId = (auth.user as any)?.employeeId || auth.user?.id;
   const list = await EnterpriseEmployeePortalService.listLeaveRequests(employeeId);
   res.json(list);
 });
 
-portalsRouter.patch("/employee/profile", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.patch("/employee/profile", ...employeeGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const employeeId = (auth.user as any)?.employeeId || auth.user?.id;
   const { phone, email, address, iban } = req.body;
@@ -289,26 +357,32 @@ portalsRouter.patch("/employee/profile", requireAuth, async (req: Request, res: 
   }
 
   const result = await EnterpriseEmployeePortalService.updateEmployeeProfile(employeeId, { phone, email, address, iban });
+  if (!result) {
+    res.status(404).json({ error: "employee_not_found", message: "Não foi possível atualizar os dados do colaborador." });
+    return;
+  }
   res.json(result);
 });
 
 // =========================================================================
-// 5. APLICAÇÃO MOBILE ERP (ANDROID & iOS)
+// 5. APLICAÇÃO MOBILE ERP (EXCLUSIVO UTILIZADORES ERP INTERNOS)
 // =========================================================================
 
-portalsRouter.get("/mobile/executive-dashboard", requireAuth, async (req: Request, res: Response) => {
+const mobileGuard = [requireAuth, requirePortalRole("ROLE_ADMIN", "ROLE_CASHIER", "ROLE_ACCOUNTANT", "ROLE_HR")];
+
+portalsRouter.get("/mobile/executive-dashboard", ...mobileGuard, async (req: Request, res: Response) => {
   const companyId = resolveCompanyId(req);
   const dashboard = await EnterpriseMobileErpService.getExecutiveDashboard(companyId);
   res.json(dashboard);
 });
 
-portalsRouter.get("/mobile/approvals", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/mobile/approvals", ...mobileGuard, async (req: Request, res: Response) => {
   const { status } = req.query;
   const approvals = await EnterpriseMobileErpService.listApprovals(typeof status === "string" ? status : undefined);
   res.json(approvals);
 });
 
-portalsRouter.post("/mobile/approvals/:id/action", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.post("/mobile/approvals/:id/action", ...mobileGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const approvalId = getParam(req, "id");
   const { action, comment } = req.body;
@@ -328,7 +402,7 @@ portalsRouter.post("/mobile/approvals/:id/action", requireAuth, async (req: Requ
   res.json(result);
 });
 
-portalsRouter.post("/mobile/crm/visits", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.post("/mobile/crm/visits", ...mobileGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const { customerId, customerName, latitude, longitude, notes, outcome, customerSignature, visitedAt } = req.body;
 
@@ -351,13 +425,13 @@ portalsRouter.post("/mobile/crm/visits", requireAuth, async (req: Request, res: 
   res.status(201).json(visit);
 });
 
-portalsRouter.get("/mobile/crm/visits", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/mobile/crm/visits", ...mobileGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const visits = await EnterpriseMobileErpService.listVisits(auth.user?.id);
   res.json(visits);
 });
 
-portalsRouter.post("/mobile/crm/calls", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.post("/mobile/crm/calls", ...mobileGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const { customerId, customerName, phone, durationSeconds, notes, calledAt } = req.body;
 
@@ -378,7 +452,7 @@ portalsRouter.post("/mobile/crm/calls", requireAuth, async (req: Request, res: R
   res.status(201).json(call);
 });
 
-portalsRouter.post("/mobile/devices/register", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.post("/mobile/devices/register", ...mobileGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const { deviceId, platform, pushToken, model, appVersion, preferences } = req.body;
 
@@ -400,12 +474,12 @@ portalsRouter.post("/mobile/devices/register", requireAuth, async (req: Request,
   res.status(201).json(device);
 });
 
-portalsRouter.get("/mobile/devices", requireAuth, async (_req: Request, res: Response) => {
+portalsRouter.get("/mobile/devices", ...mobileGuard, async (_req: Request, res: Response) => {
   const devices = await EnterpriseMobileErpService.listRegisteredDevices();
   res.json(devices);
 });
 
-portalsRouter.post("/mobile/sync", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.post("/mobile/sync", ...mobileGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
   const { mutations } = req.body;
 
@@ -418,8 +492,9 @@ portalsRouter.post("/mobile/sync", requireAuth, async (req: Request, res: Respon
   res.json(result);
 });
 
-portalsRouter.get("/mobile/offline-snapshot", requireAuth, async (req: Request, res: Response) => {
+portalsRouter.get("/mobile/offline-snapshot", ...mobileGuard, async (req: Request, res: Response) => {
   const auth = req as AuthRequest;
-  const snapshot = await EnterpriseMobileErpService.getOfflineSnapshot(auth.user?.id || "user-mobile-01");
+  const companyId = resolveCompanyId(req);
+  const snapshot = await EnterpriseMobileErpService.getOfflineSnapshot(auth.user?.id || "user-mobile-01", companyId);
   res.json(snapshot);
 });

@@ -6,6 +6,8 @@ import { logger } from "./logger.service.js";
 import { EnterpriseAuditService } from "./audit.service.js";
 import { EnterpriseNotificationService } from "./notification.service.js";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export interface CustomerPortalDashboard {
   customerId: string;
   customerName: string;
@@ -44,8 +46,8 @@ export interface StatementEntry {
   documentType: "FT" | "FR" | "RC" | "NC" | "ND";
   documentNumber: string;
   description: string;
-  debitCents: number; // Invoiced amounts / Increases debt
-  creditCents: number; // Payments / Credit Notes / Decreases debt
+  debitCents: number;
+  creditCents: number;
   runningBalanceCents: number;
 }
 
@@ -66,64 +68,53 @@ export class EnterpriseCustomerPortalService {
   private static inMemoryReferences: Map<string, PaymentReference> = new Map();
 
   static {
-    // Seed default enterprise customer fixture for resilient portal operations
-    const defaultCustId = "cust-portal-01";
-    this.inMemoryCustomers.set(defaultCustId, {
-      id: defaultCustId,
-      name: "Sonangol Distribuidora S.A.",
-      nif: "5401992831",
-      email: "financeiro@sonangol.co.ao",
-      phone: "+244 923 888 777",
-      address: "Rua Rainha Ginga, Edifício Sonangol, Luanda",
-      creditLimitCents: 50_000_000_00, // 50.000.000 Kz
-      outstandingDebtCents: 12_450_000_00, // 12.450.000 Kz
-      active: true,
-      companyId: "comp-default",
-    });
+    // Only in non-production test environments initialize test fixtures
+    if (!isProduction) {
+      const defaultCustId = "cust-portal-01";
+      this.inMemoryCustomers.set(defaultCustId, {
+        id: defaultCustId,
+        name: "Sonangol Distribuidora S.A.",
+        nif: "5401992831",
+        email: "financeiro@sonangol.co.ao",
+        phone: "+244 923 888 777",
+        address: "Rua Rainha Ginga, Edifício Sonangol, Luanda",
+        creditLimitCents: 50_000_000_00,
+        outstandingDebtCents: 12_450_000_00,
+        active: true,
+        companyId: "comp-default",
+      });
 
-    this.inMemoryDocuments.set(defaultCustId, [
-      {
-        id: "doc-ft-2026-001",
-        number: "FT 2026/0142",
-        type: "FT",
-        date: "2026-10-15T10:00:00Z",
-        totalCents: 8_500_000_00,
-        subtotalCents: 7_456_140_00,
-        taxCents: 1_043_860_00,
-        status: "PENDING",
-        downloadUrl: `/api/v1/portals/customer/documents/doc-ft-2026-001/pdf`,
-      },
-      {
-        id: "doc-ft-2026-002",
-        number: "FT 2026/0189",
-        type: "FT",
-        date: "2026-10-18T14:30:00Z",
-        totalCents: 3_950_000_00,
-        subtotalCents: 3_464_912_00,
-        taxCents: 485_088_00,
-        status: "PENDING",
-        downloadUrl: `/api/v1/portals/customer/documents/doc-ft-2026-002/pdf`,
-      },
-      {
-        id: "doc-rc-2026-001",
-        number: "RC 2026/0098",
-        type: "RC",
-        date: "2026-10-10T11:20:00Z",
-        totalCents: 5_000_000_00,
-        status: "SETTLED",
-        downloadUrl: `/api/v1/portals/customer/documents/doc-rc-2026-001/pdf`,
-      },
-    ]);
+      this.inMemoryDocuments.set(defaultCustId, [
+        {
+          id: "doc-ft-2026-001",
+          number: "FT 2026/0142",
+          type: "FT",
+          date: "2026-10-15T10:00:00Z",
+          totalCents: 8_500_000_00,
+          status: "PENDING",
+          downloadUrl: `/api/v1/portals/customer/documents/doc-ft-2026-001/pdf`,
+        },
+        {
+          id: "doc-ft-2026-002",
+          number: "FT 2026/0189",
+          type: "FT",
+          date: "2026-10-18T14:30:00Z",
+          totalCents: 3_950_000_00,
+          status: "PENDING",
+          downloadUrl: `/api/v1/portals/customer/documents/doc-ft-2026-002/pdf`,
+        },
+      ]);
 
-    this.inMemoryPayments.set(defaultCustId, [
-      {
-        id: "pay-rec-001",
-        amountCents: 5_000_000_00,
-        paymentMethod: "TRANSFER",
-        receivedAt: "2026-10-10T11:20:00Z",
-        reference: "TRF-BAI-992140",
-      },
-    ]);
+      this.inMemoryPayments.set(defaultCustId, [
+        {
+          id: "pay-rec-001",
+          amountCents: 5_000_000_00,
+          paymentMethod: "TRANSFER",
+          receivedAt: "2026-10-10T11:20:00Z",
+          reference: "TRF-BAI-992140",
+        },
+      ]);
+    }
   }
 
   /**
@@ -131,8 +122,9 @@ export class EnterpriseCustomerPortalService {
    */
   public static async authenticateCustomer(identifier: string, secret: string, companyId?: string): Promise<{ token: string; customer: any } | null> {
     const cleanId = identifier.trim().toLowerCase();
-    let customer: any = null;
+    if (!secret || secret.length < 4) return null;
 
+    let customer: any = null;
     try {
       customer = await prisma.customer.findFirst({
         where: {
@@ -144,11 +136,11 @@ export class EnterpriseCustomerPortalService {
           ...(companyId ? { companyId } : {}),
         },
       });
-    } catch {
-      // In-memory fallback
+    } catch (err) {
+      logger.error("CUSTOMER_PORTAL", "AUTH", "Falha na consulta de cliente", err);
     }
 
-    if (!customer) {
+    if (!customer && !isProduction) {
       for (const c of this.inMemoryCustomers.values()) {
         if ((c.email?.toLowerCase() === cleanId || c.nif === cleanId) && (!companyId || c.companyId === companyId)) {
           customer = c;
@@ -158,11 +150,6 @@ export class EnterpriseCustomerPortalService {
     }
 
     if (!customer) return null;
-
-    // In portal self-service, password or PIN check (defaults to PIN or secret length >= 4)
-    if (!secret || secret.length < 4) {
-      return null;
-    }
 
     const token = jwt.sign(
       {
@@ -177,68 +164,108 @@ export class EnterpriseCustomerPortalService {
       { expiresIn: "7d" }
     );
 
-    EnterpriseAuditService.record({
+    void EnterpriseAuditService.record({
       action: "PORTAL_CUSTOMER_LOGIN",
       module: "CUSTOMER_PORTAL",
-      companyId: customer.companyId,
+      companyId: customer.companyId || undefined,
       userId: customer.id,
       details: { customerName: customer.name, nif: customer.nif },
     });
 
-    return { token, customer };
+    return {
+      token,
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        nif: customer.nif,
+        email: customer.email,
+        phone: customer.phone,
+        address: customer.address,
+        creditLimitCents: customer.creditLimitCents,
+        outstandingDebtCents: customer.outstandingDebtCents,
+      },
+    };
   }
 
   /**
    * Generates Customer Self-Service Dashboard
    */
   public static async getDashboard(customerId: string, companyId?: string): Promise<CustomerPortalDashboard> {
-    let customer = this.inMemoryCustomers.get(customerId);
+    let customer: any = null;
+    let sales: any[] = [];
+    let payments: any[] = [];
+
     try {
-      const dbCust = await prisma.customer.findUnique({ where: { id: customerId } });
-      if (dbCust) customer = dbCust;
-    } catch {
-      // Memory fallback
+      customer = await prisma.customer.findFirst({
+        where: {
+          id: customerId,
+          ...(companyId ? { companyId } : {}),
+        },
+      });
+
+      if (customer) {
+        [sales, payments] = await Promise.all([
+          prisma.sale.findMany({
+            where: { customerId: customer.id },
+            orderBy: { createdAt: "desc" },
+            take: 20,
+          }),
+          prisma.receivablePayment.findMany({
+            where: { customerId: customer.id },
+            orderBy: { receivedAt: "desc" },
+            take: 20,
+          }),
+        ]);
+      }
+    } catch (err) {
+      logger.error("CUSTOMER_PORTAL", "DASHBOARD", "Falha ao carregar dashboard de cliente", err);
     }
 
-    if (!customer) {
-      customer = {
-        id: customerId,
-        name: "Cliente Self-Service",
-        nif: "999999999",
-        creditLimitCents: 10_000_000_00,
-        outstandingDebtCents: 0,
-      };
+    if (!customer && !isProduction) {
+      customer = this.inMemoryCustomers.get(customerId);
+      sales = this.inMemoryDocuments.get(customerId) || [];
+      payments = this.inMemoryPayments.get(customerId) || [];
     }
 
-    const docs = this.inMemoryDocuments.get(customerId) || [];
-    const payments = this.inMemoryPayments.get(customerId) || [];
+    if (!customer) throw new Error("customer_not_found");
 
-    const totalInvoicedCents = docs
-      .filter((d: any) => d.type === "FT" || d.type === "FR")
-      .reduce((sum: number, d: any) => sum + (d.totalCents || 0), 0);
-
-    const totalPaidCents = payments.reduce((sum: number, p: any) => sum + (p.amountCents || 0), 0);
-    const totalCreditNotesCents = docs
-      .filter((d: any) => d.type === "NC")
-      .reduce((sum: number, d: any) => sum + (d.totalCents || 0), 0);
-
-    const balanceDueCents = Math.max(0, totalInvoicedCents - totalPaidCents - totalCreditNotesCents);
+    const totalInvoicedCents = sales.reduce((sum, s) => sum + (s.totalCents || 0), 0);
+    const totalPaidCents = payments.reduce((sum, p) => sum + (p.amountCents || 0), 0);
+    const balanceDueCents = customer.outstandingDebtCents || Math.max(0, totalInvoicedCents - totalPaidCents);
     const creditAvailableCents = Math.max(0, (customer.creditLimitCents || 0) - balanceDueCents);
+
+    const recentDocuments = sales.map((s) => ({
+      id: s.id,
+      number: s.number || `DOC-${s.id.slice(0, 8)}`,
+      type: s.fiscalType || s.type || "FT",
+      date: typeof s.createdAt === "object" ? s.createdAt.toISOString() : (s.date || new Date().toISOString()),
+      totalCents: s.totalCents,
+      status: s.status || "VALID",
+      downloadUrl: `/api/v1/portals/customer/documents/${s.id}/pdf`,
+    }));
+
+    const recentPayments = payments.map((p) => ({
+      id: p.id,
+      amountCents: p.amountCents,
+      paymentMethod: p.paymentMethod,
+      receivedAt: typeof p.receivedAt === "object" ? p.receivedAt.toISOString() : (p.receivedAt || new Date().toISOString()),
+      reference: p.reference,
+    }));
 
     return {
       customerId: customer.id,
       customerName: customer.name,
-      nif: customer.nif || "999999999",
+      nif: customer.nif || "",
       totalPurchasedCents: totalInvoicedCents,
       outstandingDebtCents: balanceDueCents,
       creditLimitCents: customer.creditLimitCents || 0,
       creditAvailableCents,
-      recentDocuments: docs.slice(0, 5),
-      recentPayments: payments.slice(0, 5),
+      recentDocuments,
+      recentPayments,
       statementSummary: {
         totalInvoicedCents,
         totalPaidCents,
-        totalCreditNotesCents,
+        totalCreditNotesCents: 0,
         balanceDueCents,
       },
     };
@@ -251,8 +278,44 @@ export class EnterpriseCustomerPortalService {
     customerId: string,
     filters?: { from?: string; to?: string }
   ): Promise<{ entries: StatementEntry[]; totalDebitCents: number; totalCreditCents: number; finalBalanceCents: number }> {
-    const docs = this.inMemoryDocuments.get(customerId) || [];
-    const payments = this.inMemoryPayments.get(customerId) || [];
+    let sales: any[] = [];
+    let payments: any[] = [];
+
+    try {
+      [sales, payments] = await Promise.all([
+        prisma.sale.findMany({
+          where: {
+            customerId,
+            ...(filters?.from || filters?.to ? {
+              createdAt: {
+                ...(filters.from ? { gte: new Date(filters.from) } : {}),
+                ...(filters.to ? { lte: new Date(filters.to) } : {}),
+              },
+            } : {}),
+          },
+          orderBy: { createdAt: "asc" },
+        }),
+        prisma.receivablePayment.findMany({
+          where: {
+            customerId,
+            ...(filters?.from || filters?.to ? {
+              receivedAt: {
+                ...(filters.from ? { gte: new Date(filters.from) } : {}),
+                ...(filters.to ? { lte: new Date(filters.to) } : {}),
+              },
+            } : {}),
+          },
+          orderBy: { receivedAt: "asc" },
+        }),
+      ]);
+    } catch (err) {
+      logger.error("CUSTOMER_PORTAL", "STATEMENT", "Falha ao carregar extrato", err);
+    }
+
+    if (!sales.length && !payments.length && !isProduction) {
+      sales = this.inMemoryDocuments.get(customerId) || [];
+      payments = this.inMemoryPayments.get(customerId) || [];
+    }
 
     const rawEvents: Array<{
       id: string;
@@ -264,53 +327,33 @@ export class EnterpriseCustomerPortalService {
       creditCents: number;
     }> = [];
 
-    for (const d of docs) {
-      if (d.type === "FT" || d.type === "ND") {
-        rawEvents.push({
-          id: d.id,
-          date: d.date,
-          type: d.type,
-          number: d.number,
-          description: `Emissão de Fatura Comercial ${d.number}`,
-          debitCents: d.totalCents,
-          creditCents: 0,
-        });
-      } else if (d.type === "FR") {
-        rawEvents.push({
-          id: d.id,
-          date: d.date,
-          type: d.type,
-          number: d.number,
-          description: `Fatura / Recibo Liquidada ${d.number}`,
-          debitCents: d.totalCents,
-          creditCents: d.totalCents, // Net zero debt increase
-        });
-      } else if (d.type === "NC") {
-        rawEvents.push({
-          id: d.id,
-          date: d.date,
-          type: d.type,
-          number: d.number,
-          description: `Nota de Crédito ${d.number}`,
-          debitCents: 0,
-          creditCents: d.totalCents,
-        });
-      }
+    for (const s of sales) {
+      const docType = (s.fiscalType === "INVOICE_RECEIPT" || s.type === "FR" ? "FR" : "FT") as "FT" | "FR";
+      const docDate = typeof s.createdAt === "object" ? s.createdAt.toISOString() : (s.date || new Date().toISOString());
+      rawEvents.push({
+        id: s.id,
+        date: docDate,
+        type: docType,
+        number: s.number || `FAT-${s.id.slice(0, 8)}`,
+        description: `Fatura ${s.number || s.id.slice(0, 8)}`,
+        debitCents: s.totalCents,
+        creditCents: docType === "FR" ? s.totalCents : 0,
+      });
     }
 
     for (const p of payments) {
+      const pDate = typeof p.receivedAt === "object" ? p.receivedAt.toISOString() : (p.receivedAt || new Date().toISOString());
       rawEvents.push({
         id: p.id,
-        date: p.receivedAt,
+        date: pDate,
         type: "RC",
-        number: p.reference || "REC-LIQ",
+        number: p.reference || `REC-${p.id.slice(0, 8)}`,
         description: `Recebimento em Caixa (${p.paymentMethod})`,
         debitCents: 0,
         creditCents: p.amountCents,
       });
     }
 
-    // Sort chronologically
     rawEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     let runningBalance = 0;
@@ -319,9 +362,6 @@ export class EnterpriseCustomerPortalService {
 
     const entries: StatementEntry[] = [];
     for (const ev of rawEvents) {
-      if (filters?.from && new Date(ev.date) < new Date(filters.from)) continue;
-      if (filters?.to && new Date(ev.date) > new Date(filters.to)) continue;
-
       runningBalance += ev.debitCents - ev.creditCents;
       totalDebit += ev.debitCents;
       totalCredit += ev.creditCents;
@@ -354,32 +394,47 @@ export class EnterpriseCustomerPortalService {
     documentId: string,
     amountCents?: number
   ): Promise<PaymentReference> {
-    const docs = this.inMemoryDocuments.get(customerId) || [];
-    const doc = docs.find((d: any) => d.id === documentId);
-    const paymentAmount = amountCents || (doc ? doc.totalCents : 100_000_00);
+    try {
+      let paymentAmount = amountCents;
+      if (!paymentAmount) {
+        const sale = await prisma.sale.findFirst({
+          where: { id: documentId, customerId },
+        });
+        if (sale) paymentAmount = sale.totalCents;
+      }
 
-    const refNum = `${Math.floor(100_000_000 + Math.random() * 900_000_000)}`;
-    const reference: PaymentReference = {
-      entity: "00142", // Entidade EMIS Multicaixa Registada
-      reference: refNum,
-      amountCents: paymentAmount,
-      expiresAt: new Date(Date.now() + 48 * 3600000).toISOString(),
-      bankIban: "AO06.0040.0000.1234.5678.9012.3",
-      bankName: "Banco Angolano de Investimentos (BAI)",
-      status: "ACTIVE",
-    };
+      if (!paymentAmount && !isProduction) {
+        paymentAmount = 8_500_000_00;
+      }
 
-    this.inMemoryReferences.set(reference.reference, reference);
+      if (!paymentAmount || paymentAmount <= 0) throw new Error("invalid_payment_amount");
 
-    EnterpriseNotificationService.dispatch({
-      type: "INFO",
-      category: "FINANCIAL",
-      title: "Referência de Pagamento Gerada",
-      message: `Cliente gerou referência Multicaixa ${reference.reference} de ${(reference.amountCents / 100).toFixed(2)} Kz`,
-      module: "PORTAL_PAYMENTS",
-    });
+      const refNum = `${Math.floor(100_000_000 + Math.random() * 900_000_000)}`;
+      const reference: PaymentReference = {
+        entity: "00142",
+        reference: refNum,
+        amountCents: paymentAmount,
+        expiresAt: new Date(Date.now() + 48 * 3600000).toISOString(),
+        bankIban: "AO06.0040.0000.1234.5678.9012.3",
+        bankName: "Banco Angolano de Investimentos (BAI)",
+        status: "ACTIVE",
+      };
 
-    return reference;
+      this.inMemoryReferences.set(reference.reference, reference);
+
+      void EnterpriseNotificationService.dispatch({
+        type: "INFO",
+        category: "FINANCIAL",
+        title: "Referência de Pagamento Gerada",
+        message: `Cliente gerou referência Multicaixa ${reference.reference} de ${(reference.amountCents / 100).toFixed(2)} Kz`,
+        module: "PORTAL_PAYMENTS",
+      });
+
+      return reference;
+    } catch (err) {
+      logger.error("CUSTOMER_PORTAL", "PAYMENT_REF", "Falha ao gerar referência", err);
+      throw new Error("payment_reference_failed");
+    }
   }
 
   /**
@@ -389,41 +444,35 @@ export class EnterpriseCustomerPortalService {
     customerId: string,
     updates: { phone?: string; email?: string; address?: string }
   ): Promise<{ success: boolean; customer: any }> {
-    let customer = this.inMemoryCustomers.get(customerId);
-    if (!customer) {
-      customer = { id: customerId, name: "Cliente Self-Service", nif: "999999999" };
-    }
-
-    const updated = {
-      ...customer,
-      phone: updates.phone ?? customer.phone,
-      email: updates.email ?? customer.email,
-      address: updates.address ?? customer.address,
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.inMemoryCustomers.set(customerId, updated);
-
+    let customer: any = null;
     try {
-      await prisma.customer.update({
+      customer = await prisma.customer.update({
         where: { id: customerId },
         data: {
-          phone: updates.phone,
-          email: updates.email,
-          address: updates.address,
+          ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
+          ...(updates.email !== undefined ? { email: updates.email } : {}),
+          ...(updates.address !== undefined ? { address: updates.address } : {}),
         },
       });
-    } catch {
-      // Memory fallback
+    } catch (err) {
+      logger.error("CUSTOMER_PORTAL", "PROFILE_UPDATE", "Falha ao atualizar perfil do cliente no BD", err);
     }
 
-    EnterpriseAuditService.record({
+    if (!customer && !isProduction) {
+      const existing = this.inMemoryCustomers.get(customerId) || { id: customerId, name: "Cliente Self-Service" };
+      customer = { ...existing, ...updates };
+      this.inMemoryCustomers.set(customerId, customer);
+    }
+
+    if (!customer) throw new Error("customer_not_found");
+
+    void EnterpriseAuditService.record({
       action: "PORTAL_PROFILE_UPDATED",
       module: "CUSTOMER_PORTAL",
       userId: customerId,
       details: { updates },
     });
 
-    return { success: true, customer: updated };
+    return { success: true, customer };
   }
 }

@@ -7,8 +7,8 @@ interface Props {
 
 export function CustomerPortal({ apiUrl }: Props) {
   const [token, setToken] = useState<string | null>(localStorage.getItem("portal_customer_token"));
-  const [nif, setNif] = useState("5401992831");
-  const [pin, setPin] = useState("pin1234");
+  const [nif, setNif] = useState("");
+  const [pin, setPin] = useState("");
   const [loginError, setLoginError] = useState("");
   const [activeTab, setActiveTab] = useState<"dashboard" | "statement" | "payments" | "profile">("dashboard");
 
@@ -62,9 +62,9 @@ export function CustomerPortal({ apiUrl }: Props) {
         const data = await res.json();
         setDashboard(data);
         setProfileForm({
-          phone: "+244 923 888 777",
-          email: "financeiro@sonangol.co.ao",
-          address: "Rua Rainha Ginga, Edifício Sonangol, Luanda",
+          phone: data.phone || "",
+          email: data.email || "",
+          address: data.address || "",
         });
       }
     } catch (e) {

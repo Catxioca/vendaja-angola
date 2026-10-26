@@ -53,10 +53,10 @@ export function BootstrapAccountForm({ apiUrl, onComplete, onCancel }: { apiUrl:
     setError("");
 
     const legalName = form.legalName.trim();
-    const branchCode = form.branchCode.trim();
-    const branchName = form.branchName.trim();
+    const branchCode = form.branchCode.trim().toUpperCase() || "MAIN";
+    const branchName = form.branchName.trim() || "Sede";
     const displayName = form.displayName.trim();
-    const username = form.username.trim();
+    const username = form.username.trim().toLowerCase().replace(/\s+/g, ".");
     const email = form.email.trim();
     const nif = form.nif.trim();
     const pin = form.pin.trim();
@@ -73,16 +73,12 @@ export function BootstrapAccountForm({ apiUrl, onComplete, onCancel }: { apiUrl:
       setError("O nome completo do administrador deve ter pelo menos 2 caracteres.");
       return;
     }
-    if (username.length < 3) {
-      setError("O utilizador deve ter pelo menos 3 caracteres.");
+    if (username.length < 2) {
+      setError("O utilizador deve ter pelo menos 2 caracteres.");
       return;
     }
-    if (!/^[A-Za-z0-9._-]+$/.test(username)) {
-      setError("O nome de utilizador só pode conter letras, números, pontos (.), hífens (-) ou underscores (_). Não são permitidos espaços.");
-      return;
-    }
-    if (form.password.length < 12) {
-      setError("A password deve ter pelo menos 12 caracteres.");
+    if (form.password.length < 8) {
+      setError("A password deve ter pelo menos 8 caracteres.");
       return;
     }
     if (form.password !== form.confirmPassword) {
@@ -209,20 +205,20 @@ export function BootstrapAccountForm({ apiUrl, onComplete, onCancel }: { apiUrl:
           <input required placeholder="Ex: João da Silva" value={form.displayName} onChange={(e) => change("displayName", e.target.value)} />
         </label>
         <label>
-          Utilizador <small>(sem espaços)</small>
-          <input required minLength={3} placeholder="Ex: admin" value={form.username} onChange={(e) => change("username", e.target.value)} />
+          Utilizador
+          <input required minLength={2} placeholder="Ex: admin ou joao" value={form.username} onChange={(e) => change("username", e.target.value)} />
         </label>
         <label>
           E-mail
           <input required type="email" placeholder="admin@empresa.ao" value={form.email} onChange={(e) => change("email", e.target.value)} />
         </label>
         <label>
-          Password forte <small>(mínimo 12 caracteres)</small>
-          <input required type="password" minLength={12} placeholder="••••••••••••" value={form.password} onChange={(e) => change("password", e.target.value)} />
+          Password <small>(mínimo 8 caracteres)</small>
+          <input required type="password" minLength={8} placeholder="••••••••" value={form.password} onChange={(e) => change("password", e.target.value)} />
         </label>
         <label>
           Confirmar password
-          <input required type="password" minLength={12} placeholder="••••••••••••" value={form.confirmPassword} onChange={(e) => change("confirmPassword", e.target.value)} />
+          <input required type="password" minLength={8} placeholder="••••••••" value={form.confirmPassword} onChange={(e) => change("confirmPassword", e.target.value)} />
         </label>
         <label>
           PIN administrativo <small>(4–6 dígitos, opcional)</small>

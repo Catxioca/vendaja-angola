@@ -16,19 +16,29 @@ export const authRouter = Router();
 authRouter.use(distributedRateLimit({ name: "auth", limit: 30, windowMs: 60_000 }));
 
 const emptyToUndefined = (val: unknown) => typeof val === "string" ? (val.trim() || undefined) : val;
+const sanitizeUsername = (val: unknown) => {
+  if (typeof val !== "string") return val;
+  return val.trim().toLowerCase().replace(/\s+/g, ".");
+};
 
 export const bootstrapInput = z.object({
   company: z.object({
     legalName: z.string().trim().min(2, "O nome da empresa deve ter pelo menos 2 caracteres.").max(160),
     nif: z.preprocess(emptyToUndefined, z.string().min(5, "O NIF deve ter pelo menos 5 caracteres.").max(32).optional()),
-    branchCode: z.string().trim().min(1).max(32).regex(/^[A-Za-z0-9._-]+$/, "O código da filial só pode conter letras, números, hífen ou ponto.").default("MAIN"),
+    branchCode: z.preprocess(
+      (val) => typeof val === "string" ? val.trim().toUpperCase().replace(/[^A-Z0-9._-]/g, "") || "MAIN" : "MAIN",
+      z.string().min(1).max(32).default("MAIN")
+    ),
     branchName: z.string().trim().min(2, "O nome da filial deve ter pelo menos 2 caracteres.").max(160).default("Sede"),
   }),
   admin: z.object({
-    username: z.string().trim().min(3, "O nome de utilizador deve ter pelo menos 3 caracteres.").max(80).regex(/^[A-Za-z0-9._-]+$/, "O nome de utilizador não pode conter espaços nem caracteres especiais."),
+    username: z.preprocess(
+      sanitizeUsername,
+      z.string().min(2, "O nome de utilizador deve ter pelo menos 2 caracteres.").max(80)
+    ),
     email: z.string().trim().email("Introduza um endereço de e-mail válido."),
     displayName: z.string().trim().min(2, "O nome completo deve ter pelo menos 2 caracteres.").max(160),
-    password: z.string().min(12, "A password deve ter pelo menos 12 caracteres.").max(256),
+    password: z.string().min(8, "A password deve ter pelo menos 8 caracteres.").max(256),
     pin: z.preprocess(emptyToUndefined, z.string().regex(/^\d{4,6}$/, "O PIN deve ter entre 4 e 6 dígitos numéricos.").optional()),
   }),
 });

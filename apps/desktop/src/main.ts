@@ -169,13 +169,13 @@ async function validateLicense(): Promise<LicenseStatus> {
 
   // 1. Evaluate Product License (Authorizes running ERP instance, Login, Admin, Settings)
   let productLicense: ProductLicenseInfo = {
-    active: true,
+    active: false,
     hardwareId: id,
-    company: "Empresa Licenciada (Standard)",
-    nif: "999999999",
-    edition: "STANDARD",
-    status: "ACTIVE",
-    daysRemaining: 365,
+    company: "Não Licenciado",
+    nif: "—",
+    edition: "STARTER",
+    status: "NOT_ACTIVATED",
+    daysRemaining: 0,
   };
 
   const productTokenCandidate = state.productToken || state.token;

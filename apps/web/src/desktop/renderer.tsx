@@ -205,24 +205,10 @@ function Login({ onLogin }: { onLogin: (token: string, refresh: string, user: { 
     }, []);
     async function submit(event: FormEvent) { event.preventDefault(); setError(""); if (pinMode && !/^\d{6}$/.test(password)) { setError("O PIN deve conter exatamente 6 dígitos."); return; } setLoading(true); try { const mode = pinMode ? "pin" : "password"; let data: Awaited<ReturnType<typeof offlineLogin>>; try { const response = await fetch(`${api()}/api/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier, password, mode }) }); if (!response.ok) throw new Error("remote_login_failed"); data = await response.json() as Awaited<ReturnType<typeof offlineLogin>>; await saveLocalCredential(mode, password); } catch { data = await offlineLogin(identifier, password, mode); } localStorage.setItem("accessToken", data.accessToken); localStorage.setItem("refreshToken", data.refreshToken); onLogin(data.accessToken, data.refreshToken, data.user); } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível iniciar sessão."); } finally { setLoading(false); } }
     const press = (digit: string) => setPassword((value) => value.length < 6 ? value + digit : value);
-    const enterDemoMode = () => {
-      const demoUser = {
-        id: "demo-auditor-id",
-        role: "ADMIN",
-        email: "auditor@vendaja.ao",
-        username: "auditor",
-        displayName: "Auditor Funcional ERP",
-        authMethod: "password" as const,
-      };
-      localStorage.setItem("accessToken", "demo-audit-access-token");
-      localStorage.setItem("refreshToken", "demo-audit-refresh-token");
-      localStorage.setItem("posUser", JSON.stringify(demoUser));
-      onLogin("demo-audit-access-token", "demo-audit-refresh-token", demoUser);
-    };
     if (configurationReady === null) return <main className="login-shell"><section className="login-card"><div className="login-card-inner">A carregar configuração segura…</div></section></main>;
     if (!configurationReady) return <main className="login-shell"><section className="login-card"><ServerConfigPanel firstRun onSaved={() => setConfigurationReady(true)} /></section></main>;
     if (showBootstrap) return <main className="login-shell"><section className="login-card"><BootstrapAccountForm apiUrl={api()} onComplete={onLogin} onCancel={() => setShowBootstrap(false)} /></section></main>;
-    return <main className="login-shell"><section className="login-brand"><div className="brand-mark">V<span>J</span></div><p className="eyebrow">GESTÃO COMERCIAL & FISCAL</p><h1>VendaJá <span>Angola</span></h1><p className="tagline">ERP Omnichannel, POS Certificado AGT e Portais Integrados.</p><div className="login-status"><span className="status-dot" /> Sistema online <span className="status-separator">•</span> 27 Módulos Ativos</div><div className="brand-decoration"><span>AOA</span><span>AGT</span><span>OFFLINE FIRST</span></div></section><section className="login-card"><div className="login-card-inner"><div className="login-heading"><p className="eyebrow">BEM-VINDO</p><h2>Iniciar sessão ERP</h2><p>Aceda com as suas credenciais ou explore o ambiente de auditoria.</p></div><div className="login-tabs"><button type="button" className={!pinMode ? "selected" : ""} onClick={() => { setPinMode(false); setPassword(""); }}>E-mail e password</button><button type="button" className={pinMode ? "selected" : ""} onClick={() => { setPinMode(true); setPassword(""); }}>PIN rápido</button></div><form onSubmit={submit}><label className="login-label">Utilizador ou e-mail<input className="login-input" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="admin ou email@empresa.ao" /></label>{pinMode ? <><label className="login-label">PIN de 6 dígitos<input className="login-input pin-display" required inputMode="numeric" maxLength={6} value={password} onChange={(event) => setPassword(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••••" /></label><div className="pin-keypad">{["1","2","3","4","5","6","7","8","9","0"].map((digit) => <button type="button" key={digit} onClick={() => press(digit)}>{digit}</button>)}<button type="button" className="pin-clear" onClick={() => setPassword("")}>Limpar</button></div></> : <label className="login-label">Password<input className="login-input" required type="password" minLength={4} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Introduza a sua password" /> </label>}{error && <div className="login-error">{error}</div>}<button className="login-submit" disabled={loading}>{loading ? "A validar..." : "Entrar na VendaJá"}</button></form><div style={{ margin: "14px 0", borderTop: "1px dashed #cbd5e1", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}><button type="button" onClick={enterDemoMode} style={{ background: "#0284c7", color: "#fff", border: "none", borderRadius: "6px", padding: "10px", fontWeight: "600", cursor: "pointer", fontSize: "13px" }}>🚀 Explorar ERP Completo (Acesso Auditoria / Demo)</button><button type="button" className="bootstrap-entry" onClick={() => setShowBootstrap(true)}>🔑 Criar Conta de Administrador Inicial</button></div><div style={{ background: "#f8fafc", padding: "10px", borderRadius: "6px", fontSize: "12px", border: "1px solid #e2e8f0" }}><strong style={{ color: "#475569", display: "block", marginBottom: "6px" }}>Acessos Rápidos aos Portais Externos:</strong><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}><a href="#portal-cliente" onClick={() => { window.location.hash = "portal-cliente"; window.location.reload(); }} style={{ color: "#0284c7", textDecoration: "none", fontWeight: "600", padding: "4px 8px", background: "#e0f2fe", borderRadius: "4px" }}>🏢 Cliente</a><a href="#portal-fornecedor" onClick={() => { window.location.hash = "portal-fornecedor"; window.location.reload(); }} style={{ color: "#059669", textDecoration: "none", fontWeight: "600", padding: "4px 8px", background: "#d1fae5", borderRadius: "4px" }}>🚛 Fornecedor</a><a href="#portal-colaborador" onClick={() => { window.location.hash = "portal-colaborador"; window.location.reload(); }} style={{ color: "#7c3aed", textDecoration: "none", fontWeight: "600", padding: "4px 8px", background: "#ede9fe", borderRadius: "4px" }}>👥 Colaborador</a></div></div></div></section></main>;
+    return <main className="login-shell"><section className="login-brand"><div className="brand-mark">V<span>J</span></div><p className="eyebrow">GESTÃO COMERCIAL & FISCAL</p><h1>VendaJá <span>Angola</span></h1><p className="tagline">ERP Omnichannel, POS Certificado AGT e Portais Integrados.</p><div className="login-status"><span className="status-dot" /> Sistema online <span className="status-separator">•</span> 27 Módulos Ativos</div><div className="brand-decoration"><span>AOA</span><span>AGT</span><span>OFFLINE FIRST</span></div></section><section className="login-card"><div className="login-card-inner"><div className="login-heading"><p className="eyebrow">BEM-VINDO</p><h2>Iniciar sessão ERP</h2><p>Aceda com as suas credenciais ou explore o ambiente de auditoria.</p></div><div className="login-tabs"><button type="button" className={!pinMode ? "selected" : ""} onClick={() => { setPinMode(false); setPassword(""); }}>E-mail e password</button><button type="button" className={pinMode ? "selected" : ""} onClick={() => { setPinMode(true); setPassword(""); }}>PIN rápido</button></div><form onSubmit={submit}><label className="login-label">Utilizador ou e-mail<input className="login-input" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="admin ou email@empresa.ao" /></label>{pinMode ? <><label className="login-label">PIN de 6 dígitos<input className="login-input pin-display" required inputMode="numeric" maxLength={6} value={password} onChange={(event) => setPassword(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="••••••" /></label><div className="pin-keypad">{["1","2","3","4","5","6","7","8","9","0"].map((digit) => <button type="button" key={digit} onClick={() => press(digit)}>{digit}</button>)}<button type="button" className="pin-clear" onClick={() => setPassword("")}>Limpar</button></div></> : <label className="login-label">Password<input className="login-input" required type="password" minLength={4} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Introduza a sua password" /> </label>}{error && <div className="login-error">{error}</div>}<button className="login-submit" disabled={loading}>{loading ? "A validar..." : "Entrar na VendaJá"}</button></form><div style={{ margin: "14px 0", borderTop: "1px dashed #cbd5e1", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}><button type="button" className="bootstrap-entry" onClick={() => setShowBootstrap(true)}>🔑 Criar Conta de Administrador Inicial</button></div><div style={{ background: "#f8fafc", padding: "10px", borderRadius: "6px", fontSize: "12px", border: "1px solid #e2e8f0" }}><strong style={{ color: "#475569", display: "block", marginBottom: "6px" }}>Acessos Rápidos aos Portais Externos:</strong><div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}><a href="#portal-cliente" onClick={() => { window.location.hash = "portal-cliente"; window.location.reload(); }} style={{ color: "#0284c7", textDecoration: "none", fontWeight: "600", padding: "4px 8px", background: "#e0f2fe", borderRadius: "4px" }}>🏢 Cliente</a><a href="#portal-fornecedor" onClick={() => { window.location.hash = "portal-fornecedor"; window.location.reload(); }} style={{ color: "#059669", textDecoration: "none", fontWeight: "600", padding: "4px 8px", background: "#d1fae5", borderRadius: "4px" }}>🚛 Fornecedor</a><a href="#portal-colaborador" onClick={() => { window.location.hash = "portal-colaborador"; window.location.reload(); }} style={{ color: "#7c3aed", textDecoration: "none", fontWeight: "600", padding: "4px 8px", background: "#ede9fe", borderRadius: "4px" }}>👥 Colaborador</a></div></div></div></section></main>;
   }
 
 function FiscalPanelLegacy({ token }: { token: string }) {
@@ -421,39 +407,58 @@ function App({ onSwitchPortal }: { onSwitchPortal?: (portal: string) => void } =
   }, []);
   useEffect(() => {
     let active = true;
-    try {
-      const savedWeb = localStorage.getItem("vendaja-license-status");
-      if (savedWeb) {
-        const parsed = JSON.parse(savedWeb);
-        if (parsed.valid) {
-          setLicenseStatus(parsed);
-          const raw = parsed.modules ?? [];
+
+    if (window.pos?.getLicenseStatus) {
+      void window.pos.getLicenseStatus().then((status) => {
+        if (!active) return;
+        setLicenseStatus(status);
+        if (status?.valid) {
+          const raw = status.modules ?? [];
           const normalized: AppModule[] = Array.from(new Set<AppModule>([...raw.map((m: string) => normalizeModuleCode(m)).filter((m): m is AppModule => m !== null), "SETTINGS"]));
           setLicenseModules(normalized);
           if (normalized.includes("POS")) setView("pdv");
-        }
-      }
-    } catch { /* ignore */ }
-
-    void window.pos?.getLicenseStatus?.().then((status) => {
-      if (!active) return;
-      setLicenseStatus(status);
-      if (status?.valid) {
-        const raw = status.modules ?? [];
-        const normalized: AppModule[] = Array.from(new Set<AppModule>([...raw.map((m: string) => normalizeModuleCode(m)).filter((m): m is AppModule => m !== null), "SETTINGS"]));
-        setLicenseModules(normalized);
-        if (normalized.includes("POS")) {
-          setView("pdv");
+          else setView("license");
         } else {
+          setLicenseModules(["SETTINGS"]);
           setView("license");
         }
-      } else if (!localStorage.getItem("vendaja-license-status")) {
+      }).catch(() => undefined);
+      return () => { active = false; };
+    }
+
+    // Web Cloud: Query backend for authoritative cryptographic license status
+    if (token) {
+      void fetch(`${api()}/api/v1/license/status`, {
+        headers: { authorization: `Bearer ${token}` },
+      }).then(async (r) => {
+        if (!active) return;
+        if (r.ok) {
+          const status = await r.json();
+          setLicenseStatus(status);
+          if (status?.valid) {
+            const raw = status.modules ?? [];
+            const normalized: AppModule[] = Array.from(new Set<AppModule>([...raw.map((m: string) => normalizeModuleCode(m)).filter((m): m is AppModule => m !== null), "SETTINGS"]));
+            setLicenseModules(normalized);
+            if (normalized.includes("POS")) setView("pdv");
+            else setView("license");
+            return;
+          }
+        }
         setLicenseModules(["SETTINGS"]);
         setView("license");
-      }
-    }).catch(() => undefined);
+      }).catch(() => {
+        if (active) {
+          setLicenseModules(["SETTINGS"]);
+          setView("license");
+        }
+      });
+    } else {
+      setLicenseModules(["SETTINGS"]);
+      setView("license");
+    }
+
     return () => { active = false; };
-  }, []);
+  }, [token]);
   useEffect(() => {
     const refreshLicense = (event: Event) => {
       const detail = (event as CustomEvent<LicenseStatus>).detail;
@@ -1196,35 +1201,37 @@ function App({ onSwitchPortal }: { onSwitchPortal?: (portal: string) => void } =
     return { success: false, message: messages[result.reason || ""] || `Falha na ativação: ${result.reason || "chave inválida"}.` };
   }
 
-  // Web Cloud Activation
-  const cleanKey = (tokenToActivate || "").trim();
-  if (cleanKey.length < 6) {
-    return { success: false, message: "A chave de licença é obrigatória e deve ter um formato válido." };
+  // Web Cloud Activation via Backend Cryptographic Verification
+  try {
+    const cleanKey = (tokenToActivate || "").trim();
+    if (cleanKey.length < 20) {
+      return { success: false, message: "A chave de licença é obrigatória e deve ser um token completo assinado pela VendaJá." };
+    }
+
+    const response = await fetch(`${api()}/api/v1/license/activate`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ licenseToken: cleanKey }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.status?.valid) {
+      return {
+        success: false,
+        message: data.message || "A chave de licença foi rejeitada pelo servidor. Assinatura RSA inválida ou token não emitido pela VendaJá.",
+      };
+    }
+    setLicenseStatus(data.status);
+    const raw = data.status.modules ?? [];
+    const normalized: AppModule[] = Array.from(new Set<AppModule>([...raw.map((m: string) => normalizeModuleCode(m)).filter((m): m is AppModule => m !== null), "SETTINGS"]));
+    setLicenseModules(normalized);
+    window.dispatchEvent(new CustomEvent("license-updated", { detail: data.status }));
+    return { success: true, message: "Licença legítima verificada criptograficamente por RSA-SHA256 e ativada pelo servidor VendaJá!" };
+  } catch (err) {
+    return { success: false, message: "Falha na comunicação com o servidor de licenciamento." };
   }
-
-  const allEnterpriseModules: AppModule[] = [
-    "POS", "STOCK", "TREASURY", "ACCOUNTING", "HR", "CRM", "DOCUMENTS",
-    "BI", "AI", "AUTOMATION", "GOVERNANCE", "INTEGRATIONS", "CLOUD",
-    "BIOMETRICS", "CORPORATE", "SETTINGS", "REPORTS", "DASHBOARD", "PURCHASES"
-  ];
-
-  const webStatus: LicenseStatus = {
-    valid: true,
-    tier: "ENTERPRISE",
-    plan: "ENTERPRISE",
-    hardwareId: "WEB-ENTERPRISE-CLOUD",
-    companyName: company?.name || "VendaJá Enterprise Angola",
-    companyNif: company?.nif || "5000000000",
-    expiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
-    modules: allEnterpriseModules,
-  };
-
-  localStorage.setItem("vendaja-license-status", JSON.stringify(webStatus));
-  localStorage.setItem("vendaja-license-token", cleanKey);
-  setLicenseStatus(webStatus);
-  setLicenseModules(allEnterpriseModules);
-  window.dispatchEvent(new CustomEvent("license-updated", { detail: webStatus }));
-  return { success: true, message: "Licença Enterprise validada e ativada com sucesso! Todos os 27 módulos do ERP foram desbloqueados." };
 }} onRefreshStatus={async () => {
   if (window.pos?.getLicenseStatus) {
     const res = await window.pos.getLicenseStatus();

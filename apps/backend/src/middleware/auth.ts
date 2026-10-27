@@ -86,3 +86,51 @@ export const requireAdminOrGrant = (action: string): RequestHandler => (req, res
     });
   }
 };
+
+export const requireLicensedModule = (moduleName: string): RequestHandler => async (req, res, next) => {
+  if (moduleName === "SETTINGS") {
+    next();
+    return;
+  }
+  const ctx = (req as AuthRequest).context;
+  const companyId = ctx?.companyId || req.header("x-company-id");
+  if (!companyId) {
+    next();
+    return;
+  }
+  try {
+    const { prisma } = await import("../db.js");
+    const config = await prisma.fiscalConfig.findUnique({
+      where: { companyId },
+      select: { licenseEncrypted: true },
+    });
+    if (!config?.licenseEncrypted) {
+      res.status(403).json({
+        error: "license_required",
+        module: moduleName,
+        message: `O módulo '${moduleName}' requer uma licença empresarial legítima e ativa emitida pela VendaJá.`,
+      });
+      return;
+    }
+    const { decryptFiscalSecret } = await import("../services/fiscal.js");
+    const rawToken = decryptFiscalSecret(config.licenseEncrypted);
+    const { EnterpriseLicensingService } = await import("../services/enterprise/licensing.service.js");
+    const verified = await EnterpriseLicensingService.validateToken(rawToken);
+    if (!verified.valid || !verified.modules || !EnterpriseLicensingService.isModuleAllowed(moduleName, verified.modules)) {
+      res.status(403).json({
+        error: "module_unlicensed",
+        module: moduleName,
+        reason: verified.reason,
+        message: `O módulo '${moduleName}' não está autorizado na licença digital ativa da empresa.`,
+      });
+      return;
+    }
+    next();
+  } catch {
+    res.status(403).json({
+      error: "license_validation_failed",
+      module: moduleName,
+      message: "Falha na validação criptográfica da licença empresarial.",
+    });
+  }
+};

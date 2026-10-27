@@ -96,20 +96,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
     }
   }
 
-  const enterDemoMode = () => {
-    const demoUser = {
-      id: "demo-auditor-id",
-      role: "ADMIN",
-      email: "auditor@vendaja.ao",
-      username: "auditor",
-      displayName: "Auditor Funcional ERP",
-    };
-    localStorage.setItem("accessToken", "demo-audit-access-token");
-    localStorage.setItem("refreshToken", "demo-audit-refresh-token");
-    localStorage.setItem("posUser", JSON.stringify(demoUser));
-    onLogin();
-  };
-
   return <main className="startup-loading">{showBootstrap
     ? <BootstrapAccountForm apiUrl={api()} onComplete={onLogin} onCancel={() => setShowBootstrap(false)} />
     : <form onSubmit={(e) => void submit(e)}>
@@ -120,9 +106,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
         <button type="submit">Entrar no ERP</button>
         {error && <p role="alert">{error}</p>}
         <hr style={{ margin: "16px 0", border: "0", borderTop: "1px dashed #cbd5e1" }} />
-        <button type="button" onClick={enterDemoMode} style={{ background: "#0284c7", color: "#fff", fontWeight: 600, padding: "10px", width: "100%", borderRadius: "6px", border: "none", cursor: "pointer", marginBottom: "8px" }}>
-          🚀 Explorar ERP Completo (Demo / Auditoria)
-        </button>
         <button type="button" className="bootstrap-entry" onClick={() => setShowBootstrap(true)}>
           🔑 Criar Conta de Administrador Inicial
         </button>

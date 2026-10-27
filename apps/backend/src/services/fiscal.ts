@@ -14,6 +14,19 @@ export function encryptFiscalSecret(value: string) {
   return `${iv.toString("base64")}.${cipher.getAuthTag().toString("base64")}.${encrypted.toString("base64")}`;
 }
 
+export function decryptFiscalSecret(value: string): string {
+  const parts = value.split(".");
+  if (parts.length !== 3) throw new Error("invalid_encrypted_secret_format");
+  const [ivB64, tagB64, dataB64] = parts;
+  if (!ivB64 || !tagB64 || !dataB64) throw new Error("invalid_encrypted_secret_format");
+  const iv = Buffer.from(ivB64, "base64");
+  const tag = Buffer.from(tagB64, "base64");
+  const encrypted = Buffer.from(dataB64, "base64");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+}
+
 /** Configurable placeholders: confirm code meanings against the current AGT publication. */
 export const AGT_EXEMPTION_CODES: Record<string, string> = {
   M00: "Configurable AGT code; confirm current legal reason before use",

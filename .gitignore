@@ -11,6 +11,8 @@ node_modules/
 **/dist/
 apps/desktop/build/
 release/
+.vault/
+backups/
 
 # Certificados, chaves privadas e segredos
 private.pem

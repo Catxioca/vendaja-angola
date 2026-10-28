@@ -28,6 +28,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_database
       TEST_DATABASE_URL: postgresql://ci_user:ci_password@127.0.0.1:5432/ci_database
+      JWT_SECRET: k9X0m2P9vL5nQ8rT1wY4bZ7cE0aD3fG6h8K1
+      FISCAL_CONFIG_KEY: j8V0n3Q9wM6oR9sU2xZ5cA8dF1bE4gH7m3J2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -45,9 +45,21 @@ export async function getEffectiveTestDatabaseUrl(): Promise<string | undefined>
       }
     }
     process.env.DATABASE_URL = resolved;
+    if (!process.env.JWT_SECRET) {
+      process.env.JWT_SECRET = "k9X0m2P9vL5nQ8rT1wY4bZ7cE0aD3fG6h8K1";
+    }
+    if (!process.env.FISCAL_CONFIG_KEY) {
+      process.env.FISCAL_CONFIG_KEY = "j8V0n3Q9wM6oR9sU2xZ5cA8dF1bE4gH7m3J2";
+    }
     return resolved;
   } catch {
     process.env.DATABASE_URL = raw;
+    if (!process.env.JWT_SECRET) {
+      process.env.JWT_SECRET = "k9X0m2P9vL5nQ8rT1wY4bZ7cE0aD3fG6h8K1";
+    }
+    if (!process.env.FISCAL_CONFIG_KEY) {
+      process.env.FISCAL_CONFIG_KEY = "j8V0n3Q9wM6oR9sU2xZ5cA8dF1bE4gH7m3J2";
+    }
     return raw;
   }
 }

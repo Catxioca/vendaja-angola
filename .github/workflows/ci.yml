@@ -49,6 +49,7 @@ jobs:
         env:
           ADMIN_INITIAL_PASSWORD: ci-admin-password-0123456789
           ADMIN_INITIAL_EMAIL: admin@angolacommerce.local
+          SEED_DEMO_DATA: "true"
         run: npm run db:seed
       - name: Ensure open accounting period for E2E
         run: |

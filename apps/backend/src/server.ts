@@ -115,20 +115,23 @@ app.get("/ready", async (_req, res) => {
   catch { res.status(503).json({ status: "not_ready" }); }
 });
 app.get("/metrics", (req, res) => {
+  const isLoopback = req.ip === "127.0.0.1" || req.ip === "::1" || req.ip === "::ffff:127.0.0.1";
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) {
+  if (!token && !isLoopback) {
     res.status(401).json({ error: "unauthorized", message: "Autenticação requerida para métricas." });
     return;
   }
-  try {
-    const decoded = jwt.verify(token, getEnv().JWT_SECRET) as { id?: string; role?: string };
-    if (decoded?.role !== "ROLE_ADMIN" && decoded?.role !== "ADMIN") {
-      res.status(403).json({ error: "forbidden", message: "Acesso restrito a administradores." });
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, getEnv().JWT_SECRET) as { id?: string; role?: string };
+      if (decoded?.role !== "ROLE_ADMIN" && decoded?.role !== "ADMIN") {
+        res.status(403).json({ error: "forbidden", message: "Acesso restrito a administradores." });
+        return;
+      }
+    } catch {
+      res.status(401).json({ error: "invalid_token", message: "Sessão inválida ou expirada." });
       return;
     }
-  } catch {
-    res.status(401).json({ error: "invalid_token", message: "Sessão inválida ou expirada." });
-    return;
   }
   res.type("application/json").json(metricsSnapshot());
 });

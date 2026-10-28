@@ -93,6 +93,46 @@ export const openApiSpecification = {
     },
   },
   paths: {
+    "/platform/context": {
+      get: {
+        summary: "Contextos autorizados do utilizador",
+        tags: ["Plataforma & Multi-Tenant"],
+        responses: { "200": { description: "Lista de memberships de empresa/filial do utilizador" } },
+      },
+    },
+    "/platform/cash-registers": {
+      get: { summary: "Caixas do contexto ativo", tags: ["Plataforma & Multi-Tenant"], responses: { "200": { description: "Lista de caixas" } } },
+      post: { summary: "Criar caixa", tags: ["Plataforma & Multi-Tenant"], responses: { "201": { description: "Caixa criada" } } },
+    },
+    "/platform/cash-registers/{id}/shifts": {
+      post: {
+        summary: "Abrir turno",
+        tags: ["Plataforma & Multi-Tenant"],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: { "201": { description: "Turno aberto" } },
+      },
+    },
+    "/platform/shifts/{id}/close": {
+      post: { summary: "Fechar turno e calcular divergência", tags: ["Plataforma & Multi-Tenant"], responses: { "200": { description: "Turno fechado" } } },
+    },
+    "/platform/bank-accounts": {
+      get: { summary: "Contas bancárias do contexto", tags: ["Plataforma & Multi-Tenant"], responses: { "200": { description: "Contas bancárias" } } },
+    },
+    "/platform/bank-statement-lines/{id}/reconcile": {
+      post: { summary: "Reconciliar linha de extrato", tags: ["Plataforma & Multi-Tenant"], responses: { "200": { description: "Linha reconciliada" } } },
+    },
+    "/platform/bank-accounts/{id}/statements": {
+      post: { summary: "Importar extrato idempotente", tags: ["Plataforma & Multi-Tenant"], responses: { "201": { description: "Extrato importado" } } },
+    },
+    "/platform/payment-terminals/{id}/transactions": {
+      post: { summary: "Criar transação de terminal idempotente", tags: ["Plataforma & Multi-Tenant"], responses: { "201": { description: "Transação pendente" } } },
+    },
+    "/platform/payment-transactions/{id}": {
+      patch: { summary: "Atualizar estado de pagamento", tags: ["Plataforma & Multi-Tenant"], responses: { "200": { description: "Transação atualizada" } } },
+    },
+    "/platform/reprints": {
+      post: { summary: "Registar reimpressão autorizada", tags: ["Plataforma & Multi-Tenant"], responses: { "201": { description: "Registo de auditoria" } } },
+    },
     "/oauth/token": {
       post: {
         summary: "OAuth2 Client Credentials Grant",

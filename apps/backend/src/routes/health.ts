@@ -203,7 +203,89 @@ export async function checkStorage(): Promise<{ status: "ok" | "down"; writable:
 }
 
 // GET /health
-healthRouter.get("/", async (_req, res) => {
+healthRouter.get("/", async (req, res) => {
+  const [db, storage] = await Promise.all([
+    checkDatabase(),
+    checkStorage(),
+  ]);
+
+  const isHealthy = storage.status === "ok";
+  const statusCode = isHealthy ? 200 : 503;
+
+  // Check if request is authenticated as administrator for detailed diagnostics
+  const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  let isAuthenticatedAdmin = false;
+  if (token) {
+    try {
+      const { getEnv } = await import("../config/env.js");
+      const jwt = (await import("jsonwebtoken")).default;
+      const decoded = jwt.verify(token, getEnv().JWT_SECRET) as { id?: string; role?: string };
+      if (decoded?.role === "ROLE_ADMIN" || decoded?.role === "ADMIN") {
+        isAuthenticatedAdmin = true;
+      }
+    } catch {
+      isAuthenticatedAdmin = false;
+    }
+  }
+
+  // Public safe health payload: useful for probes, load balancers, and status checks without exposing internal infrastructure details
+  if (!isAuthenticatedAdmin) {
+    res.status(statusCode).json({
+      status: isHealthy ? (db.status === "ok" ? "ok" : "degraded") : "down",
+      service: "backend",
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  // Authenticated detailed diagnostics
+  const [license, automation, integrations] = await Promise.all([
+    checkLicense(),
+    checkAutomation(),
+    checkIntegrations(),
+  ]);
+
+  res.status(statusCode).json({
+    status: isHealthy ? (db.status === "ok" && license.status === "ok" ? "ok" : "degraded") : "down",
+    service: "backend",
+    version: process.env.npm_package_version ?? "2.2.4",
+    uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+    timestamp: new Date().toISOString(),
+    checks: {
+      database: db,
+      automation,
+      license,
+      integrations,
+      storage,
+    },
+    system: {
+      memory: process.memoryUsage(),
+      loadAverage: os.loadavg(),
+      nodeVersion: process.version,
+    },
+  });
+});
+
+// GET /health/detailed (Dedicated authenticated diagnostics endpoint)
+healthRouter.get("/detailed", async (req, res) => {
+  const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) {
+    res.status(401).json({ error: "unauthorized", message: "Autenticação requerida para métricas detalhadas." });
+    return;
+  }
+  try {
+    const { getEnv } = await import("../config/env.js");
+    const jwt = (await import("jsonwebtoken")).default;
+    const decoded = jwt.verify(token, getEnv().JWT_SECRET) as { id?: string; role?: string };
+    if (decoded?.role !== "ROLE_ADMIN" && decoded?.role !== "ADMIN") {
+      res.status(403).json({ error: "forbidden", message: "Apenas administradores podem consultar diagnósticos detalhados." });
+      return;
+    }
+  } catch {
+    res.status(401).json({ error: "invalid_token", message: "Sessão inválida ou expirada." });
+    return;
+  }
+
   const [db, license, storage, automation, integrations] = await Promise.all([
     checkDatabase(),
     checkLicense(),
@@ -213,9 +295,7 @@ healthRouter.get("/", async (_req, res) => {
   ]);
 
   const isHealthy = storage.status === "ok";
-  const statusCode = isHealthy ? 200 : 503;
-
-  res.status(statusCode).json({
+  res.status(isHealthy ? 200 : 503).json({
     status: isHealthy ? (db.status === "ok" && license.status === "ok" ? "ok" : "degraded") : "down",
     service: "backend",
     version: process.env.npm_package_version ?? "2.2.4",

@@ -2,11 +2,13 @@
  * LiveUpdateEngine - Client-Side Engine for ERP VendaJá Angola
  *
  * Implements real-time dynamic patching, hot module activation,
- * cryptographic signature verification (SHA-256) and telemetry
- * synchronization with Headquarters (Loja Mãe) without reinstallations.
+ * asymmetric digital signature verification (RSA-4096 / SHA-256), signed manifests,
+ * version compatibility guards, and telemetry synchronization with Headquarters (Loja Mãe).
  */
 
-import { AppModule, MODULE_CATALOG } from "./modules";
+import cryptoNode from "node:crypto";
+import { AppModule, MODULE_CATALOG } from "./modules.js";
+import { LICENSE_PUBLIC_KEY } from "./licensePublicKey.js";
 
 export interface LivePatchPayload {
   patchId: string;
@@ -17,10 +19,28 @@ export interface LivePatchPayload {
   targetModules?: string[];
   targetBranches?: string[];
   payloadJson: string;
-  sha256Signature: string;
+  sha256Signature?: string;
+  rsaSha256Signature?: string;
+  channel?: "stable" | "beta" | "enterprise";
+  minimumAppVersion?: string;
   isCritical: boolean;
   receivedAt?: string;
   appliedAt?: string;
+}
+
+export interface SignedUpdateManifest {
+  manifestVersion: string;
+  version: string;
+  releaseDate: string;
+  channel: "stable" | "beta" | "enterprise";
+  minimumPreviousVersion: string;
+  targetSchemaVersion: string;
+  checksumSha256: string;
+  mandatoryMigrations: string[];
+  releaseNotes: string;
+  publisher: string;
+  signatureRsaSha256?: string;
+  canonicalPayload?: string;
 }
 
 export interface ClientTelemetryData {
@@ -53,14 +73,20 @@ export interface BroadcastNotification {
 export class LiveUpdateEngine {
   private static instance: LiveUpdateEngine | null = null;
 
-  private companyId: string = "default-company";
-  private branchId: string = "hq-store-01";
-  private branchCode: string = "SEDE-01";
-  private branchName: string = "Sede Central (Loja Mãe)";
-  private isHeadquarters: boolean = true;
-  private appVersion: string = "2.2.4";
-  private hardwareId: string = "HWID-VENDAJA-AO-2026";
-  private terminalId: string = "TERM-01";
+  // Terminal Identity (Clean initialization without hardcoded placeholders)
+  private companyId: string = "";
+  private branchId: string = "";
+  private branchCode: string = "";
+  private branchName: string = "";
+  private isHeadquarters: boolean = false;
+  private appVersion: string = "2.2.2-rc.3";
+  private hardwareId: string = "";
+  private terminalId: string = "";
+
+  // Channel & Security Governance
+  private updateChannel: "stable" | "beta" | "enterprise" = "stable";
+  private authorizedUpdateEndpoint?: string;
+  private autoUpdateEnabled: boolean = false; // Strictly manual/authorized by default
 
   private appliedPatches: Map<string, LivePatchPayload> = new Map();
   private dynamicModules: Set<AppModule> = new Set();
@@ -98,38 +124,144 @@ export class LiveUpdateEngine {
     appVersion?: string;
     hardwareId?: string;
     terminalId?: string;
+    updateChannel?: "stable" | "beta" | "enterprise";
+    authorizedUpdateEndpoint?: string;
+    autoUpdateEnabled?: boolean;
   }): void {
-    if (config.companyId) this.companyId = config.companyId;
-    if (config.branchId) this.branchId = config.branchId;
-    if (config.branchCode) this.branchCode = config.branchCode;
-    if (config.branchName) this.branchName = config.branchName;
+    if (config.companyId !== undefined) this.companyId = config.companyId;
+    if (config.branchId !== undefined) this.branchId = config.branchId;
+    if (config.branchCode !== undefined) this.branchCode = config.branchCode;
+    if (config.branchName !== undefined) this.branchName = config.branchName;
     if (config.isHeadquarters !== undefined) this.isHeadquarters = config.isHeadquarters;
-    if (config.appVersion) this.appVersion = config.appVersion;
-    if (config.hardwareId) this.hardwareId = config.hardwareId;
-    if (config.terminalId) this.terminalId = config.terminalId;
+    if (config.appVersion !== undefined) this.appVersion = config.appVersion;
+    if (config.hardwareId !== undefined) this.hardwareId = config.hardwareId;
+    if (config.terminalId !== undefined) this.terminalId = config.terminalId;
+    if (config.updateChannel !== undefined) this.updateChannel = config.updateChannel;
+    if (config.authorizedUpdateEndpoint !== undefined) this.authorizedUpdateEndpoint = config.authorizedUpdateEndpoint;
+    if (config.autoUpdateEnabled !== undefined) this.autoUpdateEnabled = config.autoUpdateEnabled;
   }
 
   /**
-   * Cryptographically verifies the SHA-256 signature of a patch
+   * Cryptographically verifies the authenticity of a signed update manifest using RSA-4096 / SHA-256.
+   * Enforces asymmetric signature validation, publication channel matching, and version rollback guards.
+   */
+  public verifyAsymmetricManifest(
+    manifest: SignedUpdateManifest,
+    publicKeyPem: string = LICENSE_PUBLIC_KEY
+  ): { valid: boolean; reason?: string } {
+    if (!manifest.signatureRsaSha256) {
+      return {
+        valid: false,
+        reason: "Assinatura assimétrica digital ausente. O manifesto contém apenas checksum simples.",
+      };
+    }
+
+    try {
+      const canonical =
+        manifest.canonicalPayload ||
+        `${manifest.version}:${manifest.channel}:${manifest.minimumPreviousVersion}:${manifest.targetSchemaVersion}:${manifest.checksumSha256}`;
+
+      const verifier = cryptoNode.createVerify("RSA-SHA256");
+      verifier.update(canonical);
+      verifier.end();
+
+      const isValid = verifier.verify(
+        publicKeyPem,
+        Buffer.from(manifest.signatureRsaSha256, "base64")
+      );
+
+      if (!isValid) {
+        return {
+          valid: false,
+          reason: "Assinatura assimétrica RSA-SHA256 inválida ou adulterada.",
+        };
+      }
+
+      // Check version rollback constraint
+      if (manifest.minimumPreviousVersion && this.appVersion) {
+        const partsCurrent = this.appVersion.split(".").map((n) => parseInt(n, 10) || 0);
+        const partsMin = manifest.minimumPreviousVersion.split(".").map((n) => parseInt(n, 10) || 0);
+        const cMajor = partsCurrent[0] ?? 0;
+        const cMinor = partsCurrent[1] ?? 0;
+        const cPatch = partsCurrent[2] ?? 0;
+        const mMajor = partsMin[0] ?? 0;
+        const mMinor = partsMin[1] ?? 0;
+        const mPatch = partsMin[2] ?? 0;
+
+        const isCurrentLower =
+          cMajor < mMajor ||
+          (cMajor === mMajor && cMinor < mMinor) ||
+          (cMajor === mMajor && cMinor === mMinor && cPatch < mPatch);
+
+        if (isCurrentLower) {
+          return {
+            valid: false,
+            reason: `Versão atual (${this.appVersion}) inferior à versão mínima exigida (${manifest.minimumPreviousVersion}). Atualização abortada.`,
+          };
+        }
+      }
+
+      // Channel compatibility
+      if (manifest.channel !== this.updateChannel && manifest.channel !== "enterprise") {
+        return {
+          valid: false,
+          reason: `Manifesto direcionado ao canal '${manifest.channel}', mas o terminal está configurado para '${this.updateChannel}'.`,
+        };
+      }
+
+      return { valid: true };
+    } catch (err: any) {
+      return { valid: false, reason: `Erro na validação criptográfica: ${err.message}` };
+    }
+  }
+
+  /**
+   * Verifies the payload integrity and cryptographic authenticity of a patch.
+   * If an asymmetric signature is present, verifies with RSA-SHA256; otherwise verifies checksum hash.
    */
   public async verifyPatchSignature(patch: {
     companyId?: string;
     patchVersion: string;
     category: string;
     payloadJson: string;
-    sha256Signature: string;
+    sha256Signature?: string;
+    rsaSha256Signature?: string;
   }): Promise<boolean> {
     const compId = patch.companyId || this.companyId;
     const canonicalString = `${compId}:${patch.patchVersion}:${patch.category}:${patch.payloadJson}`;
 
-    // Browser / Electron Web Crypto API
-    const encoder = new TextEncoder();
-    const data = encoder.encode(canonicalString);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const computedHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    // 1. Asymmetric digital signature verification (RSA-SHA256)
+    if (patch.rsaSha256Signature) {
+      try {
+        const verifier = cryptoNode.createVerify("RSA-SHA256");
+        verifier.update(canonicalString);
+        verifier.end();
+        return verifier.verify(LICENSE_PUBLIC_KEY, Buffer.from(patch.rsaSha256Signature, "base64"));
+      } catch {
+        return false;
+      }
+    }
 
-    return computedHex.toLowerCase() === patch.sha256Signature.toLowerCase();
+    // 2. Checksum hash verification
+    if (patch.sha256Signature) {
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(canonicalString);
+        let computedHex = "";
+        if (typeof crypto !== "undefined" && crypto.subtle) {
+          const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          computedHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+        } else {
+          computedHex = cryptoNode.createHash("sha256").update(canonicalString).digest("hex");
+        }
+        return computedHex.toLowerCase() === patch.sha256Signature.toLowerCase();
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -404,7 +536,7 @@ export class LiveUpdateEngine {
    * Loja -> Cloud -> Sede and Sede -> Cloud -> Lojas
    */
   public async performBidirectionalSync(
-    apiUrl = "http://localhost:4000",
+    apiUrl?: string,
     metrics?: {
       todaySalesCents?: number;
       todayDocumentsCount?: number;
@@ -419,6 +551,18 @@ export class LiveUpdateEngine {
     appliedCommands: string[];
     error?: string;
   }> {
+    const targetUrl = apiUrl || this.authorizedUpdateEndpoint;
+    if (!targetUrl) {
+      return {
+        success: false,
+        online: false,
+        syncedOutboxCount: 0,
+        receivedCommandsCount: 0,
+        appliedCommands: [],
+        error: "Nenhum canal ou servidor corporativo autorizado foi configurado. Sincronização bloqueada por segurança.",
+      };
+    }
+
     const telemetry = this.getTelemetryPayload({
       ...metrics,
       pendingSyncCount: this.outboxQueue.length,
@@ -431,7 +575,7 @@ export class LiveUpdateEngine {
     };
 
     try {
-      const res = await fetch(`${apiUrl}/api/v1/corporate/sync/bidirectional`, {
+      const res = await fetch(`${targetUrl}/api/v1/corporate/sync/bidirectional`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -146,3 +146,113 @@ test("LiveUpdateEngine: Receives and buffers Sede Broadcast announcements", () =
   const readBroadcast = engine.getBroadcasts().find((b) => b.id === "bc-fecho-mes");
   assert.equal(readBroadcast?.read, true);
 });
+
+test("LiveUpdateEngine: Asymmetric RSA-SHA256 digital signature and signed manifest verification", () => {
+  const engine = LiveUpdateEngine.getInstance();
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+
+  const canonicalPayload = "2.3.0:stable:2.2.0:20261028_001:checksum-abc-123";
+  const signer = crypto.createSign("RSA-SHA256");
+  signer.update(canonicalPayload);
+  signer.end();
+  const signatureBase64 = signer.sign(privateKey, "base64");
+
+  engine.configure({
+    appVersion: "2.2.2-rc.3",
+    updateChannel: "stable",
+  });
+
+  // Valid asymmetric signature
+  const validRes = engine.verifyAsymmetricManifest(
+    {
+      manifestVersion: "1.0",
+      version: "2.3.0",
+      releaseDate: "2026-10-28",
+      channel: "stable",
+      minimumPreviousVersion: "2.2.0",
+      targetSchemaVersion: "20261028_001",
+      checksumSha256: "checksum-abc-123",
+      mandatoryMigrations: [],
+      releaseNotes: "Atualização estável assinada assimetricamente.",
+      publisher: "VendaJá Enterprise PKI Authority",
+      signatureRsaSha256: signatureBase64,
+      canonicalPayload,
+    },
+    publicKey
+  );
+  assert.equal(validRes.valid, true);
+
+  // Missing asymmetric signature -> rejected (plain checksum is not a signature)
+  const missingSigRes = engine.verifyAsymmetricManifest(
+    {
+      manifestVersion: "1.0",
+      version: "2.3.0",
+      releaseDate: "2026-10-28",
+      channel: "stable",
+      minimumPreviousVersion: "2.2.0",
+      targetSchemaVersion: "20261028_001",
+      checksumSha256: "checksum-abc-123",
+      mandatoryMigrations: [],
+      releaseNotes: "Manifesto sem assinatura digital.",
+      publisher: "Autor desconhecido",
+    },
+    publicKey
+  );
+  assert.equal(missingSigRes.valid, false);
+  assert.ok(missingSigRes.reason?.includes("Assinatura assimétrica digital ausente"));
+});
+
+test("LiveUpdateEngine: Blocks update on version rollback constraint and channel mismatch", () => {
+  const engine = LiveUpdateEngine.getInstance();
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+
+  engine.configure({
+    appVersion: "1.9.0",
+    updateChannel: "stable",
+  });
+
+  const canonicalPayload = "2.3.0:beta:2.0.0:20261028_001:checksum-abc";
+  const signer = crypto.createSign("RSA-SHA256");
+  signer.update(canonicalPayload);
+  signer.end();
+  const signatureBase64 = signer.sign(privateKey, "base64");
+
+  // Incompatible minimum previous version (1.9.0 < 2.0.0)
+  const incompatibleVer = engine.verifyAsymmetricManifest(
+    {
+      manifestVersion: "1.0",
+      version: "2.3.0",
+      releaseDate: "2026-10-28",
+      channel: "stable",
+      minimumPreviousVersion: "2.0.0",
+      targetSchemaVersion: "20261028_001",
+      checksumSha256: "checksum-abc",
+      mandatoryMigrations: [],
+      releaseNotes: "Update",
+      publisher: "VendaJá",
+      signatureRsaSha256: signatureBase64,
+      canonicalPayload,
+    },
+    publicKey
+  );
+  assert.equal(incompatibleVer.valid, false);
+  assert.ok(incompatibleVer.reason?.includes("inferior à versão mínima exigida"));
+});
+
+test("LiveUpdateEngine: Rejects unauthorized synchronization endpoint when none configured", async () => {
+  const engine = LiveUpdateEngine.getInstance();
+  engine.configure({ authorizedUpdateEndpoint: undefined });
+
+  const syncResult = await engine.performBidirectionalSync(undefined);
+  assert.equal(syncResult.success, false);
+  assert.equal(syncResult.online, false);
+  assert.ok(syncResult.error?.includes("Nenhum canal ou servidor corporativo autorizado"));
+});

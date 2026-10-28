@@ -60,6 +60,86 @@ test("EnterpriseLicensingService: module access validation", () => {
   assert.equal(EnterpriseLicensingService.isModuleAllowed("CRM", validModules), false);
 });
 
+test("EnterpriseLicensingService: cryptographic token verification, revocation, and offline grace", async () => {
+  const crypto = await import("node:crypto");
+  const testKey = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+
+  // Temporarily override cached public key for hermetic test
+  (EnterpriseLicensingService as any).cachedPublicKey = testKey.publicKey;
+
+  const createToken = (payload: any, privKey: string = testKey.privateKey) => {
+    const canonical = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const signer = crypto.createSign("RSA-SHA256");
+    signer.update(canonical);
+    signer.end();
+    const sig = signer.sign(privKey).toString("base64url");
+    return `${canonical}.${sig}`;
+  };
+
+  const now = Date.now();
+  const validPayload = {
+    version: 2,
+    licenseId: "VJ-SRV-VALID-01",
+    nif: "5409988771",
+    hardwareId: "VJ-HWID-SRV-01",
+    startsAt: new Date(now - 1000).toISOString(),
+    expiresAt: new Date(now + 90 * 86_400_000).toISOString(),
+    modules: ["POS", "STOCK", "ACCOUNTING", "HR"],
+  };
+
+  // 1. Valid token
+  const validToken = createToken(validPayload);
+  const resValid = await EnterpriseLicensingService.validateToken(validToken, "VJ-HWID-SRV-01");
+  assert.equal(resValid.valid, true);
+  assert.equal(resValid.state, "VALID");
+  assert.equal(resValid.modules?.length, 4);
+
+  // 2. Revoked token
+  const revokedToken = createToken({ ...validPayload, licenseId: "009341302LN046" });
+  const resRevoked = await EnterpriseLicensingService.validateToken(revokedToken);
+  assert.equal(resRevoked.valid, false);
+  assert.equal(resRevoked.state, "REVOKED");
+  assert.equal(resRevoked.reason, "revoked");
+
+  // 3. Tampered signature
+  const [can = "", sig = ""] = validToken.split(".");
+  const tamperedToken = `${can}.${sig.slice(0, -6)}AAAAAA`;
+  const resTampered = await EnterpriseLicensingService.validateToken(tamperedToken);
+  assert.equal(resTampered.valid, false);
+  assert.equal(resTampered.state, "INCOMPATIBLE");
+  assert.equal(resTampered.reason, "invalid_signature");
+
+  // 4. Expired with grace period (15 days grace, expired 2 days ago)
+  const graceToken = createToken({
+    ...validPayload,
+    licenseId: "VJ-SRV-GRACE-01",
+    expiresAt: new Date(now - 2 * 86_400_000).toISOString(),
+    gracePeriodDays: 15,
+  });
+  const resGrace = await EnterpriseLicensingService.validateToken(graceToken);
+  assert.equal(resGrace.valid, true);
+  assert.equal(resGrace.state, "OFFLINE_GRACE_PERIOD");
+  assert.equal(resGrace.gracePeriodDaysRemaining, 13);
+
+  // 5. Expired without grace period
+  const expiredToken = createToken({
+    ...validPayload,
+    licenseId: "VJ-SRV-EXP-01",
+    expiresAt: new Date(now - 1 * 86_400_000).toISOString(),
+  });
+  const resExpired = await EnterpriseLicensingService.validateToken(expiredToken);
+  assert.equal(resExpired.valid, false);
+  assert.equal(resExpired.state, "EXPIRED");
+  assert.equal(resExpired.reason, "expired");
+
+  // Restore cached public key
+  (EnterpriseLicensingService as any).cachedPublicKey = null;
+});
+
 test("EnterpriseNotificationService: creates and manages notifications", () => {
   const tenantCompany = `comp-${Date.now()}`;
   const notif = EnterpriseNotificationService.create({

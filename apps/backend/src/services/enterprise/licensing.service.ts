@@ -3,6 +3,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { logger } from "./logger.service.js";
 
+export type CanonicalLicenseState =
+  | "VALID"
+  | "EXPIRED"
+  | "REVOKED"
+  | "INCOMPATIBLE"
+  | "NO_CONNECTIVITY"
+  | "OFFLINE_GRACE_PERIOD";
+
 export interface LicensePayload {
   version: number;
   licenseId: string;
@@ -11,16 +19,44 @@ export interface LicensePayload {
   startsAt: string;
   expiresAt: string;
   modules: string[];
+  gracePeriodDays?: number;
+  requiresHeartbeat?: boolean;
 }
 
 export interface LicenseStatusResult {
   valid: boolean;
+  state?: CanonicalLicenseState;
   reason?: string;
   hardwareId?: string;
   expiresAt?: string;
   nif?: string;
   modules?: string[];
+  gracePeriodDaysRemaining?: number;
 }
+
+export const REVOKED_LICENSE_IDS = new Set<string>([
+  "DEV-QA-RSA2048-20260917",
+  "009341302LN046",
+  "VJ-REVOKED-001",
+  "VJ-TEST-REVOKED",
+  "cliente",
+  "abdulaye",
+]);
+
+export const AUTHORITATIVE_RSA4096_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAhtvOY/xNo4oQBgOZ80M3
+hYnc0REOKBkYAI9pKdngWNwIE0YJsbwX7c1v8/hjeR6zQTIaf2NCkw7LwKKMcqOt
+24SPun0EXwuuv9qQfe5oRUDmjmeGAKzRgYdltKpKZhuM1LCZBDqSQIU2YUSLl5aa
+U9yCLG9dJE7FKruzjI1/Gf8W3j+NFk/KJ468o+XZaWNIN+lcaiXAXqq+qlLct6Fu
+xiBD7bHhqGtkr1secvOiA078+5rNpkAGibIkw089yqWDUIdGJfI2qoCNhEq+C29Q
+Ahf0E1BeWQT3ytz1+7yy+iNPMFMWH3gCg08UGYiU4IWP0bf8uQy8uTo9B/bjvcdN
+YkSihPlhXjt7nbDEGq6h+2BcOaT39ltRbWFxTetyMF/H8iTFA3UyTsY7rsLanZps
+CSEPS0xSCam17ZxT4L8RqlgsP3c5xTvep9Vo9OF22vGLvsAekemGaRCvIyZ6oGO/
+OgGJR5mcfSD7EL7FdWathJ7T/wzK8SqQqiw4NQiq0xbKHc8ZC00wbz2QrzCiFoTS
+H5PxgxAzsWWjvHvmpWroZAbEFDb4947r4FzjMtToYLOgcVa1CdTaW7r5J7V07FIe
+N7679uR7FkkfnhHW/XcMZD3VltnVaTC0YdttvMmLf5znuR0Z7ENNeZKRI88xPDS8
+RjTvXwbWSbtnESPzPkSRbyECAwEAAQ==
+-----END PUBLIC KEY-----`;
 
 export class EnterpriseLicensingService {
   private static cachedPublicKey: string | null = null;
@@ -49,7 +85,8 @@ export class EnterpriseLicensingService {
       }
     }
 
-    throw new Error("Chave pública de licenciamento (public.pem) não encontrada.");
+    this.cachedPublicKey = AUTHORITATIVE_RSA4096_PUBLIC_KEY;
+    return AUTHORITATIVE_RSA4096_PUBLIC_KEY;
   }
 
   /**
@@ -78,24 +115,44 @@ export class EnterpriseLicensingService {
 
       const signatureValid = verifier.verify(publicKey, Buffer.from(signature, "base64url"));
       if (!signatureValid) {
-        return { valid: false, reason: "invalid_signature", hardwareId: payload.hardwareId };
+        return { valid: false, state: "INCOMPATIBLE", reason: "invalid_signature", hardwareId: payload.hardwareId };
+      }
+
+      if (payload.licenseId && REVOKED_LICENSE_IDS.has(payload.licenseId)) {
+        return { valid: false, state: "REVOKED", reason: "revoked", hardwareId: payload.hardwareId };
       }
 
       if (expectedHardwareId && payload.hardwareId !== expectedHardwareId) {
-        return { valid: false, reason: "hardware_mismatch", hardwareId: payload.hardwareId };
+        return { valid: false, state: "INCOMPATIBLE", reason: "hardware_mismatch", hardwareId: payload.hardwareId };
       }
 
       const now = Date.now();
       if (now < Date.parse(payload.startsAt)) {
-        return { valid: false, reason: "not_started", hardwareId: payload.hardwareId };
+        return { valid: false, state: "INCOMPATIBLE", reason: "not_started", hardwareId: payload.hardwareId };
       }
 
-      if (now >= Date.parse(payload.expiresAt)) {
-        return { valid: false, reason: "expired", hardwareId: payload.hardwareId, expiresAt: payload.expiresAt };
+      const expiresAtMs = Date.parse(payload.expiresAt);
+      if (now >= expiresAtMs) {
+        const graceDays = typeof payload.gracePeriodDays === "number" ? payload.gracePeriodDays : 0;
+        const gracePeriodMs = graceDays * 86_400_000;
+        if (graceDays > 0 && now < expiresAtMs + gracePeriodMs) {
+          const remainingGrace = Math.ceil((expiresAtMs + gracePeriodMs - now) / 86_400_000);
+          return {
+            valid: true,
+            state: "OFFLINE_GRACE_PERIOD",
+            hardwareId: payload.hardwareId,
+            expiresAt: payload.expiresAt,
+            nif: payload.nif,
+            modules: payload.modules,
+            gracePeriodDaysRemaining: remainingGrace,
+          };
+        }
+        return { valid: false, state: "EXPIRED", reason: "expired", hardwareId: payload.hardwareId, expiresAt: payload.expiresAt };
       }
 
       return {
         valid: true,
+        state: "VALID",
         hardwareId: payload.hardwareId,
         expiresAt: payload.expiresAt,
         nif: payload.nif,
@@ -105,6 +162,7 @@ export class EnterpriseLicensingService {
       logger.error("LICENSING", "VALIDATION_FAILED", "Falha na validação de licença", error);
       return {
         valid: false,
+        state: "INCOMPATIBLE",
         reason: error instanceof Error ? error.message : "validation_error",
       };
     }

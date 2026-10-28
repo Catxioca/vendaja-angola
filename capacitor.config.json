@@ -1,6 +1,12 @@
 {
-  "appId": "com.tmpkinaxixi.app",
+  "appId": "ao.co.vendaja.erp",
   "appName": "VendaJá Angola",
   "webDir": "apps/web/dist",
-  "server": { "cleartext": true }
+  "server": {
+    "cleartext": false,
+    "allowNavigation": [
+      "https://*.vendaja.ao",
+      "https://vendaja-api.onrender.com"
+    ]
+  }
 }

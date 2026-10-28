@@ -13,7 +13,15 @@ import {
   PRODUCT_CORE_MODULES,
   type AppModule,
   type CommercialPlan,
+  type CanonicalLicenseState,
 } from "./modules.js";
+import { LICENSE_PUBLIC_KEY } from "./licensePublicKey.js";
+import {
+  REVOKED_LICENSE_IDS,
+  computeHardwareId,
+  decodeLicenseToken,
+  verifyLicenseToken,
+} from "./license-core.js";
 import type {
   LicensePayload,
   LicenseStatus,
@@ -468,6 +476,297 @@ describe("Enterprise Modular Licensing & DRM Suite", () => {
         "MODULE_ACTIVATED",
         "LICENSE_INVALID",
       ]);
+    });
+  });
+
+  describe("Advanced Desktop Licensing Verification & DRM Security Gates", () => {
+    // Generate isolated ephemeral RSA-4096 keypair for strict cryptographic gate testing
+    const rsa4096KeyPair = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 4096,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+
+    function issueSignedToken4096(payload: LicensePayload, privKeyPem: string = rsa4096KeyPair.privateKey): string {
+      const canonical = Buffer.from(JSON.stringify(payload)).toString("base64url");
+      const signer = crypto.createSign("RSA-SHA256");
+      signer.update(canonical);
+      signer.end();
+      const signature = signer.sign(privKeyPem).toString("base64url");
+      return `${canonical}.${signature}`;
+    }
+
+    const testHwid = "VJ-HWID-TEST-000000000000000000";
+
+    it("Gate 1: Public Key Cryptographic Validation (RSA-4096, exponent 65537n)", () => {
+      // Validate the distributed LICENSE_PUBLIC_KEY
+      assert.ok(LICENSE_PUBLIC_KEY.includes("-----BEGIN PUBLIC KEY-----"));
+      assert.ok(LICENSE_PUBLIC_KEY.includes("-----END PUBLIC KEY-----"));
+
+      const keyDetails = crypto.createPublicKey(LICENSE_PUBLIC_KEY);
+      assert.equal(keyDetails.asymmetricKeyType, "rsa");
+      assert.equal(keyDetails.asymmetricKeyDetails?.modulusLength, 4096);
+      assert.equal(keyDetails.asymmetricKeyDetails?.publicExponent, 65537n);
+
+      // Validate root public.pem matches authoritative distribution
+      const rootPemPath = resolve(process.cwd(), "../../public.pem");
+      if (existsSync(rootPemPath)) {
+        const rootPem = readFileSync(rootPemPath, "utf8");
+        const rootKeyDetails = crypto.createPublicKey(rootPem);
+        assert.equal(rootKeyDetails.asymmetricKeyType, "rsa");
+        assert.equal(rootKeyDetails.asymmetricKeyDetails?.modulusLength, 4096);
+        assert.equal(rootKeyDetails.asymmetricKeyDetails?.publicExponent, 65537n);
+      }
+    });
+
+    it("Gate 2: Asymmetric Offline Local Verification (Valid License -> VALID)", () => {
+      const now = Date.now();
+      const payload: LicensePayload = {
+        version: 2,
+        licenseId: "VJ-PROD-VALID-001",
+        type: "PRODUCT",
+        company: "Empresa Legítima Lda",
+        nif: "5409988776",
+        hardwareId: testHwid,
+        plan: "ENTERPRISE",
+        startsAt: new Date(now - 1000).toISOString(),
+        expiresAt: new Date(now + 365 * 86_400_000).toISOString(),
+        modules: ["SETTINGS", "POS", "STOCK"],
+      };
+
+      const token = issueSignedToken4096(payload);
+      const res = verifyLicenseToken(token, testHwid, now, rsa4096KeyPair.publicKey);
+
+      assert.equal(res.valid, true);
+      assert.equal(res.state, "VALID");
+      assert.equal(res.payload?.licenseId, "VJ-PROD-VALID-001");
+      assert.equal(res.reason, undefined);
+    });
+
+    it("Gate 3: Invalid Signature & Tampering Detection -> INCOMPATIBLE", () => {
+      const now = Date.now();
+      const payload: LicensePayload = {
+        version: 2,
+        licenseId: "VJ-PROD-TAMPER-001",
+        company: "Empresa Original",
+        nif: "5401122334",
+        hardwareId: testHwid,
+        startsAt: new Date(now - 1000).toISOString(),
+        expiresAt: new Date(now + 30 * 86_400_000).toISOString(),
+        modules: ["SETTINGS"],
+      };
+
+      const token = issueSignedToken4096(payload);
+      const parts = token.split(".");
+      const canonical = parts[0] ?? "";
+      const signature = parts[1] ?? "";
+
+      // Test 3.1: Altering payload content without recalculating signature
+      const tampered = { ...payload, modules: ["SETTINGS", "POS", "STOCK", "ACCOUNTING", "HR"] };
+      const tamperedCanonical = Buffer.from(JSON.stringify(tampered)).toString("base64url");
+      const tamperedToken = `${tamperedCanonical}.${signature}`;
+      const res1 = verifyLicenseToken(tamperedToken, testHwid, now, rsa4096KeyPair.publicKey);
+      assert.equal(res1.valid, false);
+      assert.equal(res1.state, "INCOMPATIBLE");
+      assert.equal(res1.reason, "invalid_signature");
+
+      // Test 3.2: Corrupting signature bytes
+      const corruptedSig = signature.slice(0, -8) + "XXXXXXXX";
+      const res2 = verifyLicenseToken(`${canonical}.${corruptedSig}`, testHwid, now, rsa4096KeyPair.publicKey);
+      assert.equal(res2.valid, false);
+      assert.equal(res2.state, "INCOMPATIBLE");
+      assert.equal(res2.reason, "invalid_signature");
+
+      // Test 3.3: Signing with unauthorized third-party private key
+      const rogueKey = crypto.generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        publicKeyEncoding: { type: "spki", format: "pem" },
+        privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      });
+      const rogueSigner = crypto.createSign("RSA-SHA256");
+      rogueSigner.update(canonical);
+      rogueSigner.end();
+      const rogueSig = rogueSigner.sign(rogueKey.privateKey).toString("base64url");
+      const res3 = verifyLicenseToken(`${canonical}.${rogueSig}`, testHwid, now, rsa4096KeyPair.publicKey);
+      assert.equal(res3.valid, false);
+      assert.equal(res3.state, "INCOMPATIBLE");
+      assert.equal(res3.reason, "invalid_signature");
+    });
+
+    it("Gate 4: Revocation Verification (CRL Enforcement -> REVOKED)", () => {
+      const now = Date.now();
+      const revokedIds = ["DEV-QA-RSA2048-20260917", "009341302LN046", "VJ-REVOKED-001", "VJ-TEST-REVOKED"];
+
+      for (const revId of revokedIds) {
+        const payload: LicensePayload = {
+          version: 2,
+          licenseId: revId,
+          company: "Empresa Revogada",
+          nif: "5400000001",
+          hardwareId: testHwid,
+          startsAt: new Date(now - 1000).toISOString(),
+          expiresAt: new Date(now + 60 * 86_400_000).toISOString(),
+          modules: ["POS", "STOCK"],
+        };
+
+        const token = issueSignedToken4096(payload);
+        const res = verifyLicenseToken(token, testHwid, now, rsa4096KeyPair.publicKey);
+        assert.equal(res.valid, false, `Revoked license ${revId} must be rejected`);
+        assert.equal(res.state, "REVOKED");
+        assert.equal(res.reason, "revoked");
+      }
+    });
+
+    it("Gate 5: Incompatible Hardware Detection -> INCOMPATIBLE", () => {
+      const now = Date.now();
+      const payload: LicensePayload = {
+        version: 2,
+        licenseId: "VJ-PROD-HW-001",
+        company: "Supermercado Luanda",
+        nif: "5407766554",
+        hardwareId: "VJ-HWID-TERMINAL-CAIXA-01",
+        startsAt: new Date(now - 1000).toISOString(),
+        expiresAt: new Date(now + 60 * 86_400_000).toISOString(),
+        modules: ["POS"],
+      };
+
+      const token = issueSignedToken4096(payload);
+      // Attempting to run on a different terminal
+      const res = verifyLicenseToken(token, "VJ-HWID-TERMINAL-CAIXA-02", now, rsa4096KeyPair.publicKey);
+      assert.equal(res.valid, false);
+      assert.equal(res.state, "INCOMPATIBLE");
+      assert.equal(res.reason, "hardware_mismatch");
+    });
+
+    it("Gate 6: Hardware ID Stability & Privacy Verification", () => {
+      const hwid1 = computeHardwareId({
+        platform: "win32",
+        arch: "x64",
+        cpuModel: "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+        machineSeed: "MACHINE-PERSISTENT-UUID-1234",
+      });
+
+      const hwid2 = computeHardwareId({
+        platform: "win32",
+        arch: "x64",
+        cpuModel: "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+        machineSeed: "MACHINE-PERSISTENT-UUID-1234",
+      });
+
+      // 6.1 Stability: deterministic output for same machine
+      assert.equal(hwid1, hwid2);
+      assert.equal(hwid1.length, 32);
+      assert.match(hwid1, /^[0-9A-F]{32}$/);
+
+      // 6.2 Privacy: does NOT contain plain username, directory paths or emails
+      assert.equal(hwid1.includes("C:\\"), false);
+      assert.equal(hwid1.includes("/home"), false);
+      assert.equal(hwid1.includes("@"), false);
+
+      // 6.3 Differentiation: different machine seed yields different HWID
+      const diffHwid = computeHardwareId({
+        platform: "win32",
+        arch: "x64",
+        cpuModel: "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+        machineSeed: "DIFFERENT-MACHINE-UUID-5678",
+      });
+      assert.notEqual(hwid1, diffHwid);
+    });
+
+    it("Gate 7: Expiration and Offline Grace Period Verification", () => {
+      const now = Date.now();
+
+      // 7.1 Strictly expired without grace period -> EXPIRED
+      const expiredPayload: LicensePayload = {
+        version: 2,
+        licenseId: "VJ-PROD-EXP-001",
+        company: "Loja Kilamba",
+        nif: "5405544332",
+        hardwareId: testHwid,
+        startsAt: new Date(now - 40 * 86_400_000).toISOString(),
+        expiresAt: new Date(now - 1 * 86_400_000).toISOString(), // Expired 1 day ago
+        modules: ["POS", "STOCK"],
+        gracePeriodDays: 0,
+      };
+      const expToken = issueSignedToken4096(expiredPayload);
+      const expRes = verifyLicenseToken(expToken, testHwid, now, rsa4096KeyPair.publicKey);
+      assert.equal(expRes.valid, false);
+      assert.equal(expRes.state, "EXPIRED");
+      assert.equal(expRes.reason, "expired");
+
+      // 7.2 Expired but within offline grace period (15 days grace, expired 3 days ago) -> OFFLINE_GRACE_PERIOD
+      const gracePayload: LicensePayload = {
+        version: 2,
+        licenseId: "VJ-PROD-GRACE-001",
+        company: "Loja Kilamba",
+        nif: "5405544332",
+        hardwareId: testHwid,
+        startsAt: new Date(now - 40 * 86_400_000).toISOString(),
+        expiresAt: new Date(now - 3 * 86_400_000).toISOString(), // Expired 3 days ago
+        modules: ["POS", "STOCK"],
+        gracePeriodDays: 15,
+      };
+      const graceToken = issueSignedToken4096(gracePayload);
+      const graceRes = verifyLicenseToken(graceToken, testHwid, now, rsa4096KeyPair.publicKey);
+      assert.equal(graceRes.valid, true, "Offline operations must continue legitimately under grace period");
+      assert.equal(graceRes.state, "OFFLINE_GRACE_PERIOD");
+      assert.equal(graceRes.gracePeriodDaysRemaining, 12);
+
+      // 7.3 Expired beyond offline grace period (15 days grace, expired 16 days ago) -> EXPIRED
+      const graceOverPayload: LicensePayload = {
+        ...gracePayload,
+        expiresAt: new Date(now - 16 * 86_400_000).toISOString(),
+      };
+      const graceOverToken = issueSignedToken4096(graceOverPayload);
+      const graceOverRes = verifyLicenseToken(graceOverToken, testHwid, now, rsa4096KeyPair.publicKey);
+      assert.equal(graceOverRes.valid, false);
+      assert.equal(graceOverRes.state, "EXPIRED");
+      assert.equal(graceOverRes.reason, "expired");
+    });
+
+    it("Gate 8: Local File / State Tampering Immunity", () => {
+      // Simulating an adversary attempting to unlock modules by creating a fraudulent state
+      const fraudulentLocalState = {
+        version: 2,
+        valid: true, // Adversary claims valid
+        modules: ["POS", "STOCK", "ACCOUNTING", "HR", "BI", "CORPORATE"],
+        productToken: "NOT_A_VALID_TOKEN.FAKE_SIGNATURE",
+      };
+
+      // When the system parses the state, it verifies the cryptographic token, ignoring local fields
+      const res = verifyLicenseToken(
+        fraudulentLocalState.productToken,
+        testHwid,
+        Date.now(),
+        rsa4096KeyPair.publicKey
+      );
+
+      assert.equal(res.valid, false, "Local file editing cannot bypass cryptographic verification");
+      assert.equal(res.state, "INCOMPATIBLE");
+
+      // Verify that without valid cryptographic activation, isModuleLicensed keeps operational modules locked
+      const emptyLicenseModules: AppModule[] = ["SETTINGS"];
+      for (const opMod of OPERATIONAL_MODULES) {
+        assert.equal(isModuleLicensed(opMod, emptyLicenseModules), false);
+      }
+      // Settings remains accessible for diagnosis & activation
+      assert.equal(isModuleLicensed("SETTINGS", emptyLicenseModules), true);
+    });
+
+    it("Gate 9: Module Authorization Enforcement (Desktop & Backend Contract)", () => {
+      const allowedModules: AppModule[] = ["SETTINGS", "POS", "STOCK"];
+
+      // Allowed modules
+      assert.equal(isModuleLicensed("POS", allowedModules), true);
+      assert.equal(isModuleLicensed("STOCK", allowedModules), true);
+      assert.equal(isModuleLicensed("SETTINGS", allowedModules), true);
+
+      // Unlicensed modules remain strictly locked
+      assert.equal(isModuleLicensed("ACCOUNTING", allowedModules), false);
+      assert.equal(isModuleLicensed("HR", allowedModules), false);
+      assert.equal(isModuleLicensed("BI", allowedModules), false);
+      assert.equal(isModuleLicensed("CRM", allowedModules), false);
+      assert.equal(isModuleLicensed("CORPORATE", allowedModules), false);
     });
   });
 });

@@ -414,7 +414,7 @@ function App({ onSwitchPortal }: { onSwitchPortal?: (portal: string) => void } =
         setLicenseStatus(status);
         if (status?.valid) {
           const raw = status.modules ?? [];
-          const normalized: AppModule[] = Array.from(new Set<AppModule>([...raw.map((m: string) => normalizeModuleCode(m)).filter((m): m is AppModule => m !== null), "SETTINGS"]));
+          const normalized: AppModule[] = Array.from(new Set<AppModule>([...(Array.isArray(raw) ? raw : []).map((mod: string) => normalizeModuleCode(mod)).filter((m: AppModule | null): m is AppModule => m !== null), "SETTINGS"]));
           setLicenseModules(normalized);
           if (normalized.includes("POS")) setView("pdv");
           else setView("license");
@@ -437,7 +437,7 @@ function App({ onSwitchPortal }: { onSwitchPortal?: (portal: string) => void } =
           setLicenseStatus(status);
           if (status?.valid) {
             const raw = status.modules ?? [];
-            const normalized: AppModule[] = Array.from(new Set<AppModule>([...raw.map((m: string) => normalizeModuleCode(m)).filter((m): m is AppModule => m !== null), "SETTINGS"]));
+            const normalized: AppModule[] = Array.from(new Set<AppModule>([...(Array.isArray(raw) ? raw : []).map((mod: string) => normalizeModuleCode(mod)).filter((m: AppModule | null): m is AppModule => m !== null), "SETTINGS"]));
             setLicenseModules(normalized);
             if (normalized.includes("POS")) setView("pdv");
             else setView("license");
@@ -1225,7 +1225,7 @@ function App({ onSwitchPortal }: { onSwitchPortal?: (portal: string) => void } =
     }
     setLicenseStatus(data.status);
     const raw = data.status.modules ?? [];
-    const normalized: AppModule[] = Array.from(new Set<AppModule>([...raw.map((m: string) => normalizeModuleCode(m)).filter((m): m is AppModule => m !== null), "SETTINGS"]));
+    const normalized: AppModule[] = Array.from(new Set<AppModule>([...(Array.isArray(raw) ? raw : []).map((mod: string) => normalizeModuleCode(mod)).filter((m: AppModule | null): m is AppModule => m !== null), "SETTINGS"]));
     setLicenseModules(normalized);
     window.dispatchEvent(new CustomEvent("license-updated", { detail: data.status }));
     return { success: true, message: "Licença legítima verificada criptograficamente por RSA-SHA256 e ativada pelo servidor VendaJá!" };

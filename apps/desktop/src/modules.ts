@@ -21,6 +21,14 @@ export type AppModule =
 
 export type CommercialPlan = "STARTER" | "PROFESSIONAL" | "BUSINESS" | "ENTERPRISE" | "CUSTOM";
 
+export type CanonicalLicenseState =
+  | "VALID"
+  | "EXPIRED"
+  | "REVOKED"
+  | "INCOMPATIBLE"
+  | "NO_CONNECTIVITY"
+  | "OFFLINE_GRACE_PERIOD";
+
 export interface PlanDefinition {
   name: string;
   badge: string;

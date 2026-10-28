@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { PrismaClient } from "@prisma/client";
+import { getEffectiveTestDatabaseUrl } from "./db-test-helper.js";
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = await getEffectiveTestDatabaseUrl();
 const integration = databaseUrl ? test : test.skip;
 
 integration("isolates tenant roots, memberships and document series in PostgreSQL", async () => {

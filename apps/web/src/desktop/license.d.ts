@@ -2,6 +2,14 @@ export type CommercialPlan = "STARTER" | "PROFESSIONAL" | "BUSINESS" | "ENTERPRI
 
 export type LicenseTierType = "PRODUCT" | "MODULAR" | "COMBINED";
 
+export type CanonicalLicenseState =
+  | "VALID"
+  | "EXPIRED"
+  | "REVOKED"
+  | "INCOMPATIBLE"
+  | "NO_CONNECTIVITY"
+  | "OFFLINE_GRACE_PERIOD";
+
 export type LicensePayload = {
   version: number;
   licenseId: string;
@@ -13,6 +21,8 @@ export type LicensePayload = {
   startsAt: string;
   expiresAt: string;
   modules: string[];
+  gracePeriodDays?: number;
+  requiresHeartbeat?: boolean;
   limits?: {
     maxTerminals?: number;
     maxUsers?: number;
@@ -40,7 +50,9 @@ export interface ProductLicenseInfo {
   startsAt?: string;
   expiresAt?: string;
   daysRemaining?: number;
-  status: "ACTIVE" | "EXPIRED" | "NOT_ACTIVATED" | "TAMPERED";
+  gracePeriodDaysRemaining?: number;
+  status: "ACTIVE" | "EXPIRED" | "NOT_ACTIVATED" | "TAMPERED" | "REVOKED" | "INCOMPATIBLE" | "NO_CONNECTIVITY" | "OFFLINE_GRACE_PERIOD";
+  canonicalState?: CanonicalLicenseState;
 }
 
 export interface ModularLicenseInfo {
@@ -65,6 +77,7 @@ export interface LicenseAuditLogEntry {
 
 export type LicenseStatus = {
   valid: boolean;
+  state?: CanonicalLicenseState;
   reason?: string;
   hardwareId: string;
   expiresAt?: string;
@@ -74,6 +87,7 @@ export type LicenseStatus = {
   plan?: CommercialPlan;
   modules?: string[];
   daysRemaining?: number;
+  gracePeriodDaysRemaining?: number;
   expiryTier?: "valid" | "expiring_soon" | "critical" | "urgent" | "expired";
   limits?: {
     maxTerminals?: number;
@@ -85,8 +99,16 @@ export type LicenseStatus = {
 };
 
 declare global {
+  type CanonicalLicenseState =
+    | "VALID"
+    | "EXPIRED"
+    | "REVOKED"
+    | "INCOMPATIBLE"
+    | "NO_CONNECTIVITY"
+    | "OFFLINE_GRACE_PERIOD";
   type LicenseStatus = {
     valid: boolean;
+    state?: CanonicalLicenseState;
     reason?: string;
     hardwareId: string;
     expiresAt?: string;
@@ -96,6 +118,7 @@ declare global {
     plan?: "STARTER" | "PROFESSIONAL" | "BUSINESS" | "ENTERPRISE" | "CUSTOM";
     modules?: string[];
     daysRemaining?: number;
+    gracePeriodDaysRemaining?: number;
     expiryTier?: "valid" | "expiring_soon" | "critical" | "urgent" | "expired";
     limits?: {
       maxTerminals?: number;

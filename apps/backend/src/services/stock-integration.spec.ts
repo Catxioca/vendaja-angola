@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { applyStockChange } from "./stock-ledger.js";
 import { ensureAccountingPeriod, postSaleAccounting } from "./accounting.js";
+import { getEffectiveTestDatabaseUrl } from "./db-test-helper.js";
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseUrl = await getEffectiveTestDatabaseUrl();
 const test = databaseUrl ? (await import("node:test")).default : (await import("node:test")).default.skip;
 
 async function createFixture(prisma: PrismaClient) {

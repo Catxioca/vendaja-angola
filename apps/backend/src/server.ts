@@ -39,6 +39,8 @@ import { corporateHeadquartersRouter } from "./routes/corporate-headquarters.js"
 import { licenseRouter } from "./routes/license.js";
 import { logger } from "./services/enterprise/logger.service.js";
 import { correlationId, countMetric, logJson, metricsSnapshot } from "./services/observability.js";
+import { getEnv } from "./config/env.js";
+import jwt from "jsonwebtoken";
 
 const config = loadEnv();
 prisma.$use(async (params, next) => {
@@ -58,50 +60,30 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+  // HSTS (HTTP Strict Transport Security): enforces HTTPS for all connections when SSL/TLS is active
+  if (req.secure || req.header("x-forwarded-proto") === "https" || config.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  }
+
   next();
 });
-const isLoopbackOrLocalOrigin = (origin: string): boolean => {
-  if (origin === "null" || origin.startsWith("file://") || origin.startsWith("vscode-webview://") || origin.startsWith("electron://") || origin.startsWith("capacitor://")) {
-    return true;
-  }
-  try {
-    const url = new URL(origin);
-    const host = url.hostname.toLowerCase();
-    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
-  } catch {
-    return false;
-  }
-};
-const isAllowedDomainOrigin = (origin: string): boolean => {
-  try {
-    const url = new URL(origin);
-    const host = url.hostname.toLowerCase();
-    return (
-      host === "vendaja.ao" ||
-      host.endsWith(".vendaja.ao") ||
-      host.endsWith(".onrender.com") ||
-      host.endsWith(".pages.dev") ||
-      host.endsWith(".vercel.app")
-    );
-  } catch {
-    return false;
-  }
-};
-const allowedOrigins = (config.CORS_ORIGIN ?? "").split(",").map((origin) => origin.trim()).filter(Boolean);
-const corsOptions: cors.CorsOptions = {
+import { isAllowedOrigin, isLoopbackOrLocalOrigin, isAllowedDomainOrigin } from "./services/cors-policy.js";
+export { isAllowedOrigin, isLoopbackOrLocalOrigin, isAllowedDomainOrigin };
+
+export const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (isLoopbackOrLocalOrigin(origin)) return callback(null, true);
-    if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) return callback(null, true);
-    if (isAllowedDomainOrigin(origin)) return callback(null, true);
-    if (allowedOrigins.length === 0 && config.NODE_ENV !== "production") return callback(null, true);
-    return callback(null, false);
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
@@ -132,7 +114,22 @@ app.get("/ready", async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: "ready", service: "backend" }); }
   catch { res.status(503).json({ status: "not_ready" }); }
 });
-app.get("/metrics", (_req, res) => {
+app.get("/metrics", (req, res) => {
+  const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) {
+    res.status(401).json({ error: "unauthorized", message: "Autenticação requerida para métricas." });
+    return;
+  }
+  try {
+    const decoded = jwt.verify(token, getEnv().JWT_SECRET) as { id?: string; role?: string };
+    if (decoded?.role !== "ROLE_ADMIN" && decoded?.role !== "ADMIN") {
+      res.status(403).json({ error: "forbidden", message: "Acesso restrito a administradores." });
+      return;
+    }
+  } catch {
+    res.status(401).json({ error: "invalid_token", message: "Sessão inválida ou expirada." });
+    return;
+  }
   res.type("application/json").json(metricsSnapshot());
 });
 app.use("/api/v1/auth", authRouter);

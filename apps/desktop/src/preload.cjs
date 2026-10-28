@@ -21,4 +21,7 @@ contextBridge.exposeInMainWorld("pos", {
   syncLiveConfig: (apiUrl) => ipcRenderer.invoke("sync-live-config", apiUrl),
   copilotQuery: (payload) => ipcRenderer.invoke("ai-copilot-query", payload),
   copilotStatus: (apiUrl) => ipcRenderer.invoke("ai-copilot-status", apiUrl),
+  getSecureCapabilities: () => ipcRenderer.invoke("secure-store-capabilities"),
+  protectSecret: (plaintext) => ipcRenderer.invoke("secure-store-protect", plaintext),
+  unprotectSecret: (cipherBase64) => ipcRenderer.invoke("secure-store-unprotect", cipherBase64),
 });

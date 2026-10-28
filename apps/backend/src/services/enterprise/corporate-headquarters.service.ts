@@ -209,25 +209,8 @@ export class EnterpriseCorporateHeadquartersService {
       };
     });
 
-    if (stores.length === 0) {
-      stores.push({
-        id: "hq-store-01",
-        code: "SEDE-01",
-        name: "Sede Central (Loja Mãe)",
-        isHeadquarters: true,
-        online: true,
-        lastPingAt: new Date().toISOString(),
-        activeUsersCount: 2,
-        todaySalesCents: 4500000,
-        todayDocumentsCount: 15,
-        cashDrawerCents: 2500000,
-        activeModules: ["CORPORATE", "POS", "STOCK", "TREASURY", "HR", "CRM", "BI", "AI", "BIOMETRICS"],
-        appVersion: "2.2.4",
-        hardwareId: "HQ-HWID-001",
-        terminalId: "TERM-HQ-01",
-        pendingSyncCount: 0,
-      });
-    }
+    // Zero mock policy: if no stores are registered for this company, return empty array
+    // without injecting fictitious sales or cash drawer amounts.
 
     const totalStores = stores.length;
     const onlineStores = stores.filter((s) => s.online).length;

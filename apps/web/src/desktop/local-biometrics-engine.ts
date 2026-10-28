@@ -37,7 +37,19 @@ export interface BiometricDeviceHardware {
   details?: string;
 }
 
+export type BiometricDriverMode = "SIMULATOR" | "MOCK" | "HARDWARE_USB_ACTIVE";
+
 export interface BiometricHealthStatus {
+  driverMode: BiometricDriverMode;
+  hardwareTested: boolean;
+  complianceApdAngola: {
+    law: "Lei n.º 22/11 de Protecção de Dados Pessoais (Angola)";
+    consentRequired: true;
+    localStorageBiometricExclusion: true;
+    retentionPolicyDays: 90;
+    biometricTemplateEncryption: "IN_MEMORY_ISOLATED_VAULT";
+  };
+  disclaimer: string;
   cameraStatus: "ONLINE" | "OFFLINE";
   cameraName?: string;
   rfidStatus: "ONLINE" | "WAITING" | "OFFLINE";
@@ -163,7 +175,21 @@ export class LocalBiometricsEngine {
   private static instance: LocalBiometricsEngine | null = null;
   private memoryStorage: Record<string, string> = {};
 
+  private secureBiometricVault: Map<string, string> = new Map();
+  private biometricConsents: Map<string, { consentGiven: boolean; timestamp: string }> = new Map();
+
   private currentHealth: BiometricHealthStatus = {
+    driverMode: "SIMULATOR",
+    hardwareTested: false,
+    complianceApdAngola: {
+      law: "Lei n.º 22/11 de Protecção de Dados Pessoais (Angola)",
+      consentRequired: true,
+      localStorageBiometricExclusion: true,
+      retentionPolicyDays: 90,
+      biometricTemplateEncryption: "IN_MEMORY_ISOLATED_VAULT",
+    },
+    disclaimer:
+      "Modo Simulador / Emulação Web: Os métodos Face ID, RFID e Impressão Digital operam através de drivers emulados e Web APIs padrão. O suporte a hardware físico dedicado (ZKTeco, DigitalPersona, leitores USB e torniquetes) requer homologação e drivers nativos em C++.",
     cameraStatus: "OFFLINE",
     rfidStatus: "OFFLINE",
     fingerprintStatus: "OFFLINE",
@@ -186,28 +212,96 @@ export class LocalBiometricsEngine {
     return LocalBiometricsEngine.instance;
   }
 
-  // Storage abstraction (localStorage or fallback in-memory)
+  // Storage abstraction with strict APD Angola & biometric template exclusion
   private getItem(key: string): string | null {
+    let raw: string | null = null;
     if (typeof window !== "undefined" && window.localStorage) {
       try {
-        return window.localStorage.getItem(key);
+        raw = window.localStorage.getItem(key);
       } catch {
         // Fallback
       }
     }
-    return this.memoryStorage[key] ?? null;
+    if (!raw) raw = this.memoryStorage[key] ?? null;
+
+    // If reading persons, hydrate with in-memory secure vault templates
+    if (key === "vendaja:bio:persons" && raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const hydrated = parsed.map((p) => ({
+            ...p,
+            fingerprintTemplate: p.fingerprintTemplate || this.secureBiometricVault.get(`fp:${p.id}`),
+            faceTemplate: p.faceTemplate || this.secureBiometricVault.get(`face:${p.id}`),
+            photoUrl: p.photoUrl || this.secureBiometricVault.get(`photo:${p.id}`),
+          }));
+          return JSON.stringify(hydrated);
+        }
+      } catch {
+        // parse error fallback
+      }
+    }
+    return raw;
   }
 
   private setItem(key: string, value: string): void {
+    let sanitizedValue = value;
+
+    // Strict Security & Privacy Gate: Purge raw biometric templates before persisting to localStorage
+    if (key === "vendaja:bio:persons") {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          for (const p of parsed) {
+            if (p.fingerprintTemplate) {
+              this.secureBiometricVault.set(`fp:${p.id}`, p.fingerprintTemplate);
+            }
+            if (p.faceTemplate) {
+              this.secureBiometricVault.set(`face:${p.id}`, p.faceTemplate);
+            }
+            if (p.photoUrl) {
+              this.secureBiometricVault.set(`photo:${p.id}`, p.photoUrl);
+            }
+          }
+          // Never persist raw templates in localStorage
+          const sanitized = parsed.map((p) => ({
+            ...p,
+            fingerprintTemplate: undefined,
+            faceTemplate: undefined,
+            photoUrl: undefined,
+          }));
+          sanitizedValue = JSON.stringify(sanitized);
+        }
+      } catch {
+        // parse error fallback
+      }
+    } else if (key === "vendaja:bio:credentials" || key === "vendaja:bio:fingerprints") {
+      // Credentials must never leak raw minutiae to localStorage
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          for (const c of parsed) {
+            if (c.template) this.secureBiometricVault.set(`cred:${c.id}`, c.template);
+          }
+          const sanitized = parsed.map((c) => ({ ...c, template: "[VAULT_REDACTED]" }));
+          sanitizedValue = JSON.stringify(sanitized);
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    // Keep active in-memory storage always hydrated
+    this.memoryStorage[key] = value;
+
     if (typeof window !== "undefined" && window.localStorage) {
       try {
-        window.localStorage.setItem(key, value);
+        window.localStorage.setItem(key, sanitizedValue);
         return;
       } catch {
         // Fallback
       }
     }
-    this.memoryStorage[key] = value;
   }
 
   /**
@@ -215,6 +309,8 @@ export class LocalBiometricsEngine {
    */
   public clearAllData(): void {
     this.memoryStorage = {};
+    this.secureBiometricVault.clear();
+    this.biometricConsents.clear();
     if (typeof window !== "undefined" && window.localStorage) {
       try {
         window.localStorage.removeItem("vendaja:bio:persons");

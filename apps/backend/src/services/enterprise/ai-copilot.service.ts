@@ -1182,8 +1182,8 @@ export class EnterpriseAiCopilotService {
   ): Promise<Omit<CopilotResponse, "query" | "intent" | "domain" | "confidence" | "timestamp" | "executionTimeMs" | "authorized">> {
     const cube = await EnterpriseDataWarehouseService.getAnalyticalCube(companyId);
 
-    const totalRev = cube.sales.reduce((a, b) => a + b.revenueCents, 0) || 1250000000;
-    const totalPurch = cube.purchases.reduce((a, b) => a + b.totalCostCents, 0) || 750000000;
+    const totalRev = cube.sales.reduce((a, b) => a + b.revenueCents, 0);
+    const totalPurch = cube.purchases.reduce((a, b) => a + b.totalCostCents, 0);
 
     return {
       textAnswer: `Modo Offline Ativo: Resposta baseada no cubo analítico local sincronizado. Volume total de vendas em cache: **${formatKwanza(totalRev)}**, compras em cache: **${formatKwanza(totalPurch)}**, inventário avaliado em **${formatKwanza(cube.inventoryValuationCents)}**.`,
@@ -1271,6 +1271,20 @@ export class EnterpriseAiCopilotService {
         metricValue: 22,
         expectedValue: 5,
         deviationPercent: 17,
+      });
+    }
+
+    if (anomalies.length === 0) {
+      anomalies.push({
+        id: "anom-operational-01",
+        timestamp: new Date().toISOString(),
+        type: "EXCESSIVE_DISCOUNT",
+        severity: "INFO",
+        title: "Monitorização Operacional Ativa",
+        description: "Detetor de anomalias operacional com zero desvios críticos nas últimas 24 horas.",
+        metricValue: 0,
+        expectedValue: 0,
+        deviationPercent: 0,
       });
     }
 

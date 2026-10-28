@@ -165,7 +165,7 @@ syncRouter.post("/", async (req, res) => {
           await tx.stockMovement.create({ data: { productId: line.productId, quantity: -line.quantity, type: "SALE", reference: sale.id, operatorId } });
         }
         await tx.syncMutation.create({
-          data: { id: item.id, deviceId: parsed.data.deviceId, entity: item.entity, operation: item.operation, occurredAt: new Date(item.occurredAt), saleId: sale.id },
+          data: { id: item.id, deviceId: parsed.data.deviceId, entity: item.entity, operation: item.operation, occurredAt: new Date(item.occurredAt), saleId: sale.id, companyId: auth.context?.companyId, branchId: auth.context?.branchId, userId: auth.user?.id },
         });
       });
       accepted.push(item.id);

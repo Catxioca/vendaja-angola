@@ -582,3 +582,52 @@ test("Scenario 11: Testes de Hardware Físico -> Face ID, RFID e Impressão Digi
 
   restoreGlobals();
 });
+
+test("Scenario 12: Proteção de Dados APD Angola -> Templates biométricos são estritamente excluídos do localStorage", () => {
+  restoreGlobals();
+  const engine = LocalBiometricsEngine.getInstance();
+  engine.clearAllData();
+
+  // Mock window.localStorage
+  const localStore: Record<string, string> = {};
+  (globalThis as any).window = {
+    localStorage: {
+      getItem: (k: string) => localStore[k] ?? null,
+      setItem: (k: string, v: string) => { localStore[k] = v; },
+      removeItem: (k: string) => { delete localStore[k]; },
+    },
+  };
+
+  const person = engine.registerPerson({
+    companyId: "EMP-001",
+    internalCode: "COLAB-999",
+    fullName: "Segurança de Dados",
+    category: "EMPLOYEE",
+    status: "ACTIVE",
+  });
+
+  const secretFp = "RAW_SECRET_MINUTIAE_TEMPLATE_ISO19794_DO_NOT_LEAK";
+  const secretFace = "RAW_SECRET_FACIAL_DESCRIPTOR_VECTOR_DO_NOT_LEAK";
+
+  engine.enrollFingerprint(person.id, secretFp);
+  engine.enrollFace(person.id, secretFace);
+
+  // In-memory engine can still verify the person
+  const hydrated = engine.getPersons().find((p) => p.id === person.id);
+  assert.equal(hydrated?.fingerprintTemplate, secretFp);
+  assert.equal(hydrated?.faceTemplate?.length! > 0, true);
+
+  // CRITICAL SECURITY ASSERTION: localStorage MUST NOT contain the raw templates
+  const storedPersonsRaw = localStore["vendaja:bio:persons"];
+  assert.ok(storedPersonsRaw, "Must persist metadata to localStorage");
+  assert.ok(!storedPersonsRaw.includes(secretFp), "Plaintext fingerprint minutiae leaked in localStorage!");
+  assert.ok(!storedPersonsRaw.includes(secretFace), "Plaintext facial descriptor leaked in localStorage!");
+
+  // Verify APD compliance and simulator driver status
+  const health = engine.getHealth();
+  assert.equal(health.driverMode, "SIMULATOR");
+  assert.equal(health.hardwareTested, false);
+  assert.equal(health.complianceApdAngola.localStorageBiometricExclusion, true);
+
+  restoreGlobals();
+});

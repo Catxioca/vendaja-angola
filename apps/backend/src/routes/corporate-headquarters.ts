@@ -4,15 +4,18 @@ import {
   type CorporateRole,
   type PatchCategory,
 } from "../services/enterprise/corporate-headquarters.service.js";
+import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
 
 export const corporateHeadquartersRouter = Router();
 
+// Protect all Corporate Headquarters routes with authentication
+corporateHeadquartersRouter.use(requireAuth);
+
 function getCompanyId(req: Request): string {
-  return (
-    (req.headers["x-company-id"] as string) ||
-    (req.query.companyId as string) ||
-    "default-company-angola"
-  );
+  const auth = req as AuthRequest;
+  const headerVal = req.header ? req.header("x-company-id") : (req.headers && (req.headers["x-company-id"] as string));
+  const resolved = auth.context?.companyId || (typeof headerVal === "string" && headerVal.trim() ? headerVal.trim() : undefined) || "default-company-angola";
+  return resolved;
 }
 
 function getActorName(req: Request): string {

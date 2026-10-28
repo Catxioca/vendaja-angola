@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { assertImmutableFiscalMutation } from "./fiscal-integrity.js";
 
-test("rejects fiscal Sale fields while allowing cancellation fields", () => {
+test("strictly rejects fiscal Sale direct cancellation mutations and protected fields", () => {
   assert.throws(() => assertImmutableFiscalMutation("Sale", "update", { totalCents: 1 }), /immutable_fiscal_sale_fields/);
   assert.throws(() => assertImmutableFiscalMutation("Sale", "update", { fiscalHash: "changed" }), /immutable_fiscal_sale_fields/);
-  assert.doesNotThrow(() => assertImmutableFiscalMutation("Sale", "updateMany", { status: "CANCELLED", cancelledAt: new Date(), cancelledBy: "admin" }));
+  assert.throws(() => assertImmutableFiscalMutation("Sale", "updateMany", { status: "CANCELLED", cancelledAt: new Date(), cancelledBy: "admin" }), /immutable_fiscal_cancellation_prohibited/);
 });
 
 test("rejects SaleLine fiscal mutations", () => {

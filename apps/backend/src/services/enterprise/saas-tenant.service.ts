@@ -490,11 +490,16 @@ export class EnterpriseTenantService {
 
     let currentBranches = 1;
     try {
-      currentBranches = await prisma.branch.count({
+      const dbCount = await prisma.branch.count({
         where: { companyId: tenantId, active: true },
       });
+      if (dbCount > 0) {
+        currentBranches = dbCount;
+      } else if (inMemoryTenants.has(tenantId)) {
+        currentBranches = 1;
+      }
     } catch {
-      currentBranches = 1;
+      currentBranches = inMemoryTenants.has(tenantId) ? 1 : 0;
     }
 
     const max = tenant.quotas.maxBranches;
@@ -550,14 +555,17 @@ export class EnterpriseTenantService {
     const quotas = tenant?.quotas || DEFAULT_PLAN_QUOTAS.PROFESSIONAL;
     const usage = inMemoryUsage.get(tenantId) || { invoicesMonth: 0, storageBytes: 0, apiCalls: 0 };
 
-    let activeUsers = 2;
+    let activeUsers = 1;
     let totalBranches = 1;
     let totalWarehouses = 1;
 
     try {
-      activeUsers = await prisma.companyMembership.count({ where: { companyId: tenantId, active: true } });
-      totalBranches = await prisma.branch.count({ where: { companyId: tenantId, active: true } });
-      totalWarehouses = await prisma.warehouse.count({ where: { companyId: tenantId, active: true } });
+      const dbUsers = await prisma.companyMembership.count({ where: { companyId: tenantId, active: true } });
+      const dbBranches = await prisma.branch.count({ where: { companyId: tenantId, active: true } });
+      const dbWarehouses = await prisma.warehouse.count({ where: { companyId: tenantId, active: true } });
+      if (dbUsers > 0) activeUsers = dbUsers;
+      if (dbBranches > 0) totalBranches = dbBranches;
+      if (dbWarehouses > 0) totalWarehouses = dbWarehouses;
     } catch {
       // fallback
     }

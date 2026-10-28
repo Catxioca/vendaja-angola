@@ -16,14 +16,160 @@ export type FiscalDocumentType =
   | "CREDIT_NOTE";
 export type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "CREDIT" | "MIXED";
 export type SyncOperation = "CREATE" | "UPDATE";
-export interface Product { id: string; sku: string; name: string; priceCents: number; stock: number; taxRate: number; active: boolean; exemptionCode?: string | null; costCents?: number; barcode?: string | null; qrCode?: string | null; imageUrl?: string | null; brand?: string | null; model?: string | null; categoryId?: string | null; }
-export interface SaleLine { productId: string; quantity: number; unitPriceCents: number; taxRate: number; }
-export interface Sale { id: string; number: string; lines: SaleLine[]; subtotalCents: number; taxCents: number; totalCents: number; currency: typeof CURRENCY; createdAt: string; discountCents?: number; paymentMethod?: PaymentMethod; cashCents?: number; cardCents?: number; transferCents?: number; tenderedCents?: number; changeCents?: number; cashSessionId?: string | null; customerId?: string | null; dueDate?: string | null; customerName?: string; customerNif?: string; customerAddress?: string; fiscalType?: FiscalDocumentType; operatorName?: string; operatorNif?: string; operatorPhone?: string; terminalId?: string; }
-export interface SyncMutation { id: string; operation: SyncOperation; entity: "SALE" | "PRODUCT"; payload: unknown; occurredAt: string; }
-export interface SyncRequest { deviceId: string; mutations: SyncMutation[]; lastCursor?: string; }
-export interface SyncResponse { accepted: string[]; rejected: { id: string; reason: string }[]; cursor: string; }
-export interface Customer { id: string; name: string; taxNumber?: string; phone?: string; createdAt: string; }
-export interface CashEntry { id: string; type: "OPEN" | "CLOSE" | "IN" | "OUT"; amountCents: number; note?: string; createdAt: string; }
+
+export type MutationState =
+  | "PENDING"
+  | "PROCESSING"
+  | "SENT"
+  | "REJECTED"
+  | "RETRYABLE"
+  | "CONFLICT";
+
+export type SyncEntity =
+  | "SALE"
+  | "PRODUCT"
+  | "PAYMENT"
+  | "REFUND"
+  | "STOCK"
+  | "DOCUMENT";
+
+export interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  priceCents: number;
+  stock: number;
+  taxRate: number;
+  active: boolean;
+  exemptionCode?: string | null;
+  costCents?: number;
+  barcode?: string | null;
+  qrCode?: string | null;
+  imageUrl?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  categoryId?: string | null;
+}
+
+export interface SaleLine {
+  productId: string;
+  quantity: number;
+  unitPriceCents: number;
+  taxRate: number;
+}
+
+export interface Sale {
+  id: string;
+  number: string;
+  lines: SaleLine[];
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  currency: typeof CURRENCY;
+  createdAt: string;
+  discountCents?: number;
+  paymentMethod?: PaymentMethod;
+  cashCents?: number;
+  cardCents?: number;
+  transferCents?: number;
+  tenderedCents?: number;
+  changeCents?: number;
+  cashSessionId?: string | null;
+  customerId?: string | null;
+  dueDate?: string | null;
+  customerName?: string;
+  customerNif?: string;
+  customerAddress?: string;
+  fiscalType?: FiscalDocumentType;
+  operatorName?: string;
+  operatorNif?: string;
+  operatorPhone?: string;
+  terminalId?: string;
+}
+
+export interface SyncMutation {
+  id: string;
+  operation: SyncOperation;
+  entity: SyncEntity | (string & {});
+  payload: unknown;
+  occurredAt: string;
+  companyId?: string;
+  branchId?: string;
+  userId?: string;
+  terminalId?: string;
+  correlationId?: string;
+  idempotencyKey?: string;
+  state?: MutationState;
+  attempts?: number;
+  lastAttemptAt?: string;
+  errorSanitized?: string | null;
+}
+
+export interface SyncRequest {
+  deviceId: string;
+  mutations: SyncMutation[];
+  lastCursor?: string;
+}
+
+export interface SyncResponse {
+  accepted: string[];
+  rejected: { id: string; reason: string }[];
+  cursor: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  taxNumber?: string;
+  phone?: string;
+  createdAt: string;
+}
+
+export interface CashEntry {
+  id: string;
+  type: "OPEN" | "CLOSE" | "IN" | "OUT";
+  amountCents: number;
+  note?: string;
+  createdAt: string;
+}
+
+export interface OutboxFilter {
+  companyId?: string;
+  branchId?: string;
+  userId?: string;
+  terminalId?: string;
+  state?: MutationState | MutationState[];
+}
+
+export interface OutboxDiagnosticItem {
+  id: string;
+  correlationId: string;
+  entity: string;
+  operation: string;
+  companyId: string;
+  branchId: string;
+  userId: string;
+  terminalId: string;
+  state: MutationState;
+  attempts: number;
+  lastAttemptAt?: string;
+  errorSanitized?: string | null;
+  occurredAt: string;
+}
+
+export interface OutboxDiagnosticsReport {
+  total: number;
+  counts: {
+    pending: number;
+    processing: number;
+    retryable: number;
+    rejected: number;
+    conflict: number;
+    sent: number;
+  };
+  items: OutboxDiagnosticItem[];
+}
+
 export interface LocalPosStorage {
   getSales(): Promise<Sale[]>;
   saveSale(sale: Sale): Promise<void>;
@@ -32,10 +178,204 @@ export interface LocalPosStorage {
   saveCustomer(customer: Customer): Promise<void>;
   getCashEntries(): Promise<CashEntry[]>;
   saveCashEntry(entry: CashEntry): Promise<void>;
-  getOutbox(): Promise<SyncMutation[]>;
+  getOutbox(filter?: OutboxFilter): Promise<SyncMutation[]>;
   enqueue(mutation: SyncMutation): Promise<void>;
   acknowledge(ids: string[]): Promise<void>;
+  updateMutationState(id: string, state: MutationState, errorSanitized?: string | null): Promise<void>;
+  getOutboxDiagnostics(filter?: OutboxFilter): Promise<OutboxDiagnosticsReport>;
+  retryMutation(id: string, operatorContext: { userId: string; role: string }): Promise<{ success: boolean; mutation?: SyncMutation; error?: string }>;
   clear?(): Promise<void>;
+}
+
+export function sanitizeSyncError(error: unknown): string {
+  if (!error) return "unknown_error";
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
+    .replace(/(?:password|secret|token|key|privateKey)[:=]\s*["']?[^"',\s]+["']?/gi, "$1=[REDACTED]")
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "postgres://[REDACTED]")
+    .replace(/\bat\s+.+\(.*:\d+:\d+\)/g, "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 300) || "sync_error";
+}
+
+export function computeIdempotencyKey(params: {
+  entity: string;
+  operation?: string;
+  companyId: string;
+  branchId: string;
+  terminalId: string;
+  referenceId?: string;
+  documentNumber?: string;
+  amountCents?: number;
+  occurredAt?: string;
+}): string {
+  const comp = (params.companyId || "default-company").trim();
+  const branch = (params.branchId || "default-branch").trim();
+  const term = (params.terminalId || "default-terminal").trim();
+  const ent = (params.entity || "MUTATION").toUpperCase().trim();
+  const op = (params.operation || "CREATE").toUpperCase().trim();
+  const ref = (params.documentNumber || params.referenceId || "").trim();
+  const amt = params.amountCents !== undefined ? `:${params.amountCents}` : "";
+  const time = params.occurredAt ? `:${params.occurredAt.slice(0, 19)}` : "";
+  return `${comp}:${branch}:${term}:${ent}:${op}:${ref}${amt}${time}`;
+}
+
+export function computeSaleIdempotencyKey(
+  sale: Partial<Sale> & { id: string },
+  context: { companyId: string; branchId: string; terminalId: string }
+): string {
+  return computeIdempotencyKey({
+    entity: "SALE",
+    operation: "CREATE",
+    companyId: context.companyId,
+    branchId: context.branchId,
+    terminalId: context.terminalId,
+    referenceId: sale.id,
+    documentNumber: sale.number,
+    amountCents: sale.totalCents,
+    occurredAt: sale.createdAt,
+  });
+}
+
+export function computePaymentIdempotencyKey(
+  payment: { paymentId: string; amountCents: number; paymentMethod?: string; saleId?: string; createdAt?: string },
+  context: { companyId: string; branchId: string; terminalId: string }
+): string {
+  return computeIdempotencyKey({
+    entity: "PAYMENT",
+    operation: "CREATE",
+    companyId: context.companyId,
+    branchId: context.branchId,
+    terminalId: context.terminalId,
+    referenceId: payment.paymentId,
+    amountCents: payment.amountCents,
+    occurredAt: payment.createdAt,
+  });
+}
+
+export function computeRefundIdempotencyKey(
+  refund: { refundId: string; saleId: string; amountCents: number; reason?: string; createdAt?: string },
+  context: { companyId: string; branchId: string; terminalId: string }
+): string {
+  return computeIdempotencyKey({
+    entity: "REFUND",
+    operation: "CREATE",
+    companyId: context.companyId,
+    branchId: context.branchId,
+    terminalId: context.terminalId,
+    referenceId: `${refund.saleId}:${refund.refundId}`,
+    amountCents: refund.amountCents,
+    occurredAt: refund.createdAt,
+  });
+}
+
+export function computeStockMovementIdempotencyKey(
+  movement: { productId: string; quantity: number; type: string; reference?: string; createdAt?: string },
+  context: { companyId: string; branchId: string; terminalId: string }
+): string {
+  return computeIdempotencyKey({
+    entity: "STOCK",
+    operation: "CREATE",
+    companyId: context.companyId,
+    branchId: context.branchId,
+    terminalId: context.terminalId,
+    referenceId: `${movement.productId}:${movement.type}:${movement.reference ?? ""}`,
+    amountCents: movement.quantity,
+    occurredAt: movement.createdAt,
+  });
+}
+
+export function computeFiscalDocumentIdempotencyKey(
+  doc: { documentType: string; documentNumber: string; series?: string; totalCents?: number; issuedAt?: string },
+  context: { companyId: string; branchId: string; terminalId: string }
+): string {
+  return computeIdempotencyKey({
+    entity: "DOCUMENT",
+    operation: "CREATE",
+    companyId: context.companyId,
+    branchId: context.branchId,
+    terminalId: context.terminalId,
+    referenceId: `${doc.series ?? "A"}-${doc.documentType}-${doc.documentNumber}`,
+    amountCents: doc.totalCents,
+    occurredAt: doc.issuedAt,
+  });
+}
+
+function matchesOutboxFilter(mutation: SyncMutation, filter?: OutboxFilter): boolean {
+  if (!filter) return true;
+  if (filter.companyId !== undefined && mutation.companyId && mutation.companyId !== filter.companyId) return false;
+  if (filter.branchId !== undefined && mutation.branchId && mutation.branchId !== filter.branchId) return false;
+  if (filter.userId !== undefined && mutation.userId && mutation.userId !== filter.userId) return false;
+  if (filter.terminalId !== undefined && mutation.terminalId && mutation.terminalId !== filter.terminalId) return false;
+  if (filter.state !== undefined) {
+    const states = Array.isArray(filter.state) ? filter.state : [filter.state];
+    const currentState = mutation.state ?? "PENDING";
+    if (!states.includes(currentState)) return false;
+  }
+  return true;
+}
+
+function normalizeMutation(mutation: SyncMutation): SyncMutation {
+  return {
+    ...mutation,
+    state: mutation.state ?? "PENDING",
+    attempts: mutation.attempts ?? 0,
+    correlationId:
+      mutation.correlationId ??
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `corr-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`),
+    errorSanitized: mutation.errorSanitized ?? null,
+  };
+}
+
+function buildDiagnosticsReport(mutations: SyncMutation[], filter?: OutboxFilter): OutboxDiagnosticsReport {
+  const filtered = mutations.filter((m) => matchesOutboxFilter(m, filter));
+  const counts = {
+    pending: 0,
+    processing: 0,
+    retryable: 0,
+    rejected: 0,
+    conflict: 0,
+    sent: 0,
+  };
+  for (const m of filtered) {
+    const s = m.state ?? "PENDING";
+    if (s === "PENDING") counts.pending++;
+    else if (s === "PROCESSING") counts.processing++;
+    else if (s === "RETRYABLE") counts.retryable++;
+    else if (s === "REJECTED") counts.rejected++;
+    else if (s === "CONFLICT") counts.conflict++;
+    else if (s === "SENT") counts.sent++;
+  }
+  const items: OutboxDiagnosticItem[] = filtered.map((m) => ({
+    id: m.id,
+    correlationId: m.correlationId ?? m.id,
+    entity: m.entity,
+    operation: m.operation,
+    companyId: m.companyId ?? "default",
+    branchId: m.branchId ?? "default",
+    userId: m.userId ?? "system",
+    terminalId: m.terminalId ?? "pos-1",
+    state: m.state ?? "PENDING",
+    attempts: m.attempts ?? 0,
+    lastAttemptAt: m.lastAttemptAt,
+    errorSanitized: m.errorSanitized ?? null,
+    occurredAt: m.occurredAt,
+  }));
+  return {
+    total: filtered.length,
+    counts,
+    items,
+  };
+}
+
+const AUTHORIZED_RETRY_ROLES = new Set(["ADMIN", "SUPERVISOR", "OPERATOR", "MANAGER", "GERENTE"]);
+function canRetryMutation(role: string): boolean {
+  return AUTHORIZED_RETRY_ROLES.has((role || "").toUpperCase().trim());
 }
 
 const memoryStore = new Map<string, unknown[]>();
@@ -98,8 +438,6 @@ export function createBrowserPosStorage(name = "angola-pos"): LocalPosStorage {
 
     request.onerror = () => {
       const error = request.error;
-      // If the local database is already at a higher version than POS_DB_VERSION (VersionError),
-      // open without specifying a version to connect to the existing version safely.
       if (error?.name === "VersionError") {
         try {
           const fallbackRequest = indexedDB.open(name);
@@ -171,11 +509,12 @@ export function createBrowserPosStorage(name = "angola-pos"): LocalPosStorage {
   }
 
   async function saveSaleAndEnqueue(sale: Sale, mutation: SyncMutation): Promise<void> {
+    const normalized = normalizeMutation(mutation);
     if (!indexed) {
       const sales = memory<Sale>(`${name}:sales`).filter((item) => item.id !== sale.id);
-      const outbox = memory<SyncMutation>(`${name}:outbox`).filter((item) => item.id !== mutation.id);
+      const outbox = memory<SyncMutation>(`${name}:outbox`).filter((item) => item.id !== normalized.id);
       sales.push(clone(sale));
-      outbox.push(clone(mutation));
+      outbox.push(clone(normalized));
       memoryStore.set(`${name}:sales`, sales);
       memoryStore.set(`${name}:outbox`, outbox);
       return;
@@ -185,7 +524,7 @@ export function createBrowserPosStorage(name = "angola-pos"): LocalPosStorage {
       try {
         const transaction = db.transaction(["sales", "outbox"], "readwrite");
         transaction.objectStore("sales").put(sale);
-        transaction.objectStore("outbox").put(mutation);
+        transaction.objectStore("outbox").put(normalized);
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
         transaction.onabort = () => reject(transaction.error ?? new Error("Transação de armazenamento abortada"));
@@ -193,6 +532,51 @@ export function createBrowserPosStorage(name = "angola-pos"): LocalPosStorage {
         reject(err);
       }
     });
+  }
+
+  async function getOutbox(filter?: OutboxFilter): Promise<SyncMutation[]> {
+    const raw = await all<SyncMutation>("outbox");
+    return raw.map(normalizeMutation).filter((m) => matchesOutboxFilter(m, filter));
+  }
+
+  async function updateMutationState(id: string, state: MutationState, errorSanitized?: string | null): Promise<void> {
+    const raw = await all<SyncMutation>("outbox");
+    const item = raw.find((m) => m.id === id);
+    if (!item) return;
+    const updated: SyncMutation = {
+      ...item,
+      state,
+      attempts: (item.attempts ?? 0) + 1,
+      lastAttemptAt: new Date().toISOString(),
+      errorSanitized: errorSanitized !== undefined ? (errorSanitized ? sanitizeSyncError(errorSanitized) : null) : item.errorSanitized ?? null,
+    };
+    await put("outbox", updated);
+  }
+
+  async function getOutboxDiagnostics(filter?: OutboxFilter): Promise<OutboxDiagnosticsReport> {
+    const raw = await all<SyncMutation>("outbox");
+    return buildDiagnosticsReport(raw.map(normalizeMutation), filter);
+  }
+
+  async function retryMutation(
+    id: string,
+    operatorContext: { userId: string; role: string }
+  ): Promise<{ success: boolean; mutation?: SyncMutation; error?: string }> {
+    if (!canRetryMutation(operatorContext.role)) {
+      return { success: false, error: "unauthorized_operator" };
+    }
+    const raw = await all<SyncMutation>("outbox");
+    const item = raw.find((m) => m.id === id);
+    if (!item) {
+      return { success: false, error: "mutation_not_found" };
+    }
+    const updated: SyncMutation = {
+      ...item,
+      state: "PENDING",
+      errorSanitized: null,
+    };
+    await put("outbox", updated);
+    return { success: true, mutation: updated };
   }
 
   return {
@@ -203,8 +587,11 @@ export function createBrowserPosStorage(name = "angola-pos"): LocalPosStorage {
     saveCustomer: (customer) => put("customers", customer),
     getCashEntries: () => all<CashEntry>("cash"),
     saveCashEntry: (entry) => put("cash", entry),
-    getOutbox: () => all<SyncMutation>("outbox"),
-    enqueue: (mutation) => put("outbox", mutation),
+    getOutbox,
+    enqueue: (mutation) => put("outbox", normalizeMutation(mutation)),
+    updateMutationState,
+    getOutboxDiagnostics,
+    retryMutation,
     acknowledge: async (ids) => {
       const current = await all<SyncMutation>("outbox");
       if (!indexed) {
@@ -295,14 +682,57 @@ export class CapacitorSqliteStorage implements LocalPosStorage {
   saveSale(sale: Sale): Promise<void> { return this.put("sales", sale); }
   async saveSaleAndEnqueue(sale: Sale, mutation: SyncMutation): Promise<void> {
     await this.ensureReady();
-    await (await this.getConnection()).execute({ database: this.name, transaction: true, statements: `BEGIN; INSERT OR REPLACE INTO sales (id, data) VALUES ('${sqlQuote(sale.id)}', '${sqlQuote(JSON.stringify(sale))}'); INSERT OR REPLACE INTO outbox (id, data) VALUES ('${sqlQuote(mutation.id)}', '${sqlQuote(JSON.stringify(mutation))}'); COMMIT;` });
+    const normalized = normalizeMutation(mutation);
+    await (await this.getConnection()).execute({ database: this.name, transaction: true, statements: `BEGIN; INSERT OR REPLACE INTO sales (id, data) VALUES ('${sqlQuote(sale.id)}', '${sqlQuote(JSON.stringify(sale))}'); INSERT OR REPLACE INTO outbox (id, data) VALUES ('${sqlQuote(normalized.id)}', '${sqlQuote(JSON.stringify(normalized))}'); COMMIT;` });
   }
   getCustomers(): Promise<Customer[]> { return this.all<Customer>("customers"); }
   saveCustomer(customer: Customer): Promise<void> { return this.put("customers", customer); }
   getCashEntries(): Promise<CashEntry[]> { return this.all<CashEntry>("cash"); }
   saveCashEntry(entry: CashEntry): Promise<void> { return this.put("cash", entry); }
-  getOutbox(): Promise<SyncMutation[]> { return this.all<SyncMutation>("outbox"); }
-  enqueue(mutation: SyncMutation): Promise<void> { return this.put("outbox", mutation); }
+  async getOutbox(filter?: OutboxFilter): Promise<SyncMutation[]> {
+    const raw = await this.all<SyncMutation>("outbox");
+    return raw.map(normalizeMutation).filter((m) => matchesOutboxFilter(m, filter));
+  }
+  enqueue(mutation: SyncMutation): Promise<void> {
+    return this.put("outbox", normalizeMutation(mutation));
+  }
+  async updateMutationState(id: string, state: MutationState, errorSanitized?: string | null): Promise<void> {
+    const raw = await this.all<SyncMutation>("outbox");
+    const item = raw.find((m) => m.id === id);
+    if (!item) return;
+    const updated: SyncMutation = {
+      ...item,
+      state,
+      attempts: (item.attempts ?? 0) + 1,
+      lastAttemptAt: new Date().toISOString(),
+      errorSanitized: errorSanitized !== undefined ? (errorSanitized ? sanitizeSyncError(errorSanitized) : null) : item.errorSanitized ?? null,
+    };
+    await this.put("outbox", updated);
+  }
+  async getOutboxDiagnostics(filter?: OutboxFilter): Promise<OutboxDiagnosticsReport> {
+    const raw = await this.all<SyncMutation>("outbox");
+    return buildDiagnosticsReport(raw.map(normalizeMutation), filter);
+  }
+  async retryMutation(
+    id: string,
+    operatorContext: { userId: string; role: string }
+  ): Promise<{ success: boolean; mutation?: SyncMutation; error?: string }> {
+    if (!canRetryMutation(operatorContext.role)) {
+      return { success: false, error: "unauthorized_operator" };
+    }
+    const raw = await this.all<SyncMutation>("outbox");
+    const item = raw.find((m) => m.id === id);
+    if (!item) {
+      return { success: false, error: "mutation_not_found" };
+    }
+    const updated: SyncMutation = {
+      ...item,
+      state: "PENDING",
+      errorSanitized: null,
+    };
+    await this.put("outbox", updated);
+    return { success: true, mutation: updated };
+  }
   async acknowledge(ids: string[]): Promise<void> {
     await this.ensureReady();
     if (!ids.length) return;
@@ -327,11 +757,16 @@ export interface SyncEngineOptions {
   apiUrl: string;
   token: string;
   deviceId: string;
+  companyId?: string;
+  branchId?: string;
+  userId?: string;
+  terminalId?: string;
   intervalMs?: number;
   onState?: (online: boolean) => void;
   onResult?: (result: SyncResponse) => void;
   onError?: (error: Error) => void;
 }
+
 export class SyncEngine {
   private timer?: ReturnType<typeof setInterval>;
   private online = typeof navigator === "undefined" ? true : navigator.onLine !== false;
@@ -340,46 +775,289 @@ export class SyncEngine {
   private readonly handleOnline = () => this.setOnline(true);
   private readonly handleOffline = () => this.setOnline(false);
   constructor(private readonly storage: LocalPosStorage, private readonly options: SyncEngineOptions) {}
+
   async flush(): Promise<SyncResponse | undefined> {
     if (this.flushing) return this.flushing;
     this.flushing = this.flushOnce().finally(() => { this.flushing = undefined; });
     return this.flushing;
   }
+
   start(): void {
     if (typeof window === "undefined" || this.started) return;
     this.started = true;
-    window.addEventListener("online", this.handleOnline); window.addEventListener("offline", this.handleOffline);
-    this.timer = setInterval(() => { if (this.online) void this.flush().catch((error: unknown) => this.notifyError(error)); }, this.options.intervalMs ?? 30000);
+    window.addEventListener("online", this.handleOnline);
+    window.addEventListener("offline", this.handleOffline);
+    this.timer = setInterval(() => {
+      if (this.online) void this.flush().catch((error: unknown) => this.notifyError(error));
+    }, this.options.intervalMs ?? 30000);
     void this.flush().catch((error: unknown) => this.notifyError(error));
   }
+
   stop(): void {
     if (!this.started) return;
     if (this.timer) clearInterval(this.timer);
-    window.removeEventListener("online", this.handleOnline); window.removeEventListener("offline", this.handleOffline);
-    this.timer = undefined; this.started = false;
+    window.removeEventListener("online", this.handleOnline);
+    window.removeEventListener("offline", this.handleOffline);
+    this.timer = undefined;
+    this.started = false;
   }
+
   private setOnline(online: boolean): void {
-    this.online = online; this.options.onState?.(online);
+    this.online = online;
+    this.options.onState?.(online);
     if (online) void this.flush().catch((error: unknown) => this.notifyError(error));
   }
+
   private notifyError(error: unknown): void {
     this.options.onError?.(error instanceof Error ? error : new Error(String(error)));
   }
+
   private async flushOnce(): Promise<SyncResponse | undefined> {
     if (!this.online || (typeof navigator !== "undefined" && navigator.onLine === false)) return undefined;
-    const mutations = await this.storage.getOutbox(); if (!mutations.length) return undefined;
-    const response = await fetch(`${this.options.apiUrl.replace(/\/$/, "")}/api/v1/sync`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${this.options.token}`, "x-device-id": this.options.deviceId },
-      body: JSON.stringify({ deviceId: this.options.deviceId, mutations }),
+
+    // Filter mutations by company and branch context if provided, only selecting PENDING and RETRYABLE
+    const mutations = await this.storage.getOutbox({
+      companyId: this.options.companyId,
+      branchId: this.options.branchId,
+      userId: this.options.userId,
+      terminalId: this.options.terminalId,
+      state: ["PENDING", "RETRYABLE"],
     });
-    if (!response.ok) throw new Error(`Sync failed (${response.status})`);
-    const result = await response.json() as SyncResponse;
-    const sentIds = new Set(mutations.map((mutation) => mutation.id));
-    await this.storage.acknowledge(result.accepted.filter((id) => sentIds.has(id)));
+    if (!mutations.length) return undefined;
+
+    // Strict multi-tenant isolation guard:
+    // If an item has a different companyId/branchId than configured options, do not leak or flush it.
+    const tenantMutations = mutations.filter((m) => {
+      if (this.options.companyId && m.companyId && m.companyId !== this.options.companyId) return false;
+      if (this.options.branchId && m.branchId && m.branchId !== this.options.branchId) return false;
+      return true;
+    });
+    if (!tenantMutations.length) return undefined;
+
+    // Mark items as PROCESSING
+    for (const m of tenantMutations) {
+      await this.storage.updateMutationState(m.id, "PROCESSING");
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.options.apiUrl.replace(/\/$/, "")}/api/v1/sync`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.options.token}`,
+          "x-device-id": this.options.deviceId,
+          ...(this.options.companyId ? { "x-company-id": this.options.companyId } : {}),
+          ...(this.options.branchId ? { "x-branch-id": this.options.branchId } : {}),
+        },
+        body: JSON.stringify({ deviceId: this.options.deviceId, mutations: tenantMutations }),
+      });
+    } catch (networkError) {
+      const sanitized = sanitizeSyncError(networkError);
+      for (const m of tenantMutations) {
+        await this.storage.updateMutationState(m.id, "RETRYABLE", sanitized);
+      }
+      this.notifyError(networkError);
+      return undefined;
+    }
+
+    if (!response.ok) {
+      const errText = `Sync failed (${response.status})`;
+      for (const m of tenantMutations) {
+        await this.storage.updateMutationState(m.id, "RETRYABLE", errText);
+      }
+      throw new Error(errText);
+    }
+
+    const result = (await response.json()) as SyncResponse;
+    const sentIds = new Set(tenantMutations.map((mutation) => mutation.id));
+
+    // Acknowledge only accepted mutations
+    const acceptedSent = result.accepted.filter((id) => sentIds.has(id));
+    if (acceptedSent.length > 0) {
+      await this.storage.acknowledge(acceptedSent);
+    }
+
+    // Process rejected mutations without deleting them!
+    if (result.rejected && result.rejected.length > 0) {
+      for (const rej of result.rejected) {
+        if (!sentIds.has(rej.id)) continue;
+        const reasonLower = (rej.reason || "").toLowerCase();
+        let targetState: MutationState = "REJECTED";
+        if (
+          reasonLower.includes("conflict") ||
+          reasonLower.includes("mismatch") ||
+          reasonLower.includes("duplicate")
+        ) {
+          targetState = "CONFLICT";
+        } else if (
+          reasonLower.includes("rate_limit") ||
+          reasonLower.includes("timeout") ||
+          reasonLower.includes("busy") ||
+          reasonLower.includes("temporary")
+        ) {
+          targetState = "RETRYABLE";
+        }
+        await this.storage.updateMutationState(
+          rej.id,
+          targetState,
+          sanitizeSyncError(rej.reason)
+        );
+      }
+    }
+
     this.options.onResult?.(result);
     return result;
   }
+}
+
+export interface StorageProtectionCapabilities {
+  platform: "electron" | "android" | "browser" | "node";
+  isHardwareBacked: boolean;
+  isEncrypted: boolean;
+  encryptionAlgorithm: "DPAPI" | "AES-256-GCM-KEYSTORE" | "WEB-CRYPTO" | "NONE";
+  adapter: string;
+  warning?: string;
+}
+
+export interface SecureCredentialVault {
+  getCapabilities(): Promise<StorageProtectionCapabilities>;
+  protectCredential(plaintext: string): Promise<string>;
+  unprotectCredential(cipher: string): Promise<string>;
+}
+
+export function createSecureCredentialVault(options?: {
+  platform?: "electron" | "android" | "browser" | "node";
+  electronBridge?: {
+    getSecureCapabilities?: () => Promise<StorageProtectionCapabilities>;
+    protectSecret?: (text: string) => Promise<string>;
+    unprotectSecret?: (cipher: string) => Promise<string>;
+  };
+  androidBridge?: {
+    isAvailable?: () => Promise<boolean>;
+    encrypt?: (text: string) => Promise<string>;
+    decrypt?: (cipher: string) => Promise<string>;
+  };
+}): SecureCredentialVault {
+  const detectPlatform = (): "electron" | "android" | "browser" | "node" => {
+    if (options?.platform) return options.platform;
+    const globalObj = globalThis as {
+      pos?: { protectSecret?: unknown; getSecureCapabilities?: unknown };
+      Capacitor?: { getPlatform?: () => string; isNativePlatform?: () => boolean };
+      process?: { versions?: { electron?: string; node?: string } };
+    };
+    if (globalObj.pos?.protectSecret || globalObj.process?.versions?.electron) return "electron";
+    const cap = globalObj.Capacitor;
+    if (cap?.isNativePlatform?.() && cap?.getPlatform?.() === "android") return "android";
+    if (typeof window !== "undefined") return "browser";
+    return "node";
+  };
+
+  const currentPlatform = detectPlatform();
+
+  if (currentPlatform === "electron") {
+    const bridge = options?.electronBridge ?? (globalThis as { pos?: any }).pos;
+    return {
+      async getCapabilities(): Promise<StorageProtectionCapabilities> {
+        if (bridge?.getSecureCapabilities) {
+          return bridge.getSecureCapabilities();
+        }
+        return {
+          platform: "electron",
+          isHardwareBacked: true,
+          isEncrypted: true,
+          encryptionAlgorithm: "DPAPI",
+          adapter: "ELECTRON_SAFESTORAGE_DPAPI",
+        };
+      },
+      async protectCredential(plaintext: string): Promise<string> {
+        if (bridge?.protectSecret) {
+          return bridge.protectSecret(plaintext);
+        }
+        throw new Error("Electron DPAPI bridge unavailable");
+      },
+      async unprotectCredential(cipher: string): Promise<string> {
+        if (bridge?.unprotectSecret) {
+          return bridge.unprotectSecret(cipher);
+        }
+        throw new Error("Electron DPAPI bridge unavailable");
+      },
+    };
+  }
+
+  if (currentPlatform === "android") {
+    const bridge = options?.androidBridge;
+    return {
+      async getCapabilities(): Promise<StorageProtectionCapabilities> {
+        const available = bridge?.isAvailable ? await bridge.isAvailable() : false;
+        if (available) {
+          return {
+            platform: "android",
+            isHardwareBacked: true,
+            isEncrypted: true,
+            encryptionAlgorithm: "AES-256-GCM-KEYSTORE",
+            adapter: "ANDROID_KEYSTORE_HARDWARE",
+          };
+        }
+        return {
+          platform: "android",
+          isHardwareBacked: false,
+          isEncrypted: false,
+          encryptionAlgorithm: "NONE",
+          adapter: "ANDROID_PLAINTEXT_FALLBACK",
+          warning: "Native Keystore adapter not registered. Hardware encryption is not guaranteed.",
+        };
+      },
+      async protectCredential(plaintext: string): Promise<string> {
+        if (bridge?.encrypt) return bridge.encrypt(plaintext);
+        throw new Error("Android Keystore bridge not configured. Refusing to persist unencrypted credentials.");
+      },
+      async unprotectCredential(cipher: string): Promise<string> {
+        if (bridge?.decrypt) return bridge.decrypt(cipher);
+        throw new Error("Android Keystore bridge not configured.");
+      },
+    };
+  }
+
+  if (currentPlatform === "browser") {
+    return {
+      async getCapabilities(): Promise<StorageProtectionCapabilities> {
+        return {
+          platform: "browser",
+          isHardwareBacked: false,
+          isEncrypted: false,
+          encryptionAlgorithm: "NONE",
+          adapter: "BROWSER_UNPROTECTED_LOCAL_STORAGE",
+          warning: "Hardware-backed DPAPI/Keystore encryption not available in browser sandbox. Tokens must use short expiry and session memory.",
+        };
+      },
+      async protectCredential(_plaintext: string): Promise<string> {
+        throw new Error("Hardware-backed encryption unavailable in standard browser sandbox.");
+      },
+      async unprotectCredential(_cipher: string): Promise<string> {
+        throw new Error("Hardware-backed encryption unavailable in standard browser sandbox.");
+      },
+    };
+  }
+
+  return {
+    async getCapabilities(): Promise<StorageProtectionCapabilities> {
+      return {
+        platform: "node",
+        isHardwareBacked: false,
+        isEncrypted: false,
+        encryptionAlgorithm: "NONE",
+        adapter: "NODE_IN_MEMORY_UNPROTECTED",
+        warning: "Node environment without DPAPI/Keystore hardware backing.",
+      };
+    },
+    async protectCredential(_plaintext: string): Promise<string> {
+      throw new Error("Hardware-backed encryption unavailable in pure Node environment.");
+    },
+    async unprotectCredential(_cipher: string): Promise<string> {
+      throw new Error("Hardware-backed encryption unavailable in pure Node environment.");
+    },
+  };
 }
 
 export interface Printer { print(receipt: Uint8Array): Promise<void>; }
@@ -485,6 +1163,5 @@ export function formatKwanza(cents: number): string {
   }).format(cents / 100);
   return `${amount.replace(/[\s\u00a0]/g, ".")} Kz`;
 }
-
 
 export * from "./document-types.js";

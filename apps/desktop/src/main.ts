@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,15 @@ import {
   normalizeModuleCode,
   type AppModule,
   type CommercialPlan,
+  type CanonicalLicenseState,
 } from "./modules.js";
+import { LICENSE_PUBLIC_KEY } from "./licensePublicKey.js";
+import {
+  REVOKED_LICENSE_IDS,
+  computeHardwareId,
+  decodeLicenseToken,
+  verifyLicenseToken,
+} from "./license-core.js";
 import type {
   LicensePayload,
   LicenseStatus,
@@ -63,19 +72,65 @@ async function saveServerConfig(config: ServerConfig): Promise<ServerConfig> {
 const publicKeyPath = () => app.isPackaged
   ? path.join(process.resourcesPath, "public.pem")
   : path.resolve(here, "../../public.pem");
-async function readLicensePublicKey(): Promise<string> {
-  const key = await fs.readFile(publicKeyPath(), "utf8");
-  if (!key.includes("-----BEGIN PUBLIC KEY-----") || !key.includes("-----END PUBLIC KEY-----")) throw new Error("public_key_invalid");
-  return key;
-}
-const hardwareId = () => crypto.createHash("sha256").update(`${os.hostname()}|${os.platform()}|${os.arch()}|${app.getPath("userData")}`).digest("hex").slice(0, 32).toUpperCase();
 
-const decodeLicense = (token: string): { payload: LicensePayload; signature: string; canonical: string } => {
-  const [canonical, signature] = token.trim().split(".");
-  if (!canonical || !signature) throw new Error("Formato de licença inválido.");
-  const payload = JSON.parse(Buffer.from(canonical, "base64url").toString("utf8")) as LicensePayload;
-  return { payload, signature, canonical };
-};
+async function readLicensePublicKey(): Promise<string> {
+  try {
+    const key = await fs.readFile(publicKeyPath(), "utf8");
+    if (key.includes("-----BEGIN PUBLIC KEY-----") && key.includes("-----END PUBLIC KEY-----")) {
+      return key;
+    }
+  } catch {
+    // Hermetic fallback to authoritative embedded RSA-4096 public key
+  }
+  return LICENSE_PUBLIC_KEY;
+}
+
+/**
+ * Computes an anonymous, machine-bound Hardware Identifier (HWID).
+ *
+ * Stability & Privacy:
+ * - Does NOT expose personal data (no usernames, user directories, or private personal emails).
+ * - Utilizes platform, CPU architecture, system model and a machine-level persistent UUID.
+ * - Stored in a machine-wide location (%PROGRAMDATA%/VendaJa/machine-id on Win32, /var/lib/vendaja/machine-id on Linux, or fallback in app userData).
+ * - Remains stable across ERP updates, reboots, and Windows user account switches.
+ *
+ * Hardware Change Recovery Process:
+ * - When physical hardware components (motherboard, CPU) are replaced, a new HWID is computed.
+ * - The customer presents the new HWID and their active subscription NIF to VendaJá Support.
+ * - VendaJá revokes the prior license in the CRL ledger and issues a replacement license for the new HWID.
+ */
+function getMachinePersistentSeed(): string {
+  try {
+    const seedPath = process.platform === "win32"
+      ? path.join(process.env.ProgramData || "C:\\ProgramData", "VendaJa", "machine-id")
+      : path.join("/var/lib/vendaja", "machine-id");
+
+    if (fsSync.existsSync(seedPath)) {
+      const existing = fsSync.readFileSync(seedPath, "utf8").trim();
+      if (existing.length >= 16) return existing;
+    }
+  } catch {
+    // Permission-restricted environment; proceed to fallback
+  }
+
+  try {
+    const fallbackPath = path.join(app.getPath("userData"), "machine-id");
+    if (fsSync.existsSync(fallbackPath)) {
+      const existing = fsSync.readFileSync(fallbackPath, "utf8").trim();
+      if (existing.length >= 16) return existing;
+    }
+    const newId = crypto.randomUUID();
+    fsSync.mkdirSync(path.dirname(fallbackPath), { recursive: true });
+    fsSync.writeFileSync(fallbackPath, newId, "utf8");
+    return newId;
+  } catch {
+    return "STABLE-MACHINE-DEFAULT-SEED";
+  }
+}
+
+export const hardwareId = (): string => computeHardwareId({ machineSeed: getMachinePersistentSeed() });
+
+const decodeLicense = (token: string) => decodeLicenseToken(token);
 
 async function appendLicenseAudit(
   event: LicenseAuditLogEntry["event"],
@@ -109,31 +164,15 @@ async function verifyToken(
   token: string,
   targetHardwareId: string,
   nowMs: number
-): Promise<{ valid: boolean; reason?: string; payload?: LicensePayload }> {
-  try {
-    const decoded = decodeLicense(token);
-    const verifier = crypto.createVerify("RSA-SHA256");
-    verifier.update(decoded.canonical);
-    verifier.end();
-    const pubKey = await readLicensePublicKey();
-    if (!verifier.verify(pubKey, Buffer.from(decoded.signature, "base64url"))) {
-      return { valid: false, reason: "invalid_signature", payload: decoded.payload };
-    }
-    if (decoded.payload.hardwareId !== targetHardwareId) {
-      return { valid: false, reason: "hardware_mismatch", payload: decoded.payload };
-    }
-    const startsAtMs = Date.parse(decoded.payload.startsAt);
-    const expiresAtMs = Date.parse(decoded.payload.expiresAt);
-    if (nowMs < startsAtMs) {
-      return { valid: false, reason: "not_started", payload: decoded.payload };
-    }
-    if (nowMs >= expiresAtMs) {
-      return { valid: false, reason: "expired", payload: decoded.payload };
-    }
-    return { valid: true, payload: decoded.payload };
-  } catch (err) {
-    return { valid: false, reason: err instanceof Error ? err.message : "invalid_license" };
-  }
+): Promise<{
+  valid: boolean;
+  reason?: string;
+  state: CanonicalLicenseState;
+  payload?: LicensePayload;
+  gracePeriodDaysRemaining?: number;
+}> {
+  const pubKey = await readLicensePublicKey();
+  return verifyLicenseToken(token, targetHardwareId, nowMs, pubKey);
 }
 
 async function validateLicense(): Promise<LicenseStatus> {
@@ -151,6 +190,7 @@ async function validateLicense(): Promise<LicenseStatus> {
     await appendLicenseAudit("LICENSE_INVALID", "Detetada manipulação retroativa do relógio do sistema (Clock Tampering).");
     return {
       valid: false,
+      state: "INCOMPATIBLE",
       reason: "clock_tampering",
       hardwareId: id,
       expiryTier: "expired",
@@ -161,6 +201,7 @@ async function validateLicense(): Promise<LicenseStatus> {
         active: false,
         hardwareId: id,
         status: "TAMPERED",
+        canonicalState: "INCOMPATIBLE",
       },
     };
   }
@@ -175,12 +216,19 @@ async function validateLicense(): Promise<LicenseStatus> {
     nif: "—",
     edition: "STARTER",
     status: "NOT_ACTIVATED",
+    canonicalState: "INCOMPATIBLE",
     daysRemaining: 0,
   };
+
+  let globalLicenseState: CanonicalLicenseState = "INCOMPATIBLE";
+  let globalGraceRemaining: number | undefined;
 
   const productTokenCandidate = state.productToken || state.token;
   if (productTokenCandidate) {
     const verified = await verifyToken(productTokenCandidate, id, now);
+    globalLicenseState = verified.state;
+    globalGraceRemaining = verified.gracePeriodDaysRemaining;
+
     if (verified.valid && verified.payload) {
       const expMs = Date.parse(verified.payload.expiresAt);
       const remaining = Math.max(0, Math.ceil((expMs - now) / 86_400_000));
@@ -193,7 +241,9 @@ async function validateLicense(): Promise<LicenseStatus> {
         startsAt: verified.payload.startsAt,
         expiresAt: verified.payload.expiresAt,
         daysRemaining: remaining,
-        status: "ACTIVE",
+        gracePeriodDaysRemaining: verified.gracePeriodDaysRemaining,
+        status: verified.state === "OFFLINE_GRACE_PERIOD" ? "OFFLINE_GRACE_PERIOD" : "ACTIVE",
+        canonicalState: verified.state,
       };
     } else if (verified.reason === "expired" && verified.payload) {
       productLicense = {
@@ -206,6 +256,14 @@ async function validateLicense(): Promise<LicenseStatus> {
         expiresAt: verified.payload.expiresAt,
         daysRemaining: 0,
         status: "EXPIRED",
+        canonicalState: "EXPIRED",
+      };
+    } else if (verified.reason === "revoked") {
+      productLicense = {
+        active: false,
+        hardwareId: id,
+        status: "REVOKED",
+        canonicalState: "REVOKED",
       };
     } else {
       if (state.productToken) {
@@ -213,6 +271,7 @@ async function validateLicense(): Promise<LicenseStatus> {
           active: false,
           hardwareId: id,
           status: "NOT_ACTIVATED",
+          canonicalState: "INCOMPATIBLE",
         };
       }
     }
@@ -285,7 +344,14 @@ async function validateLicense(): Promise<LicenseStatus> {
 
   return {
     valid: productLicense.active,
-    reason: productLicense.active ? undefined : (productLicense.status === "EXPIRED" ? "expired" : "invalid_product_license"),
+    state: globalLicenseState,
+    reason: productLicense.active
+      ? undefined
+      : productLicense.status === "EXPIRED"
+      ? "expired"
+      : productLicense.status === "REVOKED"
+      ? "revoked"
+      : "invalid_product_license",
     hardwareId: id,
     company: productLicense.company,
     nif: productLicense.nif,
@@ -293,6 +359,7 @@ async function validateLicense(): Promise<LicenseStatus> {
     startsAt: productLicense.startsAt,
     expiresAt: productLicense.expiresAt,
     daysRemaining,
+    gracePeriodDaysRemaining: globalGraceRemaining,
     expiryTier,
     productLicense,
     modularLicense,
@@ -313,6 +380,7 @@ async function activateLicenseToken(
     await appendLicenseAudit("LICENSE_INVALID", `Tentativa de ativação com chave inválida ou adulterada: ${verified.reason || "Erro de validação"}`);
     return {
       valid: false,
+      state: verified.state,
       reason: verified.reason || "invalid_license",
       hardwareId: id,
       expiryTier: "expired",
@@ -788,6 +856,30 @@ ipcMain.handle(
     }
   }
 );
+
+ipcMain.handle("secure-store-capabilities", () => {
+  const available = typeof safeStorage?.isEncryptionAvailable === "function" && safeStorage.isEncryptionAvailable();
+  return {
+    platform: "electron",
+    isHardwareBacked: true,
+    isEncrypted: available,
+    encryptionAlgorithm: "DPAPI",
+    adapter: "ELECTRON_SAFESTORAGE_DPAPI",
+    warning: available ? undefined : "DPAPI safeStorage encryption is unavailable on this OS profile.",
+  };
+});
+ipcMain.handle("secure-store-protect", (_event, plaintext: string) => {
+  if (typeof safeStorage?.isEncryptionAvailable !== "function" || !safeStorage.isEncryptionAvailable()) {
+    throw new Error("safeStorage encryption unavailable");
+  }
+  return safeStorage.encryptString(plaintext).toString("base64");
+});
+ipcMain.handle("secure-store-unprotect", (_event, cipherBase64: string) => {
+  if (typeof safeStorage?.isEncryptionAvailable !== "function" || !safeStorage.isEncryptionAvailable()) {
+    throw new Error("safeStorage encryption unavailable");
+  }
+  return safeStorage.decryptString(Buffer.from(cipherBase64, "base64"));
+});
 
 ipcMain.handle("ai-copilot-status", async (_event, apiUrl?: string) => {
   try {

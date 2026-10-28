@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
 import { formatKwanza } from "@angola/shared";
 
+interface CustomerProfileFormState {
+  phone: string;
+  email: string;
+  address: string;
+  currentPin: string;
+  newPin: string;
+}
+
 interface Props {
   apiUrl: string;
 }
@@ -29,7 +37,7 @@ export function CustomerPortal({ apiUrl }: Props) {
   const [generatedRef, setGeneratedRef] = useState<any>(null);
   const [refDocId, setRefDocId] = useState("");
   const [refAmountKz, setRefAmountKz] = useState("");
-  const [profileForm, setProfileForm] = useState({ phone: "", email: "", address: "", currentPin: "", newPin: "" });
+  const [profileForm, setProfileForm] = useState<CustomerProfileFormState>({ phone: "", email: "", address: "", currentPin: "", newPin: "" });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -132,9 +140,11 @@ export function CustomerPortal({ apiUrl }: Props) {
         const data = await res.json();
         setDashboard(data);
         setProfileForm({
-          phone: data.phone || "",
-          email: data.email || "",
-          address: data.address || "",
+          phone: typeof data.phone === "string" ? data.phone : "",
+          email: typeof data.email === "string" ? data.email : "",
+          address: typeof data.address === "string" ? data.address : "",
+          currentPin: "",
+          newPin: "",
         });
       }
     } catch (e) {

@@ -32,6 +32,15 @@ licenca-*.key
 **/*private*.pem
 **/*.pem
 !public.pem
+Antonio
+Antonio.pub
+id_rsa*
+id_ed25519*
+
+# Android Release Keystore & Signing Properties
+keystore.properties
+**/keystore.properties
+android/keystore.properties
 
 # Licenças ativas locais
 apps/desktop/license.json
@@ -39,3 +48,4 @@ license.json
 *.key
 Linoy.key
 cliente*.key
+scratch/

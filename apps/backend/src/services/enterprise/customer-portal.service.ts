@@ -404,7 +404,9 @@ export class EnterpriseCustomerPortalService {
       }
 
       if (!paymentAmount && !isProduction) {
-        paymentAmount = 8_500_000_00;
+        const memDocs = this.inMemoryDocuments.get(customerId) || [];
+        const memDoc = memDocs.find((d: any) => d.id === documentId);
+        if (memDoc) paymentAmount = memDoc.totalCents;
       }
 
       if (!paymentAmount || paymentAmount <= 0) throw new Error("invalid_payment_amount");

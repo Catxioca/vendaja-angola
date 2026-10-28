@@ -71,6 +71,9 @@ aiCopilotRouter.get("/status", async (req: Request, res: Response): Promise<void
       version: "2.2.4",
       databaseConnected: dbConnected,
       modelsReady: true,
+      engineType: "DETERMINISTIC_RULES_AND_DW",
+      externalLlmProvider: "NONE",
+      disclaimer: "O VendaJá Copilot opera através de um motor de intenções determinístico e consultas analíticas no Data Warehouse local. Nenhum modelo generativo externo (OpenAI/Gemini/Claude) está configurado em produção.",
       supportedDomains: [
         "SALES",
         "FINANCE",

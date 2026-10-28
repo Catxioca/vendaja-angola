@@ -7,7 +7,8 @@ interface Props {
 
 export function MobileErpApp({ apiUrl }: Props) {
   const [platform, setPlatform] = useState<"android" | "ios">("android");
-  const [activeTab, setActiveTab] = useState<"cockpit" | "approvals" | "crm" | "push" | "offline">("cockpit");
+  const [formFactor, setFormFactor] = useState<"phone" | "tablet-portrait" | "tablet-landscape">("phone");
+  const [activeTab, setActiveTab] = useState<"cockpit" | "approvals" | "crm" | "pos-tablet" | "push" | "offline">("cockpit");
   const [isOnline, setIsOnline] = useState(true);
 
   // Data states
@@ -17,6 +18,18 @@ export function MobileErpApp({ apiUrl }: Props) {
   const [devices, setDevices] = useState<any[]>([]);
   const [offlineQueue, setOfflineQueue] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+
+  // Tablet POS Products & Cart State
+  const [posProducts] = useState<Array<{ id: string; name: string; sku: string; priceCents: number; category: string }>>([
+    { id: "prd-01", name: "Leite UHT Gira 1L", sku: "LEI-001", priceCents: 125000, category: "Alimentar" },
+    { id: "prd-02", name: "Arroz Agulha 5Kg", sku: "ARR-001", priceCents: 490000, category: "Alimentar" },
+    { id: "prd-03", name: "Óleo Alimentar 1L", sku: "OLE-001", priceCents: 215000, category: "Alimentar" },
+    { id: "prd-04", name: "Água Pura Chela 500ml", sku: "AGU-002", priceCents: 35000, category: "Bebidas" },
+    { id: "prd-05", name: "Cuca Branca 33cl", sku: "CER-001", priceCents: 45000, category: "Bebidas" },
+    { id: "prd-06", name: "Sumo Compal Laranja 1L", sku: "SUM-001", priceCents: 135000, category: "Bebidas" },
+  ]);
+  const [posCart, setPosCart] = useState<Array<{ id: string; name: string; priceCents: number; quantity: number }>>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
 
   // CRM Form state
   const [visitForm, setVisitForm] = useState({
@@ -36,10 +49,63 @@ export function MobileErpApp({ apiUrl }: Props) {
     appVersion: "2.2.2-rc.3",
   });
 
-  const authHeaders = () => ({
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}`,
-  });
+  const authHeaders = () => {
+    let token = "";
+    if (typeof localStorage !== "undefined") {
+      token = localStorage.getItem("accessToken") || "";
+    }
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
+  const addToCart = (product: { id: string; name: string; priceCents: number }) => {
+    setPosCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+  };
+
+  const updateCartQty = (id: string, delta: number) => {
+    setPosCart((prev) =>
+      prev
+        .map((item) => (item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item))
+        .filter((item) => item.quantity > 0)
+    );
+  };
+
+  const handlePosCheckout = () => {
+    if (posCart.length === 0) return;
+    const totalCents = posCart.reduce((sum, item) => sum + item.priceCents * item.quantity, 0);
+    const saleIdempotencyKey = `sale-mob-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+    const saleMutation = {
+      idempotencyKey: saleIdempotencyKey,
+      entity: "POS_SALE",
+      operation: "CREATE",
+      payload: {
+        totalCents,
+        lines: posCart.map((item) => ({ productId: item.id, name: item.name, quantity: item.quantity, priceCents: item.priceCents })),
+        occurredAt: new Date().toISOString(),
+        paymentMethod: "TPA_MULTICAIXA",
+      },
+      occurredAt: new Date().toISOString(),
+    };
+
+    if (!isOnline) {
+      setOfflineQueue((prev) => [...prev, saleMutation]);
+      setMessage(`Venda de ${formatKwanza(totalCents)} emitida em modo offline. Gravada na fila de sincronização.`);
+    } else {
+      setMessage(`Venda de ${formatKwanza(totalCents)} concluída com sucesso via TPA Multicaixa!`);
+    }
+
+    setPosCart([]);
+    setTimeout(() => setMessage(""), 4500);
+  };
 
   const loadData = async () => {
     try {
@@ -192,24 +258,25 @@ export function MobileErpApp({ apiUrl }: Props) {
 
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "20px", background: "#0b132b", minHeight: "85vh" }}>
-      {/* Phone Simulator Frame */}
+      {/* Device Frame (Adaptive Smartphone vs Tablet POS) */}
       <div
         style={{
           width: "100%",
-          maxWidth: "414px",
+          maxWidth: formFactor === "tablet-landscape" ? "1080px" : formFactor === "tablet-portrait" ? "768px" : "414px",
           background: "#fff",
-          borderRadius: platform === "ios" ? "42px" : "28px",
+          borderRadius: formFactor === "phone" ? (platform === "ios" ? "42px" : "28px") : "16px",
           overflow: "hidden",
           boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 10px #1e293b",
           display: "flex",
           flexDirection: "column",
-          minHeight: "750px",
+          minHeight: formFactor === "tablet-landscape" ? "680px" : "750px",
           position: "relative",
+          transition: "max-width 0.25s ease",
         }}
       >
-        {/* Phone Notch / Status Bar */}
+        {/* Notch / Status Bar */}
         <div style={{ background: "#0f172a", color: "#fff", padding: "10px 16px 6px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", fontWeight: "600" }}>
-          <span>09:41</span>
+          <span>09:41 · {formFactor === "tablet-landscape" ? "Tablet POS (Paisagem)" : formFactor === "tablet-portrait" ? "Tablet (Retrato)" : "Mobile (414px)"}</span>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <span style={{ background: isOnline ? "#10b981" : "#f59e0b", color: "#000", padding: "1px 6px", borderRadius: "10px", fontSize: "9px", fontWeight: "700" }}>
               {isOnline ? "ONLINE" : "OFFLINE"}
@@ -220,29 +287,55 @@ export function MobileErpApp({ apiUrl }: Props) {
         </div>
 
         {/* Simulator Controls Bar */}
-        <div style={{ background: "#1e293b", color: "#94a3b8", padding: "6px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px" }}>
-          <div>
-            Dispositivo:{" "}
+        <div style={{ background: "#1e293b", color: "#94a3b8", padding: "8px 14px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "8px", fontSize: "11px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            SO:
             <button
               onClick={() => setPlatform("android")}
-              style={{ background: platform === "android" ? "#3b82f6" : "transparent", color: "#fff", border: "none", padding: "2px 6px", borderRadius: "3px", cursor: "pointer", fontSize: "10px" }}
+              style={{ background: platform === "android" ? "#3b82f6" : "transparent", color: "#fff", border: "1px solid #475569", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}
+              aria-label="Plataforma Android"
             >
               Android
-            </button>{" "}
+            </button>
             <button
               onClick={() => setPlatform("ios")}
-              style={{ background: platform === "ios" ? "#3b82f6" : "transparent", color: "#fff", border: "none", padding: "2px 6px", borderRadius: "3px", cursor: "pointer", fontSize: "10px" }}
+              style={{ background: platform === "ios" ? "#3b82f6" : "transparent", color: "#fff", border: "1px solid #475569", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}
+              aria-label="Plataforma iOS"
             >
               iOS
             </button>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            Formato:
+            <button
+              onClick={() => setFormFactor("phone")}
+              style={{ background: formFactor === "phone" ? "#0284c7" : "transparent", color: "#fff", border: "1px solid #475569", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}
+              aria-label="Formato Smartphone"
+            >
+              📱 Phone
+            </button>
+            <button
+              onClick={() => setFormFactor("tablet-portrait")}
+              style={{ background: formFactor === "tablet-portrait" ? "#0284c7" : "transparent", color: "#fff", border: "1px solid #475569", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}
+              aria-label="Formato Tablet Retrato"
+            >
+              📋 Tablet Retrato
+            </button>
+            <button
+              onClick={() => { setFormFactor("tablet-landscape"); setActiveTab("pos-tablet"); }}
+              style={{ background: formFactor === "tablet-landscape" ? "#0284c7" : "transparent", color: "#fff", border: "1px solid #475569", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}
+              aria-label="Formato Tablet POS Paisagem"
+            >
+              📟 Tablet POS (Paisagem)
+            </button>
+          </div>
           <div>
-            Rede:{" "}
             <button
               onClick={() => setIsOnline(!isOnline)}
-              style={{ background: isOnline ? "#059669" : "#dc2626", color: "#fff", border: "none", padding: "2px 6px", borderRadius: "3px", cursor: "pointer", fontSize: "10px" }}
+              style={{ background: isOnline ? "#059669" : "#dc2626", color: "#fff", border: "none", padding: "4px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "11px", fontWeight: 600 }}
+              aria-label="Alternar estado de rede"
             >
-              {isOnline ? "Simular Offline" : "Restabelecer Net"}
+              {isOnline ? "Simular Queda de Rede" : "Restabelecer Ligação"}
             </button>
           </div>
         </div>
@@ -461,6 +554,159 @@ export function MobileErpApp({ apiUrl }: Props) {
             </div>
           )}
 
+          {/* TAB: POS TABLET (Touch-First & Accessible) */}
+          {activeTab === "pos-tablet" && (
+            <div role="region" aria-label="Módulo POS Tablet">
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>Terminal de Venda Rápida (Tablet POS)</h4>
+                  <small style={{ color: "#64748b" }}>Interface touch com botões ampliados (mín. 44x44px) e acessibilidade WCAG</small>
+                </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {["ALL", "Alimentar", "Bebidas"].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      style={{
+                        padding: "6px 12px",
+                        minHeight: "44px",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1",
+                        background: selectedCategory === cat ? "#0284c7" : "#fff",
+                        color: selectedCategory === cat ? "#fff" : "#334155",
+                        fontWeight: 600,
+                        fontSize: "12px",
+                        cursor: "pointer",
+                      }}
+                      aria-label={`Filtrar categoria ${cat}`}
+                    >
+                      {cat === "ALL" ? "Todos os Produtos" : cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Responsive Split Layout */}
+              <div style={{ display: "grid", gridTemplateColumns: formFactor === "tablet-landscape" ? "1.4fr 1fr" : "1fr", gap: "12px" }}>
+                {/* Product Catalog Grid */}
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: formFactor === "tablet-landscape" ? "repeat(3, 1fr)" : "repeat(2, 1fr)", gap: "10px" }}>
+                    {posProducts
+                      .filter((p) => selectedCategory === "ALL" || p.category === selectedCategory)
+                      .map((product) => (
+                        <button
+                          key={product.id}
+                          onClick={() => addToCart(product)}
+                          style={{
+                            background: "#fff",
+                            border: "2px solid #e2e8f0",
+                            borderRadius: "8px",
+                            padding: "12px",
+                            minHeight: "84px",
+                            display: "flex",
+                            flexDirection: "column",
+                            justifyContent: "space-between",
+                            textAlign: "left",
+                            cursor: "pointer",
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                          }}
+                          aria-label={`Adicionar ${product.name} ao carrinho por ${formatKwanza(product.priceCents)}`}
+                        >
+                          <div>
+                            <span style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", fontWeight: 700 }}>{product.sku}</span>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", marginTop: "2px" }}>{product.name}</div>
+                          </div>
+                          <div style={{ fontSize: "14px", fontWeight: 800, color: "#0284c7", marginTop: "6px" }}>
+                            {formatKwanza(product.priceCents)}
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Cart & Ticket Section */}
+                <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", display: "flex", flexDirection: "column", minHeight: "320px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px", marginBottom: "8px" }}>
+                    <strong style={{ fontSize: "13px", color: "#0f172a" }}>Talão Atual ({posCart.reduce((s, i) => s + i.quantity, 0)} itens)</strong>
+                    {posCart.length > 0 && (
+                      <button
+                        onClick={() => setPosCart([])}
+                        style={{ border: "none", background: "transparent", color: "#dc2626", fontSize: "11px", cursor: "pointer", fontWeight: 600 }}
+                        aria-label="Limpar talão atual"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {posCart.length === 0 ? (
+                      <div style={{ textAlign: "center", color: "#94a3b8", padding: "30px 0", fontSize: "12px" }}>
+                        Talão vazio. Toque nos produtos para registar itens.
+                      </div>
+                    ) : (
+                      posCart.map((item) => (
+                        <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed #f1f5f9" }}>
+                          <div style={{ flex: 1, paddingRight: "8px" }}>
+                            <div style={{ fontSize: "12px", fontWeight: 600, color: "#1e293b" }}>{item.name}</div>
+                            <small style={{ color: "#64748b" }}>{formatKwanza(item.priceCents)} un.</small>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <button
+                              onClick={() => updateCartQty(item.id, -1)}
+                              style={{ width: "44px", height: "44px", minWidth: "44px", minHeight: "44px", background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "18px", fontWeight: 700, cursor: "pointer" }}
+                              aria-label={`Diminuir quantidade de ${item.name}`}
+                            >
+                              -
+                            </button>
+                            <span style={{ minWidth: "22px", textAlign: "center", fontWeight: 700, fontSize: "13px" }}>{item.quantity}</span>
+                            <button
+                              onClick={() => updateCartQty(item.id, 1)}
+                              style={{ width: "44px", height: "44px", minWidth: "44px", minHeight: "44px", background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "18px", fontWeight: 700, cursor: "pointer" }}
+                              aria-label={`Aumentar quantidade de ${item.name}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Summary & Checkout */}
+                  <div style={{ borderTop: "2px solid #e2e8f0", paddingTop: "10px", marginTop: "10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", fontWeight: 800, marginBottom: "10px" }}>
+                      <span>Total a Cobrar:</span>
+                      <span style={{ color: "#047857" }}>
+                        {formatKwanza(posCart.reduce((sum, item) => sum + item.priceCents * item.quantity, 0))}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={handlePosCheckout}
+                      disabled={posCart.length === 0}
+                      style={{
+                        width: "100%",
+                        minHeight: "48px",
+                        background: posCart.length > 0 ? "#059669" : "#94a3b8",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        cursor: posCart.length > 0 ? "pointer" : "not-allowed",
+                        boxShadow: posCart.length > 0 ? "0 4px 6px -1px rgba(5, 150, 105, 0.4)" : "none",
+                      }}
+                      aria-label="Cobrar talão via TPA Multicaixa"
+                    >
+                      💳 Cobrar TPA Multicaixa ({formatKwanza(posCart.reduce((sum, item) => sum + item.priceCents * item.quantity, 0))})
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 4: PUSH NOTIFICATIONS */}
           {activeTab === "push" && (
             <div>
@@ -547,9 +793,10 @@ export function MobileErpApp({ apiUrl }: Props) {
         </div>
 
         {/* Bottom Mobile Tab Bar */}
-        <nav style={{ background: "#fff", borderTop: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "repeat(5, 1fr)", padding: "6px 0" }}>
+        <nav style={{ background: "#fff", borderTop: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "repeat(6, 1fr)", padding: "6px 0" }}>
           {[
             { key: "cockpit", label: "Cockpit", icon: "📊" },
+            { key: "pos-tablet", label: "POS", icon: "📟" },
             { key: "approvals", label: "Aprovações", icon: "✓" },
             { key: "crm", label: "CRM", icon: "📍" },
             { key: "push", label: "Alertas", icon: "🔔" },

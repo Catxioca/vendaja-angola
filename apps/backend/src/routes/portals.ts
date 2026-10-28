@@ -17,11 +17,16 @@ export const portalsRouter = Router();
 
 function resolveCompanyId(req: Request): string | undefined {
   const auth = req as AuthRequest;
+  if (auth.context?.companyId) {
+    return auth.context.companyId;
+  }
   const headerVal = req.header ? req.header("x-company-id") : (req.headers && req.headers["x-company-id"]);
-  return (
-    auth.context?.companyId ??
-    (typeof headerVal === "string" ? headerVal : undefined)
-  );
+  const candidate = typeof headerVal === "string" && headerVal.trim() ? headerVal.trim() : undefined;
+  // If user is authenticated, do not allow arbitrary header spoofing without membership context
+  if (auth.user?.id && candidate && auth.context?.companyId !== candidate) {
+    return undefined;
+  }
+  return candidate;
 }
 
 function getParam(req: Request, paramName: string): string {
@@ -416,7 +421,7 @@ portalsRouter.post("/auth/recover-access", async (req: Request, res: Response) =
       where: { OR: [{ email: { equals: cleanId, mode: "insensitive" } }, { nif: cleanId }] },
     });
     if (supplier) {
-      res.json({ success: true, message: `Código de acesso verificado para o fornecedor ${supplier.name}: ${supplier.code || "VND-SUPP-ATENDIMENTO"}.` });
+      res.json({ success: true, message: `Instruções de recuperação e código de acesso foram despachados para o contacto oficial do fornecedor ${supplier.name}.` });
       return;
     }
 
@@ -833,7 +838,11 @@ const hrPortalGuard = [requireAuth, requirePortalRole("ROLE_ADMIN", "ROLE_HR")];
 
 portalsRouter.get("/hr/dashboard", ...hrPortalGuard, async (req: Request, res: Response) => {
   const companyId = resolveCompanyId(req);
-  const whereCompany = companyId ? { companyId } : {};
+  if (!companyId) {
+    res.status(403).json({ error: "company_context_required", message: "Contexto empresarial obrigatório para aceder ao Portal de RH." });
+    return;
+  }
+  const whereCompany = { companyId };
 
   try {
     const [employeeCount, activeEmployees] = await Promise.all([
@@ -861,9 +870,13 @@ portalsRouter.get("/hr/dashboard", ...hrPortalGuard, async (req: Request, res: R
 
 portalsRouter.get("/hr/employees", ...hrPortalGuard, async (req: Request, res: Response) => {
   const companyId = resolveCompanyId(req);
+  if (!companyId) {
+    res.status(403).json({ error: "company_context_required", message: "Contexto empresarial obrigatório para consultar colaboradores." });
+    return;
+  }
   try {
     const list = await prisma.employee.findMany({
-      where: companyId ? { companyId } : {},
+      where: { companyId },
       select: {
         id: true,
         fullName: true,
@@ -890,7 +903,11 @@ const commercialPortalGuard = [requireAuth, requirePortalRole("ROLE_ADMIN", "ROL
 
 portalsRouter.get("/commercial/dashboard", ...commercialPortalGuard, async (req: Request, res: Response) => {
   const companyId = resolveCompanyId(req);
-  const whereCompany = companyId ? { companyId } : {};
+  if (!companyId) {
+    res.status(403).json({ error: "company_context_required", message: "Contexto empresarial obrigatório para o Portal Comercial." });
+    return;
+  }
+  const whereCompany = { companyId };
 
   try {
     const [todaySales, customersCount, salesCount] = await Promise.all([
@@ -920,9 +937,13 @@ portalsRouter.get("/commercial/dashboard", ...commercialPortalGuard, async (req:
 
 portalsRouter.get("/commercial/customers", ...commercialPortalGuard, async (req: Request, res: Response) => {
   const companyId = resolveCompanyId(req);
+  if (!companyId) {
+    res.status(403).json({ error: "company_context_required", message: "Contexto empresarial obrigatório para consultar clientes comerciais." });
+    return;
+  }
   try {
     const customers = await prisma.customer.findMany({
-      where: companyId ? { companyId } : {},
+      where: { companyId },
       select: {
         id: true,
         name: true,

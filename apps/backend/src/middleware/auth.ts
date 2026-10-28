@@ -94,17 +94,30 @@ export const requireLicensedModule = (moduleName: string): RequestHandler => asy
   }
   const ctx = (req as AuthRequest).context;
   const companyId = ctx?.companyId || req.header("x-company-id");
-  if (!companyId) {
+  const licenseHeader = req.header("x-license-token");
+
+  if (!companyId && !licenseHeader) {
     next();
     return;
   }
+
   try {
-    const { prisma } = await import("../db.js");
-    const config = await prisma.fiscalConfig.findUnique({
-      where: { companyId },
-      select: { licenseEncrypted: true },
-    });
-    if (!config?.licenseEncrypted) {
+    let rawToken: string | null = null;
+    if (licenseHeader) {
+      rawToken = licenseHeader;
+    } else if (companyId) {
+      const { prisma } = await import("../db.js");
+      const config = await prisma.fiscalConfig.findUnique({
+        where: { companyId },
+        select: { licenseEncrypted: true },
+      });
+      if (config?.licenseEncrypted) {
+        const { decryptFiscalSecret } = await import("../services/fiscal.js");
+        rawToken = decryptFiscalSecret(config.licenseEncrypted);
+      }
+    }
+
+    if (!rawToken) {
       res.status(403).json({
         error: "license_required",
         module: moduleName,
@@ -112,8 +125,7 @@ export const requireLicensedModule = (moduleName: string): RequestHandler => asy
       });
       return;
     }
-    const { decryptFiscalSecret } = await import("../services/fiscal.js");
-    const rawToken = decryptFiscalSecret(config.licenseEncrypted);
+
     const { EnterpriseLicensingService } = await import("../services/enterprise/licensing.service.js");
     const verified = await EnterpriseLicensingService.validateToken(rawToken);
     if (!verified.valid || !verified.modules || !EnterpriseLicensingService.isModuleAllowed(moduleName, verified.modules)) {
@@ -121,6 +133,7 @@ export const requireLicensedModule = (moduleName: string): RequestHandler => asy
         error: "module_unlicensed",
         module: moduleName,
         reason: verified.reason,
+        state: verified.state,
         message: `O módulo '${moduleName}' não está autorizado na licença digital ativa da empresa.`,
       });
       return;

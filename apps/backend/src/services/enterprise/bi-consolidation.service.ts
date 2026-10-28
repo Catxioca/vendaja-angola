@@ -206,14 +206,14 @@ export class BiConsolidationService {
             if (sampleElimAmount > 0) {
               eliminations.push({
                 sourceCompanyId: source.id,
-                sourceCompanyName: source.name,
+                sourceCompanyName: source.name || source.legalName || "Empresa Origem",
                 targetCompanyId: target.id,
-                targetCompanyName: target.name,
+                targetCompanyName: target.name || target.legalName || "Empresa Destino",
                 transactionType: "SALES_PURCHASE",
                 originalAmountCents: sampleElimAmount,
                 eliminatedRevenueCents: sampleElimAmount,
                 eliminatedCostCents: Math.round(sampleElimAmount * 0.82), // cost side elimination
-                description: `Eliminação de faturas intercompanhia entre ${source.name} e ${target.name}`,
+                description: `Eliminação de faturas intercompanhia entre ${source.name || source.legalName} e ${target.name || target.legalName}`,
               });
               totalEliminatedRevenueCents += sampleElimAmount;
               totalEliminatedCostCents += Math.round(sampleElimAmount * 0.82);
@@ -291,8 +291,8 @@ export class BiConsolidationService {
 
       return {
         companyId: rc.company.id,
-        companyName: rc.company.name,
-        taxNumber: rc.company.taxNumber || "5419082341",
+        companyName: rc.company.name || rc.company.legalName || "VendaJá Angola",
+        taxNumber: rc.company.taxNumber || rc.company.nif || "5419082341",
         currency: rc.company.currency || "AOA",
         exchangeRateToGroup: factor,
         revenueCents: rc.financialKpis.totalRevenueCents,

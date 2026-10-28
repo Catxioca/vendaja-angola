@@ -510,18 +510,28 @@ export class EnterpriseMobileErpService {
       // In test mode or offline without live DB
     }
 
-    if (!products.length && process.env.NODE_ENV !== "production") {
-      products = [
+    if (products.length < 3 && process.env.NODE_ENV !== "production") {
+      const defaults = [
         { id: "p-01", name: "Arroz Agulha Extra 25Kg", priceCents: 24_500_00, stock: 450 },
         { id: "p-02", name: "Óleo Alimentar 5L", priceCents: 12_800_00, stock: 280 },
         { id: "p-03", name: "Farinha de Trigo Especial 50Kg", priceCents: 32_000_00, stock: 110 },
       ];
+      for (const d of defaults) {
+        if (!products.some((p) => p.name === d.name || p.id === d.id)) {
+          products.push(d);
+        }
+      }
     }
-    if (!customers.length && process.env.NODE_ENV !== "production") {
-      customers = [
+    if (customers.length < 2 && process.env.NODE_ENV !== "production") {
+      const defaults = [
         { id: "cust-01", name: "Supermercado Kero Talatona", nif: "5401882233", phone: "+244 923 111 000" },
         { id: "cust-02", name: "Hipermercado Candando Viana", nif: "5402993344", phone: "+244 923 222 000" },
       ];
+      for (const d of defaults) {
+        if (!customers.some((c) => c.nif === d.nif || c.id === d.id)) {
+          customers.push(d);
+        }
+      }
     }
 
     return {

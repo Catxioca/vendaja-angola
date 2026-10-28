@@ -2,12 +2,10 @@ import test, { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import qrcode from "qrcode";
-import { QRCodeReader, RGBLuminanceSource, BinaryBitmap, HybridBinarizer } from "@zxing/library";
+import * as ZXing from "@zxing/library";
 
-process.env.NODE_ENV = "test";
-process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
-process.env.JWT_SECRET = crypto.randomBytes(32).toString("base64url");
-process.env.FISCAL_CONFIG_KEY = crypto.randomBytes(32).toString("base64url");
+const { QRCodeReader, RGBLuminanceSource, BinaryBitmap, HybridBinarizer } =
+  ((ZXing as any).default && (ZXing as any).default.QRCodeReader ? (ZXing as any).default : ZXing) as typeof ZXing;
 
 import {
   calculateFiscalDocument,

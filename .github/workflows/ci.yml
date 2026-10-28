@@ -81,10 +81,7 @@ jobs:
         run: npm run db:upgrade:rollback:smoke
       - run: npm --workspace @angola/backend run test:integration
       - run: npm run typecheck
-      - name: Run unit tests
-        env:
-          DATABASE_URL: ''
-        run: npm test
+      - run: npm test
       - run: npm run build:web
       - run: npm --workspace @angola/backend run build
       - run: npm run build:desktop

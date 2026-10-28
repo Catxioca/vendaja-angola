@@ -230,7 +230,16 @@ NEWFILEUID:NONE
     });
 
     test("executes atomic internal transfer between accounts via PGCA Conta 45 (Valores em Trânsito)", async () => {
-      const accounts = await TreasuryService.listAccounts();
+      let accounts = await TreasuryService.listAccounts();
+      if (accounts.length < 2) {
+        await TreasuryService.createAccount({
+          name: "Caixa Geral de Luanda",
+          type: "CASH",
+          currency: "AOA",
+          openingBalanceCents: 10_000_000_00,
+        });
+        accounts = await TreasuryService.listAccounts();
+      }
       const fromAcc = accounts[0]!;
       const toAcc = accounts[1]!;
 

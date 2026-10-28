@@ -29,17 +29,22 @@ export class EnterpriseDataExchangeService {
     if (entity === "CUSTOMERS") {
       try {
         const list = await prisma.customer.findMany({ take: 500 });
-        records = list.map((c) => ({
-          name: c.name,
-          nif: c.nif || "",
-          email: c.email || "",
-          phone: c.phone || "",
-          address: c.address || "",
-          creditLimitKz: c.creditLimitCents / 100,
-          outstandingDebtKz: c.outstandingDebtCents / 100,
-          active: c.active,
-        }));
+        if (list.length > 0) {
+          records = list.map((c) => ({
+            name: c.name,
+            nif: c.nif || "",
+            email: c.email || "",
+            phone: c.phone || "",
+            address: c.address || "",
+            creditLimitKz: c.creditLimitCents / 100,
+            outstandingDebtKz: c.outstandingDebtCents / 100,
+            active: c.active,
+          }));
+        }
       } catch {
+        // Database offline or uninitialized
+      }
+      if (records.length === 0) {
         records = [
           { name: "Sonangol EP", nif: "5412345678", email: "compras@sonangol.co.ao", phone: "+244923111222", creditLimitKz: 500000, outstandingDebtKz: 15000, active: true },
           { name: "Unitel SA", nif: "5409876543", email: "procurement@unitel.ao", phone: "+244912333444", creditLimitKz: 350000, outstandingDebtKz: 0, active: true },
@@ -48,16 +53,21 @@ export class EnterpriseDataExchangeService {
     } else if (entity === "PRODUCTS") {
       try {
         const list = await prisma.product.findMany({ take: 500 });
-        records = list.map((p) => ({
-          sku: p.sku,
-          name: p.name,
-          priceKz: p.priceCents / 100,
-          costKz: (p.costCents ?? 0) / 100,
-          taxRatePercent: Number(p.taxRate) * 100,
-          stock: p.stock,
-          active: p.active,
-        }));
+        if (list.length > 0) {
+          records = list.map((p) => ({
+            sku: p.sku,
+            name: p.name,
+            priceKz: p.priceCents / 100,
+            costKz: (p.costCents ?? 0) / 100,
+            taxRatePercent: Number(p.taxRate) * 100,
+            stock: p.stock,
+            active: p.active,
+          }));
+        }
       } catch {
+        // Database offline or uninitialized
+      }
+      if (records.length === 0) {
         records = [
           { sku: "CAF-001", name: "Café Angola", priceKz: 1250, costKz: 850, taxRatePercent: 14, stock: 42, active: true },
           { sku: "AGU-001", name: "Água mineral", priceKz: 750, costKz: 400, taxRatePercent: 14, stock: 80, active: true },

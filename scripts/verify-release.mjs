@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 const require = createRequire(import.meta.url);
 const { extractFile, listPackage } = require("@electron/asar");
 const root = process.cwd();
-const expectedVersion = "2.2.2-rc.3";
+const expectedVersion = "3.2.1-rc.4";
 const releaseDir = resolve(root, "release");
 if (!existsSync(releaseDir)) throw new Error("Diretório release não encontrado.");
 

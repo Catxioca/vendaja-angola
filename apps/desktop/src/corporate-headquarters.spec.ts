@@ -162,7 +162,7 @@ test("LiveUpdateEngine: Asymmetric RSA-SHA256 digital signature and signed manif
   const signatureBase64 = signer.sign(privateKey, "base64");
 
   engine.configure({
-    appVersion: "2.2.2-rc.3",
+    appVersion: "3.2.1-rc.4",
     updateChannel: "stable",
   });
 

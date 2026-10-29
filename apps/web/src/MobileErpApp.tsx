@@ -46,7 +46,7 @@ export function MobileErpApp({ apiUrl }: Props) {
     deviceId: "android-pixel-9-uuid-001",
     pushToken: "fcm-token-live-mobile-2026",
     model: "Google Pixel 9 Pro",
-    appVersion: "2.2.2-rc.3",
+    appVersion: "3.2.1-rc.4",
   });
 
   const authHeaders = () => {

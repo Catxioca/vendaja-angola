@@ -79,7 +79,7 @@ export class LiveUpdateEngine {
   private branchCode: string = "";
   private branchName: string = "";
   private isHeadquarters: boolean = false;
-  private appVersion: string = "2.2.2-rc.3";
+  private appVersion: string = "3.2.1-rc.4";
   private hardwareId: string = "";
   private terminalId: string = "";
 

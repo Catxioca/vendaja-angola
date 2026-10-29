@@ -1,4 +1,4 @@
-# VendaJá Angola 2.2.2-rc.3
+# VendaJá Angola 3.2.1-rc.4
 
 Release candidate com reforço da operação multiempresa, sequências fiscais e
 preparação de builds Desktop/PWA para validação controlada.

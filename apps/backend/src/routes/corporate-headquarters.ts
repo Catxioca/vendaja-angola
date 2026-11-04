@@ -4,18 +4,15 @@ import {
   type CorporateRole,
   type PatchCategory,
 } from "../services/enterprise/corporate-headquarters.service.js";
-import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireRole, type AuthRequest } from "../middleware/auth.js";
 
 export const corporateHeadquartersRouter = Router();
 
-// Protect all Corporate Headquarters routes with authentication
-corporateHeadquartersRouter.use(requireAuth);
+// Protect all Corporate Headquarters routes with authentication and verified company context
+corporateHeadquartersRouter.use(requireAuth, requireCompanyContext);
 
 function getCompanyId(req: Request): string {
-  const auth = req as AuthRequest;
-  const headerVal = req.header ? req.header("x-company-id") : (req.headers && (req.headers["x-company-id"] as string));
-  const resolved = auth.context?.companyId || (typeof headerVal === "string" && headerVal.trim() ? headerVal.trim() : undefined) || "default-company-angola";
-  return resolved;
+  return companyContext(req).companyId;
 }
 
 function getActorName(req: Request): string {
@@ -31,7 +28,7 @@ function getActorName(req: Request): string {
  * GET /api/v1/corporate/cockpit
  * Consolidated real-time multi-store headquarters cockpit
  */
-corporateHeadquartersRouter.get("/cockpit", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.get("/cockpit", requireRole("ADMIN", "MANAGER"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const cockpit = await EnterpriseCorporateHeadquartersService.getHeadquartersCockpit(companyId);

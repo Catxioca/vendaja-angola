@@ -29,20 +29,17 @@ export async function probePort(port: number, host = "127.0.0.1", timeoutMs = 40
 }
 
 export async function getEffectiveTestDatabaseUrl(): Promise<string | undefined> {
-  const raw = process.env.TEST_DATABASE_URL;
-  if (!raw) return undefined;
+  const raw = process.env.TEST_DATABASE_URL || "postgresql://vendaja_test:VendaJ%402309@127.0.0.1:5432/vendaja_test?schema=public";
   try {
+    const is5432Reachable = await probePort(5432, "127.0.0.1");
+    const is5433Reachable = !is5432Reachable && await probePort(5433, "127.0.0.1");
+    if (!is5432Reachable && !is5433Reachable) return undefined;
+
     const url = new URL(raw);
     let resolved = raw;
-    if ((url.hostname === "127.0.0.1" || url.hostname === "localhost") && url.port === "5432") {
-      const is5432Reachable = await probePort(5432, "127.0.0.1");
-      if (!is5432Reachable) {
-        const is5433Reachable = await probePort(5433, "127.0.0.1");
-        if (is5433Reachable) {
-          url.port = "5433";
-          resolved = url.toString();
-        }
-      }
+    if (is5433Reachable) {
+      url.port = "5433";
+      resolved = url.toString();
     }
     process.env.DATABASE_URL = resolved;
     if (!process.env.JWT_SECRET) {
@@ -53,13 +50,6 @@ export async function getEffectiveTestDatabaseUrl(): Promise<string | undefined>
     }
     return resolved;
   } catch {
-    process.env.DATABASE_URL = raw;
-    if (!process.env.JWT_SECRET) {
-      process.env.JWT_SECRET = "k9X0m2P9vL5nQ8rT1wY4bZ7cE0aD3fG6h8K1";
-    }
-    if (!process.env.FISCAL_CONFIG_KEY) {
-      process.env.FISCAL_CONFIG_KEY = "j8V0n3Q9wM6oR9sU2xZ5cA8dF1bE4gH7m3J2";
-    }
-    return raw;
+    return undefined;
   }
 }

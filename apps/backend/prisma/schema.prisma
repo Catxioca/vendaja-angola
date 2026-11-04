@@ -144,6 +144,7 @@ model Company {
   bankAccounts         BankAccount[]
   paymentTerminals     PaymentTerminal[]
   auditLogs            AuditLog[]
+  fiscalYearClosingConfigs FiscalYearClosingConfig[]
   // Claimed once by the public bootstrap flow. This prevents a race from
   // creating two first administrators for the same tenant.
   bootstrapAdminUserId String?             @unique
@@ -964,17 +965,33 @@ model Payroll {
 
 model Account {
   id             String         @id @default(uuid())
-  code           String         @unique
+  companyId      String?
+  code           String
   name           String
+  description    String?
   type           String
+  accountType    String         @default("MOVEMENT")
   category       String?
   parentCode     String?
+  parentId       String?
+  parent         Account?       @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children       Account[]      @relation("AccountHierarchy")
+  normalBalance  String         @default("DEBIT")
+  isActive       Boolean        @default(true)
+  sortOrder      Int            @default(0)
+  chartVersion   String         @default("default")
   createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @default(now()) @updatedAt
   debitEntries   JournalEntry[] @relation("DebitAccount")
   creditEntries  JournalEntry[] @relation("CreditAccount")
   journalLines   JournalLine[]
   outputTaxRules TaxRule[]      @relation("TaxOutputAccount")
   inputTaxRules  TaxRule[]      @relation("TaxInputAccount")
+  closingConfigs FiscalYearClosingConfig[] @relation("ClosingConfigRetainedEarnings")
+
+  @@unique([companyId, code])
+  @@index([companyId, accountType, isActive])
+  @@index([companyId, parentId])
 }
 
 model JournalEntry {
@@ -1014,27 +1031,110 @@ model Journal {
   periodId       String?
   period         AccountingPeriod? @relation(fields: [periodId], references: [id])
   lines          JournalLine[]
+  journalCode    String?
+  sequenceNumber Int?
+  fiscalYear     Int?
+  reversalOfId   String?
+  correlationId  String?
+  reason         String?
 
   @@unique([companyId, sourceType, sourceId])
   @@index([entryDate])
   @@index([periodId])
+  @@index([companyId, journalCode, fiscalYear])
 }
 
 model AccountingPeriod {
-  id        String    @id @default(uuid())
-  companyId String?
-  branchId  String?
-  name      String
-  startsAt  DateTime
-  endsAt    DateTime
-  status    String    @default("OPEN")
-  closedAt  DateTime?
-  closedBy  String?
-  journals  Journal[]
-  createdAt DateTime  @default(now())
+  id              String    @id @default(uuid())
+  companyId       String?
+  branchId        String?
+  name            String
+  startsAt        DateTime
+  endsAt          DateTime
+  status          String    @default("OPEN")
+  closedAt        DateTime?
+  closedBy        String?
+  closingReason   String?
+  reopenedAt      DateTime?
+  reopenedBy      String?
+  reopeningReason String?
+  journals        Journal[]
+  createdAt       DateTime  @default(now())
 
   @@unique([companyId, startsAt, endsAt])
   @@index([status, startsAt, endsAt])
+}
+
+model AccountingJournal {
+  id          String   @id @default(uuid())
+  companyId   String
+  branchId    String?
+  code        String
+  name        String
+  type        String
+  status      String   @default("OPEN")
+  currentSeq  Int      @default(0)
+  fiscalYear  Int
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  createdBy   String?
+  closingConfigs FiscalYearClosingConfig[] @relation("ClosingConfigJournal")
+
+  @@unique([companyId, code, fiscalYear])
+  @@index([companyId, type, status])
+  @@index([companyId, fiscalYear])
+}
+
+model FiscalYearClosingConfig {
+  id                        String              @id @default(uuid())
+  companyId                 String
+  retainedEarningsAccountId String
+  closingJournalId          String
+  sourceAccountTypes        String              @default("REVENUE,EXPENSE")
+  sourceCategoryFilter      String?
+  policyType                String              @default("INTERNAL_POLICY")
+  source                    String              @default("MANUAL_CONTABILISTICO")
+  version                   String              @default("v1")
+  effectiveFrom             DateTime?
+  effectiveTo               DateTime?
+  responsibleParty          String
+  approvalDate              DateTime            @default(now())
+  status                    String              @default("ACTIVE")
+  notes                     String?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @default(now()) @updatedAt
+  company                   Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  retainedEarningsAccount   Account             @relation("ClosingConfigRetainedEarnings", fields: [retainedEarningsAccountId], references: [id])
+  closingJournal            AccountingJournal   @relation("ClosingConfigJournal", fields: [closingJournalId], references: [id])
+  closings                  FiscalYearClosing[]
+
+  @@unique([companyId, version])
+  @@index([companyId, status])
+}
+
+model FiscalYearClosing {
+  id                          String                   @id @default(uuid())
+  companyId                   String
+  fiscalYear                  Int
+  status                      String                   @default("CLOSED")
+  configId                    String?
+  closingConfig               FiscalYearClosingConfig? @relation(fields: [configId], references: [id])
+  closingJournalId            String?
+  retainedEarningsAccountId   String?
+  closedAt                    DateTime                 @default(now())
+  closedBy                    String
+  closingReason               String
+  reopenedAt                  DateTime?
+  reopenedBy                  String?
+  reopeningReason             String?
+  reopeningJournalId          String?
+  summaryNetIncomeCents       Int
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @default(now()) @updatedAt
+
+  @@unique([companyId, fiscalYear])
+  @@index([companyId, status])
 }
 
 model TaxRule {

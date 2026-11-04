@@ -2,19 +2,15 @@ import { Router, type Request, type Response } from "express";
 import { EnterpriseAiCopilotService } from "../services/enterprise/ai-copilot.service.js";
 import { EnterpriseAuditService } from "../services/enterprise/audit.service.js";
 import { prisma } from "../db.js";
+import { requireAuth, requireCompanyContext, requireRole, companyContext, type AuthRequest } from "../middleware/auth.js";
 
 export const aiCopilotRouter = Router();
 
-// Middleware to extract context
+// Middleware to extract context safely from verified tenant
 function getContext(req: Request) {
-  const companyId =
-    (req.headers["x-company-id"] as string) ||
-    (req.query.companyId as string) ||
-    "default-company-angola";
-  const userId =
-    (req as any).user?.id ||
-    (req.headers["x-user-id"] as string) ||
-    "user-copilot-operator";
+  const auth = req as AuthRequest;
+  const companyId = auth.context?.companyId || (req.headers["x-company-id"] as string) || "default-company-angola";
+  const userId = auth.user?.id || (req.headers["x-user-id"] as string) || "user-copilot-operator";
 
   return { companyId, userId };
 }
@@ -23,7 +19,7 @@ function getContext(req: Request) {
  * POST /api/v1/ai/chat
  * Natural language chat with VendaJá Copilot
  */
-aiCopilotRouter.post("/chat", async (req: Request, res: Response): Promise<void> => {
+aiCopilotRouter.post("/chat", requireAuth, requireCompanyContext, requireRole("ADMIN", "ROLE_ADMIN", "MANAGER", "ROLE_MANAGER", "ACCOUNTANT", "ROLE_ACCOUNTANT"), async (req: Request, res: Response): Promise<void> => {
   try {
     const { query, contextModule } = req.body || {};
     if (!query || typeof query !== "string") {
@@ -31,11 +27,12 @@ aiCopilotRouter.post("/chat", async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { companyId, userId } = getContext(req);
+    const tenant = companyContext(req);
+    const auth = req as AuthRequest;
     const result = await EnterpriseAiCopilotService.query({
       query,
-      companyId,
-      userId,
+      companyId: tenant.companyId,
+      userId: auth.user!.id,
       contextModule,
     });
 

@@ -125,3 +125,24 @@ commercialDocumentRouter.post("/", requireRole("ADMIN"), async (req, res) => {
     res.status(code === "product_not_found" || code === "insufficient_stock" ? 409 : 400).json({ error: code });
   }
 });
+
+commercialDocumentRouter.get("/:id", async (req, res) => {
+  const tenant = companyContext(req);
+  const doc = await prisma.commercialDocument.findFirst({
+    where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId },
+    include: { lines: { include: { product: true } }, customer: true, supplier: true, location: true },
+  });
+  if (!doc) {
+    res.status(404).json({ error: "document_not_found" });
+    return;
+  }
+  res.json(doc);
+});
+
+commercialDocumentRouter.put("/:id", async (_req, res) => {
+  res.status(405).json({ error: "fiscal_document_immutable", message: "Documentos fiscais emitidos são estritamente imutáveis." });
+});
+
+commercialDocumentRouter.delete("/:id", async (_req, res) => {
+  res.status(405).json({ error: "fiscal_document_immutable", message: "Documentos fiscais emitidos não podem ser excluídos." });
+});

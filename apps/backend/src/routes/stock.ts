@@ -101,7 +101,8 @@ stockRouter.post("/transfers", requireRole("ADMIN"), async (req, res) => {
     res.status(201).json(result);
   } catch (error) {
     const code = error instanceof Error ? error.message : "stock_transfer_failed";
-    res.status(code === "insufficient_stock" ? 409 : 400).json({ error: code });
+    const status = code === "insufficient_stock" ? 409 : (code.includes("not_found") ? 404 : 400);
+    res.status(status).json({ error: code });
   }
 });
 
@@ -145,7 +146,8 @@ stockRouter.post("/inventory-counts", requireRole("ADMIN"), async (req, res) => 
     res.status(201).json(result);
   } catch (error) {
     const code = error instanceof Error ? error.message : "inventory_count_failed";
-    res.status(code === "insufficient_stock" || code === "inventory_reference_conflict" ? 409 : 400).json({ error: code });
+    const status = code === "insufficient_stock" || code === "inventory_reference_conflict" ? 409 : (code.includes("not_found") ? 404 : 400);
+    res.status(status).json({ error: code });
   }
 });
 

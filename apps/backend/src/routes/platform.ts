@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Router, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, requireCompanyContext, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireCompanyContext, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { auditInContext } from "../services/security.js";
 
 export const platformRouter = Router();
@@ -83,7 +83,7 @@ platformRouter.post("/shifts/:id/close", async (req, res) => {
   res.json(updated);
 });
 
-platformRouter.get("/bank-accounts", async (req, res) => {
+platformRouter.get("/bank-accounts", requireRole("ADMIN", "MANAGER", "ACCOUNTANT"), async (req, res) => {
   res.json(await prisma.bankAccount.findMany({ where: { companyId: context(req as AuthRequest).companyId, ...(context(req as AuthRequest).branchId ? { OR: [{ branchId: context(req as AuthRequest).branchId! }, { branchId: null }] } : {}) }, orderBy: { name: "asc" } }));
 });
 
@@ -139,10 +139,9 @@ platformRouter.patch("/payment-transactions/:id", async (req, res) => {
   res.json(updated);
 });
 
-platformRouter.post("/reprints", async (req, res) => {
+platformRouter.post("/reprints", requireRole("ADMIN", "MANAGER"), async (req, res) => {
   const parsed = z.object({ documentType: z.string().min(1), documentId: z.string().uuid(), reason: z.string().min(3) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_reprint" }); return; }
-  if (!requireAdmin(req as AuthRequest, res)) return;
   const tenant = context(req as AuthRequest);
   const document = parsed.data.documentType === "SALE"
     ? await prisma.sale.findFirst({ where: { id: parsed.data.documentId, companyId: tenant.companyId, branchId: tenant.branchId } })

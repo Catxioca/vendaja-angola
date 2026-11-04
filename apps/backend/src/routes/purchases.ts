@@ -192,10 +192,22 @@ purchaseRouter.post("/:id/receipts", requireRole("ADMIN"), async (req, res) => {
   if (!parsed.success) { res.status(400).json({ error: "invalid_purchase_receipt" }); return; }
   const purchaseId = String(req.params.id);
   const operatorId = (req as AuthRequest).user?.id;
+  const tenant = companyContext(req);
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const purchase = await tx.purchase.findUnique({ where: { id: purchaseId }, include: { lines: true } });
+      const purchase = await tx.purchase.findFirst({
+        where: { id: purchaseId, companyId: tenant.companyId, ...(tenant.branchId ? { branchId: tenant.branchId } : {}) },
+        include: { lines: true },
+      });
       if (!purchase) throw new Error("purchase_not_found");
+      const location = await tx.stockLocation.findFirst({
+        where: {
+          id: parsed.data.locationId,
+          active: true,
+          warehouse: { companyId: tenant.companyId, ...(tenant.branchId ? { branchId: tenant.branchId } : {}) },
+        },
+      });
+      if (!location) throw new Error("stock_location_not_found");
       const existing = await tx.purchaseReceipt.findUnique({ where: { reference: parsed.data.reference }, include: { lines: true } });
       if (existing) {
         if (existing.purchaseId !== purchaseId) throw new Error("receipt_reference_reused");
@@ -227,6 +239,7 @@ purchaseRouter.post("/:id/receipts", requireRole("ADMIN"), async (req, res) => {
     res.status(201).json(result);
   } catch (error) {
     const code = error instanceof Error ? error.message : "purchase_receipt_failed";
-    res.status(code === "purchase_not_found" ? 404 : code === "receipt_exceeds_ordered" || code === "receipt_reference_conflict" ? 409 : 400).json({ error: code });
+    const status = code === "purchase_not_found" || code === "stock_location_not_found" ? 404 : code === "receipt_exceeds_ordered" || code === "receipt_reference_conflict" ? 409 : 400;
+    res.status(status).json({ error: code });
   }
 });

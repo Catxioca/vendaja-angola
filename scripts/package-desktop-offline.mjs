@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -48,13 +48,18 @@ const run = (command, args) => {
 };
 
 // Do not let a previous version or partial build influence the installer contents.
-rmSync("release", { recursive: true, force: true });
+rmSync("release", { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 mkdirSync("release", { recursive: true });
 // Older local builds may have written the builder output under the app directory.
 // Exclude and remove it so it cannot be copied into the next asar.
-rmSync(join("apps", "desktop", "dist", "win-unpacked"), { recursive: true, force: true });
+rmSync(join("apps", "desktop", "dist", "win-unpacked"), { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 
 run("npm", ["run", "build:desktop"]);
+
+const vendorPrismaClient = join("apps", "backend", "node_modules", "@prisma", "client");
+if (!existsSync(vendorPrismaClient) && existsSync(join("node_modules", "@prisma", "client"))) {
+  cpSync(join("node_modules", "@prisma", "client"), vendorPrismaClient, { recursive: true });
+}
 run("npx", [
   "--no-install",
   "electron-builder",

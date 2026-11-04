@@ -15,24 +15,9 @@ const context = (req: AuthRequest) => req.context!;
  * GET /api/v1/license/status
  * Queries the cryptographic status of the active license for the current company
  */
-licenseRouter.get("/status", requireAuth, async (req, res: Response) => {
+licenseRouter.get("/status", requireAuth, requireCompanyContext, async (req, res: Response) => {
   const authReq = req as AuthRequest;
-  const companyId = authReq.context?.companyId || req.header("x-company-id");
-
-  if (!companyId) {
-    // If no specific company context, check if there is any company in DB
-    const firstCompany = await prisma.company.findFirst({ select: { id: true } });
-    if (!firstCompany) {
-      res.json({ valid: false, reason: "company_unconfigured", modules: ["SETTINGS"] });
-      return;
-    }
-  }
-
-  const targetCompanyId = companyId || (await prisma.company.findFirst({ select: { id: true } }))?.id;
-  if (!targetCompanyId) {
-    res.json({ valid: false, reason: "company_unconfigured", modules: ["SETTINGS"] });
-    return;
-  }
+  const targetCompanyId = authReq.context!.companyId;
 
   try {
     const fiscalConfig = await prisma.fiscalConfig.findUnique({

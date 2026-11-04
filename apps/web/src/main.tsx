@@ -351,6 +351,9 @@ function Boot() {
     if (ALL_VIEWS.includes(hash)) return hash;
     const saved = localStorage.getItem("vendaja_omnichannel_view") as OmnichannelView;
     if (ALL_VIEWS.includes(saved)) return saved;
+    if (typeof window !== "undefined" && ((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() || window.innerWidth < 768)) {
+      return "mobile-erp";
+    }
     return "erp";
   });
 
@@ -607,7 +610,7 @@ function Boot() {
         {isHr && <HrPortal apiUrl={api()} />}
         {isCommercial && <CommercialPortal apiUrl={api()} />}
         {isAdmin && <AdminPortal apiUrl={api()} />}
-        {view === "mobile-erp" && (localStorage.getItem("accessToken") ? <MobileErpApp apiUrl={api()} /> : <Login onLogin={() => setReady(true)} />)}
+        {view === "mobile-erp" && <MobileErpApp apiUrl={api()} />}
         {view === "copilot" && (localStorage.getItem("accessToken") ? <CopilotWidget apiUrl={api()} /> : <Login onLogin={() => setReady(true)} />)}
         {view === "erp" && <DesktopErpApp onSwitchPortal={(p) => changeView(p as OmnichannelView)} />}
       </div>

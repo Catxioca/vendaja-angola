@@ -187,3 +187,24 @@ saleRouter.post("/:id/cancel", requireAdminOrGrant("SALE_CANCELLED"), async (req
     });
   }
 });
+
+saleRouter.get("/:id", async (req, res) => {
+  const tenant = companyContext(req);
+  const sale = await prisma.sale.findFirst({
+    where: { id: String(req.params.id), companyId: tenant.companyId, branchId: tenant.branchId },
+    include: { lines: true },
+  });
+  if (!sale) {
+    res.status(404).json({ error: "sale_not_found" });
+    return;
+  }
+  res.json(sale);
+});
+
+saleRouter.put("/:id", async (_req, res) => {
+  res.status(405).json({ error: "fiscal_document_immutable", message: "Documentos fiscais emitidos são estritamente imutáveis." });
+});
+
+saleRouter.delete("/:id", async (_req, res) => {
+  res.status(405).json({ error: "fiscal_document_immutable", message: "Documentos fiscais emitidos não podem ser excluídos." });
+});

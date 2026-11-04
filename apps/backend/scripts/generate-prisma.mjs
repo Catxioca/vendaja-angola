@@ -17,16 +17,15 @@ if (result.stderr) process.stderr.write(result.stderr);
 if (result.error) throw result.error;
 if (result.status === 0) process.exit(0);
 
-const enginePath = resolve(process.cwd(), "node_modules", ".prisma", "client", "query_engine-windows.dll.node");
 const renameFailure = result.stderr?.match(/EPERM: operation not permitted, rename '([^']+)' -> '([^']+)'/);
-if (process.platform === "win32" && renameFailure && existsSync(enginePath)) {
+if (process.platform === "win32" && renameFailure) {
   const temporaryPath = resolve(renameFailure[1]);
   const destinationPath = resolve(renameFailure[2]);
-  const isExpectedTemporaryFile = dirname(temporaryPath) === dirname(enginePath) &&
-    basename(temporaryPath).startsWith(`${basename(enginePath)}.tmp`);
-  if (destinationPath === enginePath && isExpectedTemporaryFile && existsSync(temporaryPath)) {
+  const isExpectedTemporaryFile = dirname(temporaryPath) === dirname(destinationPath) &&
+    basename(temporaryPath).startsWith(`${basename(destinationPath)}.tmp`);
+  if (isExpectedTemporaryFile && existsSync(temporaryPath) && existsSync(destinationPath)) {
     const hash = (filePath) => createHash("sha256").update(readFileSync(filePath)).digest("hex");
-    if (hash(temporaryPath) === hash(enginePath)) {
+    if (hash(temporaryPath) === hash(destinationPath)) {
       unlinkSync(temporaryPath);
       console.warn("Prisma generated an identical Windows engine; kept the existing in-use engine.");
       process.exit(0);

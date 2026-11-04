@@ -373,6 +373,45 @@ export const openApiSpecification = {
     "/bi/consolidation/holding": {
       get: { summary: "Consolidação Executiva Multi-Empresa com Eliminação de Operações Intercompanhia", tags: ["Business Intelligence & Analytics"], responses: { "200": { description: "Cockpit consolidado do grupo/holding" } } },
     },
+    "/accounting/chart": {
+      get: { summary: "Listar plano de contas segregado por empresa", tags: ["Contabilidade ERP"], responses: { "200": { description: "Lista ou árvore do plano de contas da empresa" } } },
+      post: { summary: "Criar conta contábil (ADMIN)", tags: ["Contabilidade ERP"], responses: { "201": { description: "Conta criada com validação anti-ciclo e tipo operacional" } } },
+    },
+    "/accounting/chart/{id}": {
+      get: { summary: "Obter detalhes de conta contábil", tags: ["Contabilidade ERP"], responses: { "200": { description: "Detalhes da conta" }, "404": { description: "Conta não encontrada" } } },
+      put: { summary: "Atualizar conta contábil (ADMIN)", tags: ["Contabilidade ERP"], responses: { "200": { description: "Conta atualizada" } } },
+      delete: { summary: "Eliminar conta contábil sem movimentos (ADMIN)", tags: ["Contabilidade ERP"], responses: { "200": { description: "Conta eliminada" }, "409": { description: "Proibido eliminar conta com movimentos históricos" } } },
+    },
+    "/accounting/chart/import-template": {
+      post: { summary: "Importar modelo de plano de contas versionado (ADMIN)", tags: ["Contabilidade ERP"], responses: { "200": { description: "Modelo importado" } } },
+    },
+    "/accounting/subledgers": {
+      get: { summary: "Listar subdiários configurados por exercício (Vendas, Compras, Caixa, Bancos, etc.)", tags: ["Contabilidade ERP"], responses: { "200": { description: "Subdiários configurados" } } },
+      post: { summary: "Criar/configurar subdiário (ADMIN)", tags: ["Contabilidade ERP"], responses: { "201": { description: "Subdiário criado" } } },
+    },
+    "/accounting/journals": {
+      get: { summary: "Consultar lançamentos em partidas dobradas com filtros por subdiário", tags: ["Contabilidade ERP"], responses: { "200": { description: "Lançamentos encontrados" } } },
+      post: { summary: "Criar lançamento contabilístico auditável com validação de contas MOVEMENT e período aberto", tags: ["Contabilidade ERP"], responses: { "201": { description: "Lançamento criado" } } },
+    },
+    "/accounting/periods/{id}/reopen": {
+      post: { summary: "Reabrir período contabilístico com motivo obrigatório (ADMIN)", tags: ["Contabilidade ERP"], responses: { "200": { description: "Período reaberto" } } },
+    },
+    "/accounting/closing-configs": {
+      get: { summary: "Listar parametrizações de fecho de exercício por empresa", tags: ["Contabilidade ERP"], responses: { "200": { description: "Configurações de fecho" } } },
+      post: { summary: "Criar ou versionar parametrização explícita de fecho de exercício (ADMIN)", tags: ["Contabilidade ERP"], responses: { "201": { description: "Parametrização criada com sucesso" } } },
+    },
+    "/accounting/closing-configs/active": {
+      get: { summary: "Obter parametrização de fecho de exercício ativa da empresa", tags: ["Contabilidade ERP"], responses: { "200": { description: "Configuração ativa" } } },
+    },
+    "/accounting/fiscal-year/closing/preview": {
+      post: { summary: "Pré-visualizar fecho anual de exercício via parametrização ativa", tags: ["Contabilidade ERP"], responses: { "200": { description: "Simulação de fecho com apuramento de resultados" } } },
+    },
+    "/accounting/fiscal-year/closing/execute": {
+      post: { summary: "Executar fecho anual de exercício com transferência de resultados para conta e subdiário configurados (ADMIN)", tags: ["Contabilidade ERP"], responses: { "201": { description: "Exercício fechado e lançamento de fecho criado no subdiário configurado" } } },
+    },
+    "/accounting/fiscal-year/closing/reopen": {
+      post: { summary: "Reabertura de exercício anual com estorno de fecho e registo de motivo (ADMIN)", tags: ["Contabilidade ERP"], responses: { "200": { description: "Exercício reaberto com estorno auditável" } } },
+    },
   },
 };
 

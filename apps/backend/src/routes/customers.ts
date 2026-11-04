@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { companyContext, requireAuth, requireCompanyContext, type AuthRequest } from "../middleware/auth.js";
+import { companyContext, requireAuth, requireCompanyContext, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { audit } from "../services/security.js";
 import { canManageCashSession } from "../services/authorization.js";
 import { receivableStatus } from "../services/credit-integrity.js";
@@ -96,7 +96,7 @@ const paymentInput = z.object({
   amountCents: z.number().int().positive(), paymentMethod: z.enum(["CASH", "CARD", "TRANSFER"]).default("CASH"),
   idempotencyKey: z.string().min(1).max(200), cashSessionId: z.string().uuid().nullable().optional(), reference: z.string().trim().max(200).optional().nullable(), note: z.string().max(300).optional(), receivedAt: z.coerce.date().optional(),
 });
-customerRouter.post("/:id/payments", async (req, res) => {
+customerRouter.post("/:id/payments", requireRole("ADMIN", "CASHIER", "ACCOUNTANT"), async (req, res) => {
   const parsed = paymentInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_receivable_payment", details: parsed.error.flatten() }); return; }
   const customerId = String(req.params.id), actorId = (req as AuthRequest).user?.id;

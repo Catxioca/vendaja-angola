@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import type { LicenseStatus } from "./license.js";
 import {
   formatKwanza,
+  parseMoneyToCents,
   createSampleCommercialDocument,
   PAPER_FORMAT_INFO,
   DOCUMENT_TYPE_METADATA,
@@ -22,6 +23,7 @@ import {
   type PrinterDeviceOption,
 } from "./print-engine.js";
 import { DocumentPreviewModal } from "./document-preview-modal.js";
+import { MoneyInput } from "./MoneyInput.js";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import {
@@ -134,7 +136,7 @@ function parseScannedProduct(value: string): Partial<ProductForm> {
     sku: sku ?? "",
     barcode: barcode ?? "",
     qrCode: raw,
-    priceCents: read("price|preço|preco") ? money(read("price|preço|preco")!) : 0,
+    priceCents: parseMoneyToCents(read("price|preço|preco")),
   };
 }
 
@@ -248,7 +250,7 @@ export function ProductsPanel({ api, token, admin, onError }: Props) {
   const saveAdjustment = async () => { const value = Number(quantity); if (!Number.isInteger(value) || value === 0) return onError("Indique uma quantidade inteira diferente de zero."); try { try { await request(`${api}/api/v1/stock/adjustments`, token, { method: "POST", body: JSON.stringify({ productId: adjust?.id, quantity: value, note: "Ajuste manual no painel de stock" }) }); } catch { writeLocalProducts(readLocalProducts().map((item) => item.id === adjust?.id ? { ...item, stock: Math.max(0, item.stock + value) } : item)); } setAdjust(null); setQuantity(""); await load(); } catch (e) { onError(e instanceof Error ? e.message : "Falha ao ajustar stock."); } };
   return <section className="panel"><div className="panel-heading"><div><h2>Produtos / Stock</h2><p>Catálogo, preços e movimentos de inventário.</p></div>{admin && <div className="modal-actions"><button onClick={() => { setScannerActive(!scannerActive); setEditing(true); }}> {scannerActive ? "Parar scanner" : "Scanner ativo"} </button><button className="checkout" onClick={() => { setForm(emptyProduct); setEditing(true); }}>+ Novo Produto</button></div>}</div>
     {scannerActive && <div className="card scanner-card"><strong>Scanner ativo</strong><p>Leia com leitor USB/HID ou use a câmara. Um produto existente abre diretamente o ajuste de stock.</p><input autoFocus value={scanInput} onChange={e => setScanInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleScan(scanInput); setScanInput(""); } }} placeholder="Código lido ou payload estruturado" /><button onClick={() => void startProductCamera()}>Abrir câmara</button><video ref={cameraVideo} className="qr-camera" muted playsInline /></div>}
-    {editing && <form className="form-grid card" onSubmit={submit}><h3>{form.id ? "Editar produto" : "Novo produto"}</h3><label>Nome<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label><label>SKU / código de barras<input required value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value, barcode: e.target.value })} /></label><label>QR Code do produto<input value={form.qrCode} placeholder="Código QR opcional" onChange={e => setForm({ ...form, qrCode: e.target.value })} /></label><label>Categoria<input value={form.categoryName} placeholder="Eletrónicos/Telemóveis" onChange={e => setForm({ ...form, categoryName: e.target.value })} /></label><label>Marca / fabricante<input value={form.brand} placeholder="Coca-Cola, Samsung, Apple..." onChange={e => setForm({ ...form, brand: e.target.value })} /></label>{/eletrónicos|eletronicos|telemóveis|telemoveis/i.test(form.categoryName) && <label>Modelo<input value={form.model} placeholder="Galaxy S23" onChange={e => setForm({ ...form, model: e.target.value })} /></label>}<label>Imagem por URL<input type="url" value={form.imageUrl.startsWith("data:") ? "" : form.imageUrl} placeholder="https://..." onChange={e => setForm({ ...form, imageUrl: e.target.value })} /></label><label>Carregar imagem<input type="file" accept="image/*" onChange={readImage} /></label>{form.imageUrl && <div className="image-preview"><img src={form.imageUrl} alt="Pré-visualização do produto" /><button type="button" onClick={() => setForm({ ...form, imageUrl: "" })}>Remover imagem</button></div>}<label>Preço de custo (Kz)<input type="number" min="0" value={form.costCents / 100} onChange={e => setForm({ ...form, costCents: money(e.target.value) })} /></label>    <label>Preço de venda (Kz)<input ref={priceInput} required type="number" min="0" value={form.priceCents / 100} onChange={e => setForm({ ...form, priceCents: money(e.target.value) })} /></label><label>IVA<select value={form.taxRate} onChange={e => setForm({ ...form, taxRate: Number(e.target.value) })}><option value="0.14">14%</option><option value="0">Isento</option></select></label>{form.taxRate === 0 && <label>Razão de isenção<input required value={form.exemptionCode} placeholder="Código AGT" onChange={e => setForm({ ...form, exemptionCode: e.target.value })} /></label>}<label>Stock inicial<input type="number" min="0" value={form.stock} onChange={e => setForm({ ...form, stock: Number(e.target.value) })} /></label><div className="modal-actions"><button className="checkout">Guardar</button><button type="button" onClick={() => setEditing(false)}>Cancelar</button></div></form>}
+    {editing && <form className="form-grid card" onSubmit={submit}><h3>{form.id ? "Editar produto" : "Novo produto"}</h3><label>Nome<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></label><label>SKU / código de barras<input required value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value, barcode: e.target.value })} /></label><label>QR Code do produto<input value={form.qrCode} placeholder="Código QR opcional" onChange={e => setForm({ ...form, qrCode: e.target.value })} /></label><label>Categoria<input value={form.categoryName} placeholder="Eletrónicos/Telemóveis" onChange={e => setForm({ ...form, categoryName: e.target.value })} /></label><label>Marca / fabricante<input value={form.brand} placeholder="Coca-Cola, Samsung, Apple..." onChange={e => setForm({ ...form, brand: e.target.value })} /></label>{/eletrónicos|eletronicos|telemóveis|telemoveis/i.test(form.categoryName) && <label>Modelo<input value={form.model} placeholder="Galaxy S23" onChange={e => setForm({ ...form, model: e.target.value })} /></label>}<label>Imagem por URL<input type="url" value={form.imageUrl.startsWith("data:") ? "" : form.imageUrl} placeholder="https://..." onChange={e => setForm({ ...form, imageUrl: e.target.value })} /></label><label>Carregar imagem<input type="file" accept="image/*" onChange={readImage} /></label>{form.imageUrl && <div className="image-preview"><img src={form.imageUrl} alt="Pré-visualização do produto" /><button type="button" onClick={() => setForm({ ...form, imageUrl: "" })}>Remover imagem</button></div>}<label>Preço de custo (Kz)<MoneyInput valueCents={form.costCents} onChangeCents={(costCents) => setForm({ ...form, costCents })} /></label>    <label>Preço de venda (Kz)<MoneyInput ref={priceInput} required valueCents={form.priceCents} onChangeCents={(priceCents) => setForm({ ...form, priceCents })} /></label><label>IVA<select value={form.taxRate} onChange={e => setForm({ ...form, taxRate: Number(e.target.value) })}><option value="0.14">14%</option><option value="0">Isento</option></select></label>{form.taxRate === 0 && <label>Razão de isenção<input required value={form.exemptionCode} placeholder="Código AGT" onChange={e => setForm({ ...form, exemptionCode: e.target.value })} /></label>}<label>Stock inicial<input type="number" min="0" value={form.stock} onChange={e => setForm({ ...form, stock: Number(e.target.value) })} /></label><div className="modal-actions"><button className="checkout">Guardar</button><button type="button" onClick={() => setEditing(false)}>Cancelar</button></div></form>}
     {message && <p className="success">{message}</p>}<div className="table-wrap"><table><thead><tr><th>Produto</th><th>Marca</th><th>SKU</th><th>Venda</th><th>IVA</th><th>Stock</th><th>Ações</th></tr></thead><tbody>{items.map(p => <tr key={p.id}><td>{p.imageUrl ? <img className="table-product-image" src={p.imageUrl} alt="" /> : <span className="table-product-placeholder">▦</span>}{p.name}{p.model ? ` · ${p.model}` : ""}</td><td>{p.brand || "—"}</td><td>{p.sku}</td><td>{formatKwanza(p.priceCents)}</td><td>{p.taxRate === 0 ? `Isento ${p.exemptionCode ?? ""}` : `${Number(p.taxRate) * 100}%`}</td><td className={p.stock < 10 ? "low-stock" : ""}>{p.stock}</td><td className="actions">{admin && <><button onClick={() => { setForm({ id: p.id, name: p.name, sku: p.sku, barcode: p.barcode ?? p.sku, qrCode: p.qrCode ?? "", costCents: p.costCents ?? 0, priceCents: p.priceCents, taxRate: Number(p.taxRate), exemptionCode: p.exemptionCode ?? "", stock: p.stock, imageUrl: p.imageUrl ?? "", brand: p.brand ?? "", model: p.model ?? "", categoryName: "" }); setEditing(true); }}>Editar</button><button className="danger-text" onClick={() => void remove(p)}>Eliminar</button><button onClick={() => setAdjust(p)}>Ajustar stock</button></>}</td></tr>)}</tbody></table></div>
     {adjust && <div className="modal-backdrop"><div className="modal"><h2>Ajustar stock: {adjust.name}</h2><p>Stock atual: {adjust.stock}. Use valor positivo para entrada e negativo para saída.</p><input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} autoFocus /><div className="modal-actions"><button className="checkout" onClick={() => void saveAdjustment()}>Registar movimento</button><button onClick={() => setAdjust(null)}>Cancelar</button></div></div></div>}
   </section>;
@@ -1666,30 +1668,53 @@ export function HRPanel({ api, token, admin, onError }: Props) {
 }
 
 export function AccountingPanel({ api, token, admin, onError }: Props) {
+  const [activeTab, setActiveTab] = useState<"lancamentos" | "planoContas" | "diarios" | "balancete" | "fecho">("lancamentos");
   const [entries, setEntries] = useState<Array<{ id: string; description: string; entryDate: string; amountCents: number; debitAccount: { code: string; name: string }; creditAccount: { code: string; name: string } }>>([]);
-  const [accounts, setAccounts] = useState<Array<{ code: string; name: string; type: string; category?: string | null }>>(fallbackAccounts);
+  const [accounts, setAccounts] = useState<Array<{ id?: string; code: string; name: string; type: string; accountType?: string; normalBalance?: string; isActive?: boolean; category?: string | null; parentId?: string | null; parent?: { code: string; name: string } | null }>>(fallbackAccounts);
+  const [subledgers, setSubledgers] = useState<Array<{ id: string; code: string; name: string; type: string; currentSeq: number; fiscalYear: number; status: string }>>([]);
+  const [periods, setPeriods] = useState<Array<{ id: string; name: string; startsAt: string; endsAt: string; status: string; closingReason?: string | null }>>([]);
   const [journalMode, setJournalMode] = useState(false);
   const [lines, setLines] = useState([{ accountCode: "6", debitCents: 0, creditCents: 0 }, { accountCode: "9", debitCents: 0, creditCents: 0 }]);
   const [columns, setColumns] = useState<4 | 8>(4);
   const [trial, setTrial] = useState<Array<{ code: string; name: string; debitCents: number; creditCents: number; debitBalanceCents: number; creditBalanceCents: number }>>([]);
-  const [form, setForm] = useState({ description: "", debitAccountCode: "6", creditAccountCode: "9", amountCents: 0, sourceType: "MANUAL" });
+  const [form, setForm] = useState({ description: "", debitAccountCode: "6", creditAccountCode: "9", amountCents: 0, sourceType: "MANUAL", journalCode: "ODIV" });
   const [message, setMessage] = useState("");
+
+  // Estado para criação/edição de conta
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [accountForm, setAccountForm] = useState<{ id?: string; code: string; name: string; type: "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE"; accountType: "HEADER" | "MOVEMENT"; normalBalance: "DEBIT" | "CREDIT"; parentId: string; description: string }>({
+    code: "", name: "", type: "ASSET", accountType: "MOVEMENT", normalBalance: "DEBIT", parentId: "", description: ""
+  });
+
+  // Estado para fecho e reabertura
+  const [closingReason, setClosingReason] = useState("");
+  const [selectedPeriodId, setSelectedPeriodId] = useState("");
+  const [closingPreview, setClosingPreview] = useState<{ fiscalYear: number; revenueTotalCents: number; expenseTotalCents: number; netIncomeCents: number; simulatedLines: any[] } | null>(null);
 
   const load = async () => {
     try {
-      const [chart, journal] = await Promise.all([
-        request<Array<{ code: string; name: string; type: string; category?: string | null }>>(`${api}/api/v1/accounting/chart`, token),
-        request<Array<{ id: string; description: string; entryDate: string; amountCents: number; debitAccount: { code: string; name: string }; creditAccount: { code: string; name: string } }>>(`${api}/api/v1/accounting/entries`, token),
+      const [chart, journal, subs, pers] = await Promise.all([
+        request<Array<any>>(`${api}/api/v1/accounting/chart`, token),
+        request<Array<any>>(`${api}/api/v1/accounting/entries`, token),
+        request<Array<any>>(`${api}/api/v1/accounting/subledgers`, token).catch(() => []),
+        request<Array<any>>(`${api}/api/v1/accounting/periods`, token).catch(() => []),
       ]);
       setAccounts(chart);
       setEntries(journal);
+      setSubledgers(subs);
+      setPeriods(pers);
       localStorage.setItem(localAccountingKey, JSON.stringify({ accounts: chart, entries: journal }));
     } catch (error) {
       console.warn("Accounting API unavailable; using local cache", error);
-      setMessage("Modo offline: a contabilidade local está disponível. Os lançamentos serão sincronizados quando o servidor voltar.");
-      try { const saved = JSON.parse(localStorage.getItem(localAccountingKey) ?? "{}"); setAccounts(saved.accounts?.length ? saved.accounts : fallbackAccounts); setEntries(saved.entries ?? []); } catch { setAccounts(fallbackAccounts); }
+      setMessage("Modo offline: a contabilidade local está disponível.");
+      try {
+        const saved = JSON.parse(localStorage.getItem(localAccountingKey) ?? "{}");
+        setAccounts(saved.accounts?.length ? saved.accounts : fallbackAccounts);
+        setEntries(saved.entries ?? []);
+      } catch {
+        setAccounts(fallbackAccounts);
+      }
     }
-
   };
 
   useEffect(() => { void load(); }, []);
@@ -1698,29 +1723,501 @@ export function AccountingPanel({ api, token, admin, onError }: Props) {
     if (!admin) return onError("Apenas o administrador pode lançar movimentos contabilísticos.");
     try {
       const payload = { ...form, amountCents: money(String(form.amountCents / 100)) };
-      try { await request(`${api}/api/v1/accounting/entries`, token, { method: "POST", body: JSON.stringify(payload) }); }
-      catch {
+      try {
+        await request(`${api}/api/v1/accounting/entries`, token, { method: "POST", body: JSON.stringify(payload) });
+      } catch {
         const saved = JSON.parse(localStorage.getItem(localAccountingKey) ?? "{}");
         const find = (code: string) => accounts.find((a) => a.code === code) ?? { code, name: "Conta " + code };
         const localEntry = { id: crypto.randomUUID(), description: form.description, entryDate: new Date().toISOString(), amountCents: payload.amountCents, debitAccount: find(form.debitAccountCode), creditAccount: find(form.creditAccountCode) };
-        const next = [...(saved.entries ?? []), localEntry]; localStorage.setItem(localAccountingKey, JSON.stringify({ accounts, entries: next })); setEntries(next); setMessage("Lançamento guardado localmente; será sincronizado quando online."); return;
+        const next = [...(saved.entries ?? []), localEntry];
+        localStorage.setItem(localAccountingKey, JSON.stringify({ accounts, entries: next }));
+        setEntries(next);
+        setMessage("Lançamento guardado localmente; será sincronizado quando online.");
+        return;
       }
-      setForm({ description: "", debitAccountCode: "6", creditAccountCode: "9", amountCents: 0, sourceType: "MANUAL" });
+      setForm({ description: "", debitAccountCode: "6", creditAccountCode: "9", amountCents: 0, sourceType: "MANUAL", journalCode: "ODIV" });
       setMessage("Lançamento contabilístico criado.");
       await load();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Falha ao criar lançamento.");
     }
   };
+
   const addJournal = async () => {
     if (!admin) return onError("Apenas o administrador pode lançar movimentos contabilísticos.");
-    const debit = lines.reduce((n, l) => n + l.debitCents, 0); const credit = lines.reduce((n, l) => n + l.creditCents, 0);
-    if (!form.description || debit <= 0 || debit !== credit) return onError("O diário deve ter descrição e débitos iguais aos créditos.");
-    try { await request(`${api}/api/v1/accounting/journals`, token, { method: "POST", body: JSON.stringify({ description: form.description, journalType: form.sourceType, documentType: "MANUAL", lines }) }); setMessage("Diário criado."); setLines([{ accountCode: "6", debitCents: 0, creditCents: 0 }, { accountCode: "9", debitCents: 0, creditCents: 0 }]); await load(); } catch { const saved = JSON.parse(localStorage.getItem(localAccountingKey) ?? "{}"); localStorage.setItem(localAccountingKey, JSON.stringify({ ...saved, accounts, entries })); setMessage("Diário guardado localmente; será sincronizado quando online."); }
+    const debit = lines.reduce((n, l) => n + l.debitCents, 0);
+    const credit = lines.reduce((n, l) => n + l.creditCents, 0);
+    if (!form.description || debit <= 0 || debit !== credit) {
+      return onError("O diário deve ter descrição e débitos iguais aos créditos.");
+    }
+    try {
+      await request(`${api}/api/v1/accounting/journals`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          description: form.description,
+          journalType: form.sourceType,
+          journalCode: form.journalCode,
+          documentType: "MANUAL",
+          lines,
+        }),
+      });
+      setMessage("Diário criado com sucesso no subdiário.");
+      setLines([{ accountCode: "6", debitCents: 0, creditCents: 0 }, { accountCode: "9", debitCents: 0, creditCents: 0 }]);
+      await load();
+    } catch (e: any) {
+      onError(e instanceof Error ? e.message : "Falha ao criar diário.");
+    }
   };
-  const loadTrial = async () => { try { const data = await request<{ rows: typeof trial }>(`${api}/api/v1/accounting/trial-balance?columns=${columns}`, token); setTrial(data.rows); } catch { setTrial([]); } };
 
-  return <section className="panel"><h2>Contabilidade</h2><div className="card form-grid"><h3>Plano de contas e diário</h3><div className="modal-actions"><button onClick={() => setJournalMode(false)}>Lançamento simples</button><button onClick={() => setJournalMode(true)}>Diário multi-linha</button></div><label>Descrição<input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label>{journalMode ? lines.map((line, index) => <div className="modal-actions" key={index}><select value={line.accountCode} onChange={e => setLines(lines.map((l, i) => i === index ? { ...l, accountCode: e.target.value } : l))}>{accounts.map(a => <option key={a.code} value={a.code}>{a.code} - {a.name}</option>)}</select><input type="number" placeholder="Débito" onChange={e => setLines(lines.map((l, i) => i === index ? { ...l, debitCents: money(e.target.value), creditCents: 0 } : l))} /><input type="number" placeholder="Crédito" onChange={e => setLines(lines.map((l, i) => i === index ? { ...l, creditCents: money(e.target.value), debitCents: 0 } : l))} />{index === lines.length - 1 && <button type="button" onClick={() => setLines([...lines, { accountCode: "6", debitCents: 0, creditCents: 0 }])}>+ linha</button>}</div>) : <><label>Conta de débito<select value={form.debitAccountCode} onChange={e => setForm({ ...form, debitAccountCode: e.target.value })}>{accounts.map(account => <option key={`debit-${account.code}`} value={account.code}>{account.code} - {account.name}</option>)}</select></label><label>Conta de crédito<select value={form.creditAccountCode} onChange={e => setForm({ ...form, creditAccountCode: e.target.value })}>{accounts.map(account => <option key={`credit-${account.code}`} value={account.code}>{account.code} - {account.name}</option>)}</select></label><label>Montante (Kz)<input type="number" value={form.amountCents / 100} onChange={e => setForm({ ...form, amountCents: money(e.target.value) })} /></label></>}<button className="checkout" onClick={() => void (journalMode ? addJournal() : addEntry())}>{journalMode ? "Criar diário" : "Criar lançamento"}</button>{message && <p className="success">{message}</p>}</div><div className="card"><h3>Balancete</h3><button onClick={() => void loadTrial()}>Atualizar</button><select value={columns} onChange={e => setColumns(Number(e.target.value) as 4 | 8)}><option value="4">4 colunas</option><option value="8">8 colunas</option></select><div className="table-wrap"><table><thead><tr><th>Conta</th><th>Débitos</th><th>Créditos</th><th>Saldo devedor</th><th>Saldo credor</th></tr></thead><tbody>{trial.map(r => <tr key={r.code}><td>{r.code} - {r.name}</td><td>{formatKwanza(r.debitCents)}</td><td>{formatKwanza(r.creditCents)}</td><td>{formatKwanza(r.debitBalanceCents)}</td><td>{formatKwanza(r.creditBalanceCents)}</td></tr>)}</tbody></table></div></div><div className="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Débito</th><th>Crédito</th><th>Valor</th></tr></thead><tbody>{entries.map(entry => <tr key={entry.id}><td>{new Date(entry.entryDate).toLocaleDateString("pt-PT")}</td><td>{entry.description}</td><td>{entry.debitAccount.code} - {entry.debitAccount.name}</td><td>{entry.creditAccount.code} - {entry.creditAccount.name}</td><td>{formatKwanza(entry.amountCents)}</td></tr>)}</tbody></table></div></section>;
+  const saveAccount = async () => {
+    if (!accountForm.code || !accountForm.name) return onError("Código e nome são obrigatórios.");
+    try {
+      if (accountForm.id) {
+        await request(`${api}/api/v1/accounting/chart/${accountForm.id}`, token, {
+          method: "PUT",
+          body: JSON.stringify(accountForm),
+        });
+        setMessage("Conta atualizada com sucesso.");
+      } else {
+        await request(`${api}/api/v1/accounting/chart`, token, {
+          method: "POST",
+          body: JSON.stringify(accountForm),
+        });
+        setMessage("Nova conta criada no plano da empresa.");
+      }
+      setShowAccountModal(false);
+      setAccountForm({ code: "", name: "", type: "ASSET", accountType: "MOVEMENT", normalBalance: "DEBIT", parentId: "", description: "" });
+      await load();
+    } catch (e: any) {
+      onError(e instanceof Error ? e.message : "Erro ao guardar conta.");
+    }
+  };
+
+  const handleClosePeriod = async (periodId: string) => {
+    if (!closingReason) return onError("Informe o motivo de encerramento do período.");
+    try {
+      await request(`${api}/api/v1/accounting/periods/${periodId}/close`, token, {
+        method: "POST",
+        body: JSON.stringify({ reason: closingReason }),
+      });
+      setMessage("Período contabilístico encerrado com sucesso.");
+      setClosingReason("");
+      await load();
+    } catch (e: any) {
+      onError(e instanceof Error ? e.message : "Erro ao encerrar período.");
+    }
+  };
+
+  const handleReopenPeriod = async (periodId: string) => {
+    if (!closingReason || closingReason.length < 5) return onError("Informe o motivo obrigatório de reabertura (mín. 5 caracteres).");
+    try {
+      await request(`${api}/api/v1/accounting/periods/${periodId}/reopen`, token, {
+        method: "POST",
+        body: JSON.stringify({ reason: closingReason }),
+      });
+      setMessage("Período contabilístico reaberto.");
+      setClosingReason("");
+      await load();
+    } catch (e: any) {
+      onError(e instanceof Error ? e.message : "Erro ao reabrir período.");
+    }
+  };
+
+  const handlePreviewAnnualClosing = async () => {
+    try {
+      const year = new Date().getUTCFullYear();
+      const res = await request<any>(`${api}/api/v1/accounting/fiscal-year/closing/preview`, token, {
+        method: "POST",
+        body: JSON.stringify({ fiscalYear: year }),
+      });
+      setClosingPreview(res);
+      setMessage("Pré-visualização gerada com sucesso via parametrização da empresa.");
+    } catch (e: any) {
+      onError(e instanceof Error ? e.message : "Erro ao pré-visualizar fecho.");
+    }
+  };
+
+  const handleExecuteAnnualClosing = async () => {
+    if (!closingReason || closingReason.length < 5) return onError("O motivo do fecho anual é obrigatório.");
+    try {
+      const year = new Date().getUTCFullYear();
+      await request(`${api}/api/v1/accounting/fiscal-year/closing/execute`, token, {
+        method: "POST",
+        body: JSON.stringify({ fiscalYear: year, reason: closingReason }),
+      });
+      setMessage("Fecho anual de exercício executado no subdiário configurado.");
+      setClosingPreview(null);
+      setClosingReason("");
+      await load();
+    } catch (e: any) {
+      onError(e instanceof Error ? e.message : "Erro ao executar fecho anual.");
+    }
+  };
+
+  const loadTrial = async () => {
+    try {
+      const data = await request<{ rows: typeof trial }>(`${api}/api/v1/accounting/trial-balance?columns=${columns}`, token);
+      setTrial(data.rows);
+    } catch {
+      setTrial([]);
+    }
+  };
+
+  // Filtra apenas contas MOVEMENT e ativas para seleção de lançamentos
+  const movementAccounts = accounts.filter((a) => (a.accountType ?? "MOVEMENT") === "MOVEMENT" && (a.isActive ?? true));
+
+  return (
+    <section className="panel">
+      <h2>Contabilidade ERP Multiempresa</h2>
+      <div className="modal-actions" style={{ marginBottom: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <button className={activeTab === "lancamentos" ? "checkout" : ""} onClick={() => setActiveTab("lancamentos")}>📝 Lançamentos</button>
+        <button className={activeTab === "planoContas" ? "checkout" : ""} onClick={() => setActiveTab("planoContas")}>🌳 Plano de Contas</button>
+        <button className={activeTab === "diarios" ? "checkout" : ""} onClick={() => setActiveTab("diarios")}>📚 Subdiários</button>
+        <button className={activeTab === "balancete" ? "checkout" : ""} onClick={() => { setActiveTab("balancete"); void loadTrial(); }}>📊 Balancete</button>
+        <button className={activeTab === "fecho" ? "checkout" : ""} onClick={() => setActiveTab("fecho")}>🔒 Fecho & Reabertura</button>
+      </div>
+
+      {message && <p className="success" style={{ margin: "8px 0" }}>{message}</p>}
+
+      {/* ABA 1: LANÇAMENTOS */}
+      {activeTab === "lancamentos" && (
+        <>
+          <div className="card form-grid">
+            <h3>Novo Lançamento Contabilístico</h3>
+            <div className="modal-actions">
+              <button onClick={() => setJournalMode(false)}>Lançamento Simples</button>
+              <button onClick={() => setJournalMode(true)}>Diário Multi-linha</button>
+            </div>
+            <label>
+              Subdiário
+              <select value={form.journalCode} onChange={(e) => setForm({ ...form, journalCode: e.target.value })}>
+                {subledgers.map((s) => (
+                  <option key={s.code} value={s.code}>{s.code} - {s.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Descrição
+              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Ex.: Pagamento de serviços..." />
+            </label>
+
+            {journalMode ? (
+              lines.map((line, index) => (
+                <div className="modal-actions" key={index} style={{ alignItems: "center" }}>
+                  <select value={line.accountCode} onChange={(e) => setLines(lines.map((l, i) => i === index ? { ...l, accountCode: e.target.value } : l))}>
+                    {movementAccounts.map((a) => (
+                      <option key={a.code} value={a.code}>{a.code} - {a.name}</option>
+                    ))}
+                  </select>
+                  <input type="number" placeholder="Débito" onChange={(e) => setLines(lines.map((l, i) => i === index ? { ...l, debitCents: money(e.target.value), creditCents: 0 } : l))} />
+                  <input type="number" placeholder="Crédito" onChange={(e) => setLines(lines.map((l, i) => i === index ? { ...l, creditCents: money(e.target.value), debitCents: 0 } : l))} />
+                  {index === lines.length - 1 && (
+                    <button type="button" onClick={() => setLines([...lines, { accountCode: "6", debitCents: 0, creditCents: 0 }])}>+ linha</button>
+                  )}
+                </div>
+              ))
+            ) : (
+              <>
+                <label>
+                  Conta de Débito (Movimento)
+                  <select value={form.debitAccountCode} onChange={(e) => setForm({ ...form, debitAccountCode: e.target.value })}>
+                    {movementAccounts.map((account) => (
+                      <option key={`debit-${account.code}`} value={account.code}>{account.code} - {account.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Conta de Crédito (Movimento)
+                  <select value={form.creditAccountCode} onChange={(e) => setForm({ ...form, creditAccountCode: e.target.value })}>
+                    {movementAccounts.map((account) => (
+                      <option key={`credit-${account.code}`} value={account.code}>{account.code} - {account.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Montante (Kz)
+                  <input type="number" value={form.amountCents / 100} onChange={(e) => setForm({ ...form, amountCents: money(e.target.value) })} />
+                </label>
+              </>
+            )}
+
+            <button className="checkout" onClick={() => void (journalMode ? addJournal() : addEntry())}>
+              {journalMode ? "Gravar Diário" : "Gravar Lançamento"}
+            </button>
+          </div>
+
+          <div className="table-wrap">
+            <h3>Histórico de Lançamentos Recentes</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Débito</th>
+                  <th>Crédito</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{new Date(entry.entryDate).toLocaleDateString("pt-PT")}</td>
+                    <td>{entry.description}</td>
+                    <td>{entry.debitAccount.code} - {entry.debitAccount.name}</td>
+                    <td>{entry.creditAccount.code} - {entry.creditAccount.name}</td>
+                    <td>{formatKwanza(entry.amountCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ABA 2: PLANO DE CONTAS */}
+      {activeTab === "planoContas" && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h3>Plano de Contas da Empresa</h3>
+            {admin && (
+              <button className="checkout" onClick={() => {
+                setAccountForm({ code: "", name: "", type: "ASSET", accountType: "MOVEMENT", normalBalance: "DEBIT", parentId: "", description: "" });
+                setShowAccountModal(true);
+              }}>
+                ➕ Nova Conta
+              </button>
+            )}
+          </div>
+
+          {showAccountModal && (
+            <div className="card form-grid" style={{ background: "#f8fafc", padding: "16px", border: "1px solid #cbd5e1", borderRadius: "8px", marginBottom: "16px" }}>
+              <h4>{accountForm.id ? "Editar Conta Contábil" : "Criar Nova Conta no Plano"}</h4>
+              <label>
+                Código da Conta
+                <input value={accountForm.code} onChange={(e) => setAccountForm({ ...accountForm, code: e.target.value })} placeholder="Ex: 6.1 ou 11" />
+              </label>
+              <label>
+                Nome / Descrição
+                <input value={accountForm.name} onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="Ex: Caixa Filial Sul" />
+              </label>
+              <label>
+                Classe Contábil
+                <select value={accountForm.type} onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value as any })}>
+                  <option value="ASSET">Ativo (ASSET)</option>
+                  <option value="LIABILITY">Passivo (LIABILITY)</option>
+                  <option value="EQUITY">Património Líquido (EQUITY)</option>
+                  <option value="REVENUE">Receitas (REVENUE)</option>
+                  <option value="EXPENSE">Despesas (EXPENSE)</option>
+                </select>
+              </label>
+              <label>
+                Tipo Operacional
+                <select value={accountForm.accountType} onChange={(e) => setAccountForm({ ...accountForm, accountType: e.target.value as any })}>
+                  <option value="MOVEMENT">MOVIMENTO (Lançável)</option>
+                  <option value="HEADER">CABEÇALHO (Totalizadora - Não Lançável)</option>
+                </select>
+              </label>
+              <label>
+                Conta-Pai (Agrupadora)
+                <select value={accountForm.parentId} onChange={(e) => setAccountForm({ ...accountForm, parentId: e.target.value })}>
+                  <option value="">Sem conta-pai (Raiz)</option>
+                  {accounts.filter((a) => a.accountType === "HEADER").map((a) => (
+                    <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="modal-actions">
+                <button className="checkout" onClick={() => void saveAccount()}>Guardar Conta</button>
+                <button onClick={() => setShowAccountModal(false)}>Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Nome da Conta</th>
+                  <th>Classe</th>
+                  <th>Tipo</th>
+                  <th>Saldo Normal</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.map((acc) => (
+                  <tr key={acc.code} style={{ fontWeight: acc.accountType === "HEADER" ? 700 : 400 }}>
+                    <td>{acc.code}</td>
+                    <td>{acc.accountType === "HEADER" ? "📁 " : "📄 "}{acc.name}</td>
+                    <td>{acc.type}</td>
+                    <td><span style={{ padding: "2px 6px", borderRadius: "4px", fontSize: "11px", background: acc.accountType === "HEADER" ? "#e2e8f0" : "#dcfce7" }}>{acc.accountType ?? "MOVEMENT"}</span></td>
+                    <td>{acc.normalBalance ?? "DEBIT"}</td>
+                    <td>{acc.isActive !== false ? "✅ Ativa" : "❌ Inativa"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 3: SUBDIÁRIOS */}
+      {activeTab === "diarios" && (
+        <div className="card">
+          <h3>Subdiários Configuráveis</h3>
+          <p style={{ fontSize: "13px", color: "#64748b" }}>
+            Diários operacionais com numeração sequencial atómica concorrente e isolada por exercício fiscal.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Nome do Diário</th>
+                  <th>Tipo</th>
+                  <th>Exercício</th>
+                  <th>Última Sequência</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subledgers.map((sub) => (
+                  <tr key={sub.id}>
+                    <td><strong>{sub.code}</strong></td>
+                    <td>{sub.name}</td>
+                    <td>{sub.type}</td>
+                    <td>{sub.fiscalYear}</td>
+                    <td>#{sub.currentSeq}</td>
+                    <td><span style={{ color: sub.status === "OPEN" ? "#16a34a" : "#dc2626" }}>● {sub.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 4: BALANCETE */}
+      {activeTab === "balancete" && (
+        <div className="card">
+          <h3>Balancete de Verificação</h3>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px" }}>
+            <button onClick={() => void loadTrial()}>Atualizar Balancete</button>
+            <select value={columns} onChange={(e) => setColumns(Number(e.target.value) as 4 | 8)}>
+              <option value="4">4 colunas (Movimentos e Saldos)</option>
+              <option value="8">8 colunas (Saldos Iniciais, Movimentos e Finais)</option>
+            </select>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Conta</th>
+                  <th>Débitos</th>
+                  <th>Créditos</th>
+                  <th>Saldo Devedor</th>
+                  <th>Saldo Credor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trial.map((r) => (
+                  <tr key={r.code}>
+                    <td>{r.code} - {r.name}</td>
+                    <td>{formatKwanza(r.debitCents)}</td>
+                    <td>{formatKwanza(r.creditCents)}</td>
+                    <td>{formatKwanza(r.debitBalanceCents)}</td>
+                    <td>{formatKwanza(r.creditBalanceCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 5: FECHO E REABERTURA */}
+      {activeTab === "fecho" && (
+        <div className="card form-grid">
+          <h3>Encerramento e Reabertura Controlados</h3>
+          <p style={{ fontSize: "13px", color: "#64748b" }}>
+            Controlo de períodos contabilísticos e fecho de exercício com apuramento de resultados e registo imutável de auditoria.
+          </p>
+
+          <label>
+            Motivo da Operação (Obrigatório para Fecho e Reabertura)
+            <input value={closingReason} onChange={(e) => setClosingReason(e.target.value)} placeholder="Ex.: Fecho regular auditado pelo contabilista OCPCA..." />
+          </label>
+
+          <div className="table-wrap" style={{ marginTop: "12px" }}>
+            <h4>Períodos Mensais</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Período</th>
+                  <th>Início</th>
+                  <th>Fim</th>
+                  <th>Estado</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {periods.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td>{new Date(p.startsAt).toLocaleDateString("pt-PT")}</td>
+                    <td>{new Date(p.endsAt).toLocaleDateString("pt-PT")}</td>
+                    <td><span style={{ color: p.status === "OPEN" ? "#16a34a" : "#dc2626" }}>● {p.status}</span></td>
+                    <td>
+                      {p.status === "OPEN" ? (
+                        <button onClick={() => void handleClosePeriod(p.id)}>🔒 Fechar Período</button>
+                      ) : (
+                        admin && <button onClick={() => void handleReopenPeriod(p.id)}>🔓 Reabrir (ADMIN)</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ marginTop: "20px", padding: "16px", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
+            <h4>Fecho Anual de Exercício Fiscal</h4>
+            <p style={{ fontSize: "12px", color: "#64748b" }}>
+              Transfere saldos de receitas e despesas para a conta e subdiário configurados pela empresa.
+            </p>
+            <p style={{ fontSize: "11px", color: "#0369a1", background: "#f0f9ff", padding: "8px", borderRadius: "4px", margin: "6px 0 12px 0" }}>
+              ℹ️ Modelagem contabilística configurável por empresa, sujeita a fonte oficial e validação por contabilista certificado. Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.
+            </p>
+            <div className="modal-actions" style={{ marginTop: "8px" }}>
+              <button onClick={() => void handlePreviewAnnualClosing()}>👁️ Pré-visualizar Fecho</button>
+              {admin && <button className="checkout" onClick={() => void handleExecuteAnnualClosing()}>🔒 Executar Fecho de Exercício</button>}
+            </div>
+
+            {closingPreview && (
+              <div style={{ marginTop: "12px", background: "#f8fafc", padding: "12px", borderRadius: "6px" }}>
+                <h5>Pré-visualização do Ano Fiscal {closingPreview.fiscalYear}</h5>
+                <p>Receitas Totais: {formatKwanza(closingPreview.revenueTotalCents)} | Despesas Totais: {formatKwanza(closingPreview.expenseTotalCents)}</p>
+                <p><strong>Resultado Líquido Apurado: {formatKwanza(closingPreview.netIncomeCents)} ({closingPreview.netIncomeCents >= 0 ? "LUCRO" : "PREJUÍZO"})</strong></p>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>Conta</th><th>Débito</th><th>Crédito</th></tr>
+                    </thead>
+                    <tbody>
+                      {closingPreview.simulatedLines.map((l, i) => (
+                        <tr key={i}><td>{l.accountCode} - {l.accountName}</td><td>{formatKwanza(l.debitCents)}</td><td>{formatKwanza(l.creditCents)}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function DevicesPanel({ settings, onSave, onError }: { settings: DeviceSettings; onSave: (settings: DeviceSettings) => void; onError: (message: string) => void }) {

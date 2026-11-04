@@ -1165,3 +1165,4 @@ export function formatKwanza(cents: number): string {
 }
 
 export * from "./document-types.js";
+export * from "./money-input.js";

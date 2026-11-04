@@ -157,7 +157,7 @@ fiscalRouter.post("/cash/:id/adjustment", async (req, res) => {
     throw error;
   }
 });
-fiscalRouter.get("/saft", async (req, res) => {
+fiscalRouter.get("/saft", requireRole("ADMIN", "ACCOUNTANT"), async (req, res) => {
   const parsed = z.object({ from: z.coerce.date(), to: z.coerce.date() }).safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "invalid_date_range" }); return; }
   const xml = await exportSaftAo(parsed.data.from, parsed.data.to, companyContext(req));

@@ -568,7 +568,7 @@ export class EnterpriseLocalCopilotEngine {
         const weekTotalCents = weekSales.reduce((acc, s) => acc + (s.totalCents || 0), 0);
 
         return {
-          textAnswer: `Nos últimos 7 dias foram emitidas **${weekSales.length} faturas** comerciais no terminal local, totalizando **${formatKwanza(weekTotalCents)}** com certificação fiscal e hash atómica.`,
+          textAnswer: `Nos últimos 7 dias foram emitidas **${weekSales.length} faturas** comerciais no terminal local, totalizando **${formatKwanza(weekTotalCents)}** com registo comercial/fiscal estruturado e integridade encadeada.`,
           metrics: [
             { label: "Faturas da Semana", value: `${weekSales.length} faturas` },
             { label: "Total Faturado", value: formatKwanza(weekTotalCents), trend: "UP" },

@@ -764,7 +764,7 @@ function renderThermal58mmHtml(
 
   const fiscalHashLine = doc.fiscalHash
     ? formatAgtCertificationMention(doc.fiscalHash, doc.agtCertificate)
-    : "--------Processado por programa certificado n.º 24/AGT/2026";
+    : "--------Processado por programa informático · Não homologado até aprovação formal da AGT";
 
   return `
     <div class="receipt-58mm">
@@ -892,7 +892,7 @@ function renderThermal58mmHtml(
         qrDataUrl
           ? `
         <div class="r58-qr">
-          <img src="${qrDataUrl}" alt="QR AGT" />
+          <img src="${qrDataUrl}" alt="Código QR fiscal estruturado (piloto)" />
         </div>
       `
           : ""
@@ -974,7 +974,7 @@ function renderThermal80mmHtml(
 
   const fiscalHashLine = doc.fiscalHash
     ? formatAgtCertificationMention(doc.fiscalHash, doc.agtCertificate)
-    : "--------Processado por programa certificado n.º 24/AGT/2026";
+    : "--------Processado por programa informático · Não homologado até aprovação formal da AGT";
 
   return `
     <div class="receipt-80mm">
@@ -1120,7 +1120,7 @@ function renderThermal80mmHtml(
         </tbody>
       </table>
 
-      <!-- AGT Fiscal Footer -->
+      <!-- Fiscal Integrity Footer -->
       <div class="r80-divider"></div>
       <div class="r80-hash-block">${escapeHtml(fiscalHashLine)}</div>
       <div class="r80-meta r80-center" style="font-size: 8.5px;">
@@ -1131,8 +1131,8 @@ function renderThermal80mmHtml(
         qrDataUrl
           ? `
         <div class="r80-qr">
-          <img src="${qrDataUrl}" alt="Código QR Fiscal AGT" />
-          <span style="font-size: 8px; color: #555; margin-top: 2px;">AGT FISCAL VALIDATION QR</span>
+          <img src="${qrDataUrl}" alt="Código QR fiscal estruturado (piloto)" />
+          <span style="font-size: 8px; color: #555; margin-top: 2px;">QR FISCAL PILOTO · FORMATO OFICIAL PENDENTE</span>
         </div>
       `
           : ""
@@ -1250,7 +1250,7 @@ function renderOfficeHtml(
 
   const fiscalHashLine = doc.fiscalHash
     ? formatAgtCertificationMention(doc.fiscalHash, doc.agtCertificate)
-    : "--------Processado por programa certificado n.º 24/AGT/2026";
+    : "--------Processado por programa informático · Não homologado até aprovação formal da AGT";
 
   return `
     <div class="office-document">
@@ -1458,7 +1458,7 @@ function renderOfficeHtml(
             }
           </div>
           <div style="font-style: italic; color: #64748b;">
-            Emitido por software certificado VendaJá Angola Enterprise v2.2 · Licença Oficial AGT
+            Emitido por software de gestão empresarial VendaJá Angola Enterprise · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT
           </div>
           ${doc.company.thanksMessage ? `<div style="font-weight: 600; color: #0f172a; margin-top: 4px;">${escapeHtml(doc.company.thanksMessage)}</div>` : ""}
           ${doc.company.footerText ? `<div style="color: #64748b; font-size: 8.5px;">${escapeHtml(doc.company.footerText)}</div>` : ""}
@@ -1468,8 +1468,8 @@ function renderOfficeHtml(
           qrDataUrl
             ? `
           <div class="office-qr-box">
-            <img src="${qrDataUrl}" alt="QR AGT" />
-            <span style="font-size: 8px; font-weight: 700; color: #64748b;">AGT FISCAL QR</span>
+            <img src="${qrDataUrl}" alt="Código QR fiscal estruturado (piloto)" />
+            <span style="font-size: 8px; font-weight: 700; color: #64748b;">QR FISCAL PILOTO · FORMATO OFICIAL PENDENTE</span>
           </div>
         `
             : ""

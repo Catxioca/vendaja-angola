@@ -995,7 +995,7 @@ export function generateSalesReportPrintHtml(report: SalesReportSummary, company
       </table>
 
       <div class="footer">
-        <span>Software Certificado de Faturação VendaJá Angola v2.2 · Licença Oficial AGT</span>
+        <span>VendaJá Angola Enterprise · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT</span>
         <span>Página 1 de 1</span>
       </div>
     </body>

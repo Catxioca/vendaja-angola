@@ -426,7 +426,7 @@ export class EnterpriseAiCopilotService {
             `A proporção de pagamentos a pronto (FR) é de ${sales.length > 0 ? Math.round((frCount / sales.length) * 100) : 0}%.`,
           ],
           recommendations: [
-            "Verifique se todas as séries fiscais em utilização possuem selos de certificação AGT em dia.",
+            "Verifique se todas as séries fiscais em utilização estão devidamente ativas e parametrizadas segundo as regras da empresa.",
           ],
           source: "LIVE_DATABASE",
         };
@@ -607,7 +607,7 @@ export class EnterpriseAiCopilotService {
             "A falta destes produtos pode gerar perda direta de receita estimada em 15% nas vendas do final de semana.",
           ],
           recommendations: [
-            "Emita ordens de compra urgentes aos fornecedores homologados para reposição prioritária.",
+            "Emita ordens de compra urgentes aos fornecedores credenciados para reposição prioritária.",
           ],
           source: "LIVE_DATABASE",
         };

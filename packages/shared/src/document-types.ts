@@ -32,6 +32,7 @@ export interface DocumentCompanyInfo {
   footerText?: string;
   thanksMessage?: string;
   signatureText?: string;
+  certificateNumber?: string;
   bankAccounts?: Array<{
     bank: string;
     iban: string;
@@ -281,9 +282,10 @@ export const PAPER_FORMAT_INFO: Record<
 };
 
 /**
- * Generates an AGT-compliant fiscal QR code payload string
+ * Generates a structured fiscal QR code payload string (pilot/development format).
+ * Código QR fiscal estruturado (piloto) — formato oficial pendente de especificação AGT.
  */
-export function buildAgtQrPayload(params: {
+export function buildFiscalStructuredQrPayload(params: {
   issuerNif: string;
   customerNif?: string;
   documentType: string;
@@ -300,12 +302,32 @@ export function buildAgtQrPayload(params: {
 }
 
 /**
- * Generates an AGT certified software mention string
+ * @deprecated Usar buildFiscalStructuredQrPayload. Formato oficial pendente de especificação AGT.
  */
-export function formatAgtCertificationMention(hash: string, certNumber = "24/AGT/2026"): string {
+export const buildAgtQrPayload = buildFiscalStructuredQrPayload;
+
+/**
+ * Formats software fiscal mention string.
+ * Número de certificação disponível somente quando formalmente fornecido.
+ * Se provisório, vazio ou pendente de homologação, não exibe certificação.
+ */
+export function formatAgtCertificationMention(hash: string, certNumber?: string): string {
   const hashPrefix = (hash || "0000").slice(0, 4);
-  return `${hashPrefix}-Processado por programa certificado n.º ${certNumber}`;
+  const safeCert = certNumber?.trim() || "";
+  const isPlaceholderCert =
+    safeCert.length === 0 ||
+    safeCert === "PROVISIONAL" ||
+    safeCert === "PENDING_HOMOLOGATION" ||
+    /^(0+|24)\/AGT/i.test(safeCert) ||
+    /AGT\/\d{4}/i.test(safeCert);
+
+  if (safeCert.length > 0 && !isPlaceholderCert) {
+    return `${hashPrefix}-Processado por programa informático (certificação formal: ${safeCert})`;
+  }
+  return `${hashPrefix}-Processado por programa informático · Não homologado até aprovação formal da AGT`;
 }
+
+export const formatFiscalCertificationMention = formatAgtCertificationMention;
 
 /**
  * Creates realistic sample commercial documents for any of the 12 document types.
@@ -406,8 +428,8 @@ export function createSampleCommercialDocument(
         },
         operator: { name: "Maria Domingos", terminalId: "TESOURARIA-01" },
         fiscalHash: hash,
-        agtCertificate: "24/AGT/2026",
-        qrPayload: buildAgtQrPayload({
+        agtCertificate: undefined,
+        qrPayload: buildFiscalStructuredQrPayload({
           issuerNif: company.nif,
           customerNif: customer.nif,
           documentType: "RC",
@@ -459,8 +481,8 @@ export function createSampleCommercialDocument(
         },
         operator: { name: "Carlos Fernandes", terminalId: "CAIXA-01" },
         fiscalHash: hash,
-        agtCertificate: "24/AGT/2026",
-        qrPayload: buildAgtQrPayload({
+        agtCertificate: undefined,
+        qrPayload: buildFiscalStructuredQrPayload({
           issuerNif: company.nif,
           customerNif: customer.nif,
           documentType: "ND",
@@ -550,8 +572,8 @@ export function createSampleCommercialDocument(
         },
         operator: { name: "Expedição Armazém", terminalId: "EXP-01" },
         fiscalHash: hash,
-        agtCertificate: "24/AGT/2026",
-        qrPayload: buildAgtQrPayload({
+        agtCertificate: undefined,
+        qrPayload: buildFiscalStructuredQrPayload({
           issuerNif: company.nif,
           customerNif: customer.nif,
           documentType: "GR",
@@ -653,8 +675,8 @@ export function createSampleCommercialDocument(
         },
         operator: { name: "António Silva", terminalId: "CAIXA-01" },
         fiscalHash: hash,
-        agtCertificate: "24/AGT/2026",
-        qrPayload: buildAgtQrPayload({
+        agtCertificate: undefined,
+        qrPayload: buildFiscalStructuredQrPayload({
           issuerNif: company.nif,
           customerNif: customer.nif,
           documentType: "NC",
@@ -780,12 +802,12 @@ export function createSampleCommercialDocument(
           deliveryAddress: "Centro Logístico Geral - Estrada de Cacuaco, Luanda",
           departureDateTime: new Date().toISOString(),
           arrivalDateTime: new Date(Date.now() + 14400000).toISOString(),
-          transitCodeAGT: "AGT-TRANS-2026/049182",
+          transitCodeAGT: "TRANS-2026/049182",
         },
         operator: { name: "Pedro Kwanza", terminalId: "LOGISTICA-01" },
         fiscalHash: hash,
-        agtCertificate: "24/AGT/2026",
-        qrPayload: buildAgtQrPayload({
+        agtCertificate: undefined,
+        qrPayload: buildFiscalStructuredQrPayload({
           issuerNif: company.nif,
           customerNif: customer.nif,
           documentType: "GT",
@@ -846,8 +868,8 @@ export function createSampleCommercialDocument(
         },
         operator: { name: "Maria Domingos", terminalId: "POS-01", shiftId: "TURNO-T1" },
         fiscalHash: hash,
-        agtCertificate: "24/AGT/2026",
-        qrPayload: buildAgtQrPayload({
+        agtCertificate: undefined,
+        qrPayload: buildFiscalStructuredQrPayload({
           issuerNif: company.nif,
           documentType: "POS_Z",
           documentNumber: "Z 2026/0154",
@@ -952,13 +974,13 @@ export function createSampleCommercialDocument(
       const taxTotalCents = Math.round((555000 + 690000 + 210000) * 0.14 + 300000 * 0.05);
       const totalCents = subtotalCents + taxTotalCents;
       const hash = "e74a81dc";
-      const docNumber = isFR ? "FR AGT2026/001" : "FT 2026/0291";
+      const docNumber = isFR ? "FR 2026/0001" : "FT 2026/0291";
 
       return {
         id: "sample-doc-001",
         type: type,
         typeName: metadata.label,
-        series: isFR ? "FR AGT2026" : "FT 2026",
+        series: isFR ? "FR 2026" : "FT 2026",
         number: docNumber,
         date: dateIso,
         taxPointDate: dateFormatted,
@@ -994,8 +1016,8 @@ export function createSampleCommercialDocument(
           terminalId: "POS-01",
         },
         fiscalHash: hash,
-        agtCertificate: "24/AGT/2026",
-        qrPayload: buildAgtQrPayload({
+        agtCertificate: undefined,
+        qrPayload: buildFiscalStructuredQrPayload({
           issuerNif: company.nif,
           customerNif: customer.nif,
           documentType: isFR ? "FR" : "FT",
@@ -1184,7 +1206,7 @@ export function saleToCommercialDocument(
   const computedHash = hash || "--------";
   const computedQr =
     qrPayload ||
-    buildAgtQrPayload({
+    buildFiscalStructuredQrPayload({
       issuerNif: safeCompany.nif,
       customerNif: sale?.customerNif,
       documentType: docType,
@@ -1228,7 +1250,7 @@ export function saleToCommercialDocument(
       terminalId: sale?.terminalId || "01",
     },
     fiscalHash: isProforma ? undefined : computedHash,
-    agtCertificate: isProforma ? undefined : "24/AGT/2026",
+    agtCertificate: isProforma ? undefined : (companyInfo?.certificateNumber || undefined),
     qrPayload: isProforma ? undefined : computedQr,
     notes: isProforma
       ? "Este documento não serve de fatura / Isento de validação fiscal."

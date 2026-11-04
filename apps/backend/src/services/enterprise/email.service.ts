@@ -49,7 +49,7 @@ export class EnterpriseEmailService {
             <div style="background: #f1f5f9; padding: 15px; border-radius: 6px; margin: 20px 0;">
               <p style="margin: 0;">Valor Total: <b style="font-size: 18px; color: #16a34a;">${total}</b></p>
             </div>
-            <p style="color: #64748b; font-size: 12px;">Documento emitido por programa de faturação certificado pela AGT.</p>
+            <p style="color: #64748b; font-size: 12px;">Documento comercial processado por programa de faturação VendaJá Angola · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT.</p>
           </div>
         `,
       };

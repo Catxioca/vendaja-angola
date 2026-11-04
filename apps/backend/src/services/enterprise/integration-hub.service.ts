@@ -53,7 +53,7 @@ export class EnterpriseIntegrationsHubService {
         provider: "AGT_SAFT_AO",
         name: "Autoridade Geral Tributária (SAF-T AO)",
         category: "GOVERNMENT",
-        description: "Comunicação fiscal periódica, exportação e validação de SAF-T AO (Portaria n.º 63/20)",
+        description: "Comunicação fiscal periódica e exportação estrutural de SAF-T AO; validação formal depende de XSD oficial externo",
         status: "ACTIVE",
         syncSchedule: "0 0 1 * *", // Monthly
         lastSyncAt: new Date().toISOString(),

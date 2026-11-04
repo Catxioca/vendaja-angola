@@ -700,7 +700,7 @@ export function LicensingCenterPanel({
           <span className="step-num">3</span>
           <div>
             <strong>Ative e Opere 100% Offline</strong>
-            <p>Os módulos desbloqueados operam com total conformidade fiscal AGT.</p>
+            <p>Os módulos desbloqueados operam com arquitetura preparada para processo de homologação fiscal.</p>
           </div>
         </div>
       </div>

@@ -207,7 +207,7 @@ export class EnterpriseCrmService {
       validUntil: new Date(Date.now() + 30 * 86400000).toISOString(),
       items: [
         { description: "Licenciamento ERP VendaJá Angola v2.2.4 (8 Postos)", quantity: 8, unitPriceCents: 1_200_000_00, totalCents: 9_600_000_00 },
-        { description: "Serviço de Implantação, Formação de Caixas e Certificação AGT", quantity: 1, unitPriceCents: 3_200_000_00, totalCents: 3_200_000_00 },
+        { description: "Serviço de Implantação, Formação de Caixas e Parametrização Fiscal", quantity: 1, unitPriceCents: 3_200_000_00, totalCents: 3_200_000_00 },
       ],
       createdAt: now,
       updatedAt: now,

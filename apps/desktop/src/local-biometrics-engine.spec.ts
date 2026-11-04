@@ -514,7 +514,7 @@ test("Scenario 10: Empresas & RH -> Registo de Entrada, Saída, Pausas e Horas E
     authMethod: "FINGERPRINT",
     biometricProbe: "FP-SEBASTIAO",
     direction: "ENTRY",
-    deviceName: "Torniquete Portaria",
+    deviceName: "Torniquete Entrada Principal",
     eventCategory: "NORMAL",
   });
   assert.equal(entry.granted, true);

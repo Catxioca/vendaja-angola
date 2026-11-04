@@ -1,4 +1,4 @@
-# VendaJá Angola 3.2.1-rc.4
+# VendaJá Angola 3.2.2-rc.1
 
 Release candidate para piloto operacional experimental. Esta versão não é uma
 publicação pública nem constitui homologação fiscal.

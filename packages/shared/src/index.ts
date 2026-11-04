@@ -1123,8 +1123,8 @@ export function escPosReceipt(sale: Sale, options: ReceiptOptions = {}): Uint8Ar
     ] : [
       "Taxa (%)       Base / Incidência     Imposto\n",
       `14%             ${formatKwanza(sale.subtotalCents)}       ${formatKwanza(sale.taxCents)}\n`,
-      `${options.fiscalHash ?? "--------"}-Processado por programa certificado n.º 24/AGT/2026\n`,
-      `QR AGT: ${options.qrPayload ?? ""}\n`,
+      `${(options.fiscalHash ?? "--------").slice(0, 4)}-Processado por programa informático · Não homologado até aprovação formal da AGT\n`,
+      `QR Fiscal: ${options.qrPayload ?? ""}\n`,
     ]),
     `Cliente: ${sale.customerName ?? "Consumidor Final"} | NIF: ${sale.customerNif ?? "999999999"}\n${sale.customerAddress ?? ""}\n`,
     "Os bens/serviços foram colocados à disposição na data da factura. Talão indispensável em caso de troca\n",

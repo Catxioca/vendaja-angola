@@ -127,7 +127,7 @@ export class FiscalTreasuryManager {
 
     return {
       mode: "structural",
-      caveat: "Validação estrutural local. Necessário XSD oficial AGT homologado para submissão legal.",
+      caveat: "Validação estrutural local. Validação formal depende de XSD oficial externo disponibilizado pela AGT.",
       readyForExport: true,
     };
   }

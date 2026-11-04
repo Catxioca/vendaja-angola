@@ -64,7 +64,7 @@ export function TabletSidebar({
           <h2 style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: "#38bdf8" }}>
             🇦🇴 VendaJá Tablet POS
           </h2>
-          <small style={{ color: "#94a3b8" }}>Terminal Operacional Certificado</small>
+          <small style={{ color: "#94a3b8" }}>Terminal Operacional Autorizado</small>
         </div>
         <button
           type="button"

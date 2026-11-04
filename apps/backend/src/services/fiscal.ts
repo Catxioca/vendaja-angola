@@ -40,7 +40,7 @@ export interface FiscalTaxRateConfig {
   description: string;
   effectiveFrom: string; // ISO date YYYY-MM-DD
   effectiveTo?: string | null;
-  origin: "PROVISIONAL_PORTARIA_REFERENCED" | "TENANT_CUSTOM_CONFIGURATION";
+  origin: "PROVISIONAL_LEGAL_SOURCE_REFERENCED" | "TENANT_CUSTOM_CONFIGURATION";
   status: "PROVISIONAL_PENDING_AGT_SPECIFICATION" | "ACTIVE" | "DEPRECATED";
 }
 
@@ -106,7 +106,7 @@ export const DEFAULT_PROVISIONAL_FISCAL_POLICY: TenantFiscalPolicy = {
       rate: 0.14,
       description: "Taxa Normal de IVA (14%)",
       effectiveFrom: "2019-10-01",
-      origin: "PROVISIONAL_PORTARIA_REFERENCED",
+      origin: "PROVISIONAL_LEGAL_SOURCE_REFERENCED",
       status: "PROVISIONAL_PENDING_AGT_SPECIFICATION",
     },
     {
@@ -114,7 +114,7 @@ export const DEFAULT_PROVISIONAL_FISCAL_POLICY: TenantFiscalPolicy = {
       rate: 0.07,
       description: "Taxa Reduzida (7%) para bens de amplo consumo",
       effectiveFrom: "2022-01-01",
-      origin: "PROVISIONAL_PORTARIA_REFERENCED",
+      origin: "PROVISIONAL_LEGAL_SOURCE_REFERENCED",
       status: "PROVISIONAL_PENDING_AGT_SPECIFICATION",
     },
     {
@@ -122,7 +122,7 @@ export const DEFAULT_PROVISIONAL_FISCAL_POLICY: TenantFiscalPolicy = {
       rate: 0.05,
       description: "Taxa Especial (5%) produtos agrícolas e pecuários",
       effectiveFrom: "2024-01-01",
-      origin: "PROVISIONAL_PORTARIA_REFERENCED",
+      origin: "PROVISIONAL_LEGAL_SOURCE_REFERENCED",
       status: "PROVISIONAL_PENDING_AGT_SPECIFICATION",
     },
     {
@@ -130,7 +130,7 @@ export const DEFAULT_PROVISIONAL_FISCAL_POLICY: TenantFiscalPolicy = {
       rate: 0.00,
       description: "Isenção de IVA (0%)",
       effectiveFrom: "2019-10-01",
-      origin: "PROVISIONAL_PORTARIA_REFERENCED",
+      origin: "PROVISIONAL_LEGAL_SOURCE_REFERENCED",
       status: "PROVISIONAL_PENDING_AGT_SPECIFICATION",
     },
   ],

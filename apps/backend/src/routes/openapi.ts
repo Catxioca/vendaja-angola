@@ -268,7 +268,7 @@ export const openApiSpecification = {
     },
     "/invoices/{id}": {
       get: {
-        summary: "Consultar fatura detalhada com linhas e hash AGT",
+        summary: "Consultar fatura detalhada com linhas e hash fiscal",
         tags: ["Vendas"],
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
         responses: { "200": { description: "Fatura detalhada" } },

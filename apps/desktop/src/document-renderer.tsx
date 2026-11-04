@@ -345,7 +345,7 @@ export function CommercialDocumentView({
             </div>
           )}
 
-          {/* Fiscal AGT Certification & QR Code */}
+          {/* Fiscal Integrity & QR Code */}
           <div className="thermal-fiscal-footer">
             {doc.fiscalHash && (
               <div className="thermal-agt-mention">
@@ -363,11 +363,11 @@ export function CommercialDocumentView({
               <div className="thermal-qr-container">
                 <img
                   src={qrDataUrl}
-                  alt="QR Code Fiscal AGT"
+                  alt="Código QR fiscal estruturado (piloto)"
                   className="thermal-qr-img"
                   loading="eager"
                 />
-                <div className="thermal-qr-caption">Consulte a validação na AGT</div>
+                <div className="thermal-qr-caption">Código QR fiscal estruturado (piloto)</div>
               </div>
             )}
 
@@ -386,7 +386,7 @@ export function CommercialDocumentView({
                 "Talão indispensável em caso de troca ou devolução no prazo legal de 15 dias."}
             </div>
             <div className="thermal-software-brand">
-              Processado por software certificado VendaJá Angola · www.vendaja.ao
+              Processado por software de faturação VendaJá Angola · www.vendaja.ao
             </div>
 
             <div className="thermal-cut-line">
@@ -529,7 +529,7 @@ export function CommercialDocumentView({
                   </div>
                   {doc.transport.transitCodeAGT && (
                     <div>
-                      Código AGT: <b>{doc.transport.transitCodeAGT}</b>
+                      Código de trânsito: <b>{doc.transport.transitCodeAGT}</b>
                     </div>
                   )}
                   <div className="grid-full">
@@ -753,15 +753,15 @@ export function CommercialDocumentView({
                   : "Documento probatório emitido a título informativo, sem eficácia de validação fiscal."}
               </div>
               <div className="office-software-credit">
-                Emitido por software de gestão empresarial certificado VendaJá Angola Enterprise v2.2 · Licença Oficial AGT
+                Emitido por software de gestão empresarial VendaJá Angola Enterprise · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT
               </div>
             </div>
 
             {/* QR Code */}
             {qrDataUrl && (
               <div className="office-qr-box">
-                <img src={qrDataUrl} alt="Código QR Fiscal AGT" className="office-qr-img" />
-                <span className="office-qr-tag">AGT Fiscal QR</span>
+                <img src={qrDataUrl} alt="Código QR fiscal estruturado (piloto)" className="office-qr-img" />
+                <span className="office-qr-tag" title="Código QR fiscal estruturado (piloto) — Formato oficial pendente de especificação AGT.">QR Fiscal Piloto</span>
               </div>
             )}
 

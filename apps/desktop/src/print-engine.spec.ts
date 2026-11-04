@@ -98,7 +98,7 @@ describe("Enterprise Print Engine & Templates Test Suite", () => {
       assert.ok(html.includes("receipt-58mm"), "Must contain 58mm container class");
       assert.ok(html.includes("width: 48mm;"), "Must constrain printable width to 48mm to prevent clipping");
       assert.ok(html.includes("FR 2026/00045"), "Must contain invoice number");
-      assert.ok(html.includes("ABCD-Processado por programa certificado"), "Must contain 4-char AGT fiscal hash");
+      assert.ok(html.includes("ABCD-Processado por programa informático · Não homologado até aprovação formal da AGT"), "Must contain 4-char fiscal hash mention");
       assert.ok(html.includes("CORTE AQUI"), "Must contain auto-cut feed space");
       assert.ok(!html.includes("undefined"), "Must not contain undefined strings");
       assert.ok(!html.includes("NaN"), "Must not contain NaN strings");
@@ -147,7 +147,7 @@ describe("Enterprise Print Engine & Templates Test Suite", () => {
       assert.ok(html.includes("Empresa de Transportes Kwanza Lda"), "Must include customer name");
       assert.ok(html.includes("5412345678"), "Must include customer NIF");
       assert.ok(html.includes("DISCRIMINAÇÃO FISCAL DE IMPOSTOS"), "Must include tax breakdown table");
-      assert.ok(html.includes("EF78-Processado por programa certificado"), "Must include AGT certification notice");
+      assert.ok(html.includes("EF78-Processado por programa informático · Não homologado até aprovação formal da AGT"), "Must include fiscal notice");
       assert.ok(html.includes("CORTE AQUI"), "Must include auto-cut space");
       assert.ok(!html.includes("undefined"));
       assert.ok(!html.includes("NaN"));

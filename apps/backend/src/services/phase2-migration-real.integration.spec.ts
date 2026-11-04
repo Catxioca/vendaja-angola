@@ -5,7 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { getEffectiveTestDatabaseUrl } from "./db-test-helper.js";
 
-const PSQL_PATH = "C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe";
+const PSQL_PATH =
+  process.platform === "win32"
+    ? fs.existsSync("C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe")
+      ? "C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe"
+      : "psql.exe"
+    : "psql";
 
 test("PROVA REAL DA MIGRATION 35 EM POSTGRESQL (CENÁRIOS A, B, C, D)", async (t) => {
   const dbUrl = await getEffectiveTestDatabaseUrl();

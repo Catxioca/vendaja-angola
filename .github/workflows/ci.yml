@@ -39,6 +39,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run db:generate
+      - run: npm run build:shared
       - run: npm --workspace @angola/backend run prisma:validate
       - run: npm --workspace @angola/backend exec prisma migrate deploy -- --schema=prisma/schema.prisma
       - name: Validate backup and restore

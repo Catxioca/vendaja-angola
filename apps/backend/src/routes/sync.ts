@@ -15,8 +15,8 @@ export const syncRouter = Router();
 syncRouter.use(requireAuth, requireCompanyContext);
 syncRouter.use(distributedRateLimit({ name: "sync", limit: 120, windowMs: 60_000 }));
 
-const mutation = z.object({ id: z.string(), operation: z.enum(["CREATE", "UPDATE"]), entity: z.enum(["SALE", "PRODUCT"]), payload: z.unknown(), occurredAt: z.string().datetime() });
-const saleSchema = z.object({
+export const mutation = z.object({ id: z.string(), operation: z.enum(["CREATE", "UPDATE"]), entity: z.enum(["SALE", "PRODUCT"]), payload: z.unknown(), occurredAt: z.string().datetime() });
+export const saleSchema = z.object({
   id: z.string().uuid(),
   number: z.string().min(1).optional(),
   subtotalCents: z.number().int().nonnegative().optional(),
@@ -36,7 +36,7 @@ const saleSchema = z.object({
     quantity: z.number().int().positive(),
     unitPriceCents: z.number().int().nonnegative().optional(),
     taxRate: z.number().min(0).max(1).optional(),
-  })).min(1),
+  })).min(1).max(1000),
 });
 
 class SyncMutationRejected extends Error {
@@ -67,10 +67,12 @@ async function recordMutation(
   });
 }
 
+export const syncInput = z.object({ deviceId: z.string().min(1), mutations: z.array(mutation).max(1000), lastCursor: z.string().optional() });
+
 syncRouter.post("/", async (req, res) => {
   const auth = req as AuthRequest;
   if (!auth.user?.id || !auth.context) { res.status(403).json({ error: "company_context_required" }); return; }
-  const parsed = z.object({ deviceId: z.string().min(1), mutations: z.array(mutation), lastCursor: z.string().optional() }).safeParse(req.body);
+  const parsed = syncInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_sync", details: parsed.error.flatten() }); return; }
 
   const accepted: string[] = [];

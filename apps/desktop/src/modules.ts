@@ -246,10 +246,10 @@ export const MODULE_CATALOG: ModuleInfo[] = [
   },
   {
     code: "AI",
-    name: "VendaJá Copilot (IA)",
+    name: "Muambuluisha IA",
     category: "Inteligência Artificial",
     icon: "🤖",
-    description: "Assistente empresarial inteligente com consultas em linguagem natural, previsões preditivas e deteção de anomalias.",
+    description: "Assistente empresarial inteligente com consultas em linguagem natural, previsões preditivas e deteção de anomalias com base em dados reais do ERP.",
     minimumPlan: "ENTERPRISE",
   },
   {
@@ -366,7 +366,7 @@ export const normalizeModuleCode = (code: string): AppModule | null => {
   if (upper === "GOVERNANCE" || upper === "GOVERNANCA" || upper === "AUDIT" || upper === "SECURITY") return "GOVERNANCE";
   if (upper === "INTEGRATIONS" || upper === "INTEGRACOES" || upper === "API" || upper === "WEBHOOKS") return "INTEGRATIONS";
   if (upper === "CLOUD" || upper === "SAAS" || upper === "MULTILOJAS" || upper === "MULTILOJA") return "CLOUD";
-  if (upper === "AI" || upper === "COPILOT" || upper === "IA" || upper === "ASSISTANT") return "AI";
+  if (upper === "AI" || upper === "COPILOT" || upper === "IA" || upper === "ASSISTANT" || upper === "MUAMBULUISHA" || upper === "MUAMBULA") return "AI";
   if (upper === "BIOMETRICS" || upper === "BIOMETRIA" || upper === "ACCESS_CONTROL" || upper === "ACESSOS" || upper === "ACCESS") return "BIOMETRICS";
   if (upper === "CORPORATE" || upper === "HEADQUARTERS" || upper === "SEDE" || upper === "LOJA_MAE" || upper === "CORPORATIVO") return "CORPORATE";
   return null;

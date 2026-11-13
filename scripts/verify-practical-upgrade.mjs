@@ -68,7 +68,7 @@ try {
 
   console.log("  ✔ Configurações, terminalId, outbox, cache e licença v2.2.1 gravados.");
 
-  console.log("[2/4] Executando processo de upgrade para versão v3.2.2-rc.1...");
+  console.log("[2/4] Executando processo de upgrade para versão v3.2.2-rc.3...");
 
   // Simulate upgrade migration: Pre-update snapshot + verification
   const backupDir = path.join(tempUserData, "backups");
@@ -76,7 +76,7 @@ try {
   const backupManifest = {
     backupId: `BKP-${Date.now()}`,
     sourceVersion: "2.2.1",
-    targetVersion: "3.2.2-rc.1",
+    targetVersion: "3.2.2-rc.3",
     timestamp: new Date().toISOString(),
     filesPreserved: ["server-config.json", "license.json", "pos-outbox/pending-queue.json", "pos-cache/catalog-cache.json"],
   };

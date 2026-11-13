@@ -30,7 +30,7 @@ export function CopilotWidget({ apiUrl, contextModule = "DASHBOARD", standalone 
       id: "welcome-1",
       sender: "copilot",
       timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
-      text: "Olá! Sou o **VendaJá Copilot**, o assistente executivo com Inteligência Artificial do ERP VendaJá Angola. Como posso apoiar a sua gestão hoje?",
+      text: "Olá! Sou o **Muambuluisha IA — Assistente inteligente do VendaJá Angola**. Como posso apoiar a sua gestão hoje?",
       insights: [
         "Estou conectado à base de dados real do ERP e respondo com indicadores auditáveis.",
         "Pode perguntar sobre Vendas, Finanças, Tesouraria, Stocks, Recursos Humanos ou Previsões.",
@@ -75,7 +75,7 @@ export function CopilotWidget({ apiUrl, contextModule = "DASHBOARD", standalone 
     { label: "👥 Colaboradores de férias", q: "Quantos colaboradores estão de férias?" },
     { label: "📈 Previsão de vendas", q: "Previsão de vendas para o próximo mês" },
     { label: "🔍 Deteção de anomalias", q: "Quais anomalias e irregularidades foram detetadas?" },
-    { label: "💡 Recomendações estratégicas", q: "Quais são as recomendações do Copilot?" },
+    { label: "💡 Recomendações estratégicas", q: "Quais são as recomendações da Muambuluisha IA?" },
   ];
 
   const handleSend = async (textToSend?: string) => {
@@ -172,7 +172,7 @@ export function CopilotWidget({ apiUrl, contextModule = "DASHBOARD", standalone 
           <span style={{ fontSize: "22px" }}>🤖</span>
           <div>
             <div style={{ fontWeight: 700, fontSize: "15px", color: "#38bdf8" }}>
-              VendaJá Copilot — IA Empresarial Integrada
+              Muambuluisha IA — Assistente inteligente do VendaJá Angola
             </div>
             <div style={{ fontSize: "11px", color: "#94a3b8" }}>
               Assistente Corporativo em Linguagem Natural · Dados Reais Auditados
@@ -279,7 +279,7 @@ export function CopilotWidget({ apiUrl, contextModule = "DASHBOARD", standalone 
                 gap: "6px",
               }}
             >
-              <span>{m.sender === "user" ? "Você" : "🤖 VendaJá Copilot"}</span>
+              <span>{m.sender === "user" ? "Você" : "🤖 Muambuluisha IA"}</span>
               <span>· {m.timestamp}</span>
               {m.source && (
                 <span
@@ -413,7 +413,7 @@ export function CopilotWidget({ apiUrl, contextModule = "DASHBOARD", standalone 
         {loading && (
           <div style={{ display: "flex", gap: "8px", alignItems: "center", color: "#94a3b8", fontSize: "12px" }}>
             <span className="spinner" style={{ width: "16px", height: "16px", border: "2px solid #38bdf8" }} />
-            <span>O VendaJá Copilot está a analisar a base de dados real…</span>
+            <span>O Muambuluisha IA está a analisar a base de dados real…</span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -437,7 +437,7 @@ export function CopilotWidget({ apiUrl, contextModule = "DASHBOARD", standalone 
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Pergunte ao VendaJá Copilot (ex: 'Quanto vendi hoje?', 'Stock crítico', 'Previsão de vendas')…"
+          placeholder="Pergunte ao Muambuluisha IA (ex: 'Quanto vendi hoje?', 'Stock crítico', 'Previsão de vendas')…"
           style={{
             flex: 1,
             padding: "10px 14px",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { createPosStorage, SyncEngine, formatKwanza } from "@angola/shared";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -12,11 +12,40 @@ import { AdminPortal } from "./AdminPortal";
 import { DesktopErpApp } from "./desktop/renderer.js";
 import { MobileErpApp } from "./MobileErpApp";
 import { CopilotWidget } from "./CopilotWidget";
+import { logoutSession, persistBrowserSession } from "./site/session";
+import {
+  SiteHeader,
+  SiteFooter,
+  updatePageSeo,
+  resolveRouteFromLocation,
+  resolveEffectiveViewWithSession,
+  navigateHistory,
+  isPublicView,
+  requiresMainErpSession,
+  normalizeRouteToken,
+  type OmnichannelView,
+  type AuthenticatedAppView,
+} from "./site/index";
 import "./style.css";
+import "./site/site.css";
+
+const HomePage = lazy(() => import("./site/HomePage").then((m) => ({ default: m.HomePage })));
+const SolutionsPage = lazy(() => import("./site/SolutionsPage").then((m) => ({ default: m.SolutionsPage })));
+const ModulesPage = lazy(() => import("./site/ModulesPage").then((m) => ({ default: m.ModulesPage })));
+const SobrePage = lazy(() => import("./site/SobrePage").then((m) => ({ default: m.SobrePage })));
+const LoginPage = lazy(() => import("./site/LoginPage").then((m) => ({ default: m.LoginPage })));
+const BootstrapPage = lazy(() => import("./site/BootstrapPage").then((m) => ({ default: m.BootstrapPage })));
+const SecurityPage = lazy(() => import("./site/SecurityPage").then((m) => ({ default: m.SecurityPage })));
+const FiscalCompliancePage = lazy(() => import("./site/FiscalCompliancePage").then((m) => ({ default: m.FiscalCompliancePage })));
+const PrivacyPolicyPage = lazy(() => import("./site/PrivacyPolicyPage").then((m) => ({ default: m.PrivacyPolicyPage })));
+const TermsPage = lazy(() => import("./site/TermsPage").then((m) => ({ default: m.TermsPage })));
+const StatusPage = lazy(() => import("./site/StatusPage").then((m) => ({ default: m.StatusPage })));
+const ContactPage = lazy(() => import("./site/ContactPage").then((m) => ({ default: m.ContactPage })));
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").then((reg) => {
+    const swUrl = window.location.protocol.startsWith("http") ? "/sw.js" : "./sw.js";
+    navigator.serviceWorker.register(swUrl).then((reg) => {
       void reg.update();
       reg.addEventListener("updatefound", () => {
         const newWorker = reg.installing;
@@ -50,7 +79,12 @@ function Login({ onLogin }: { onLogin: () => void }) {
     event.preventDefault();
     setError("");
     try {
-      const response = await fetch(`${api()}/api/v1/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier, password }) });
+      const response = await fetch(`${api()}/api/v1/auth/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
       if (response.status === 401 || response.status === 403) {
         // Automatic Multi-Profile Detection
         try {
@@ -83,13 +117,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
       }
       if (!response.ok) { setError(`O servidor não está disponível para iniciar sessão (HTTP ${response.status}). Tente novamente mais tarde.`); return; }
       const data = await response.json();
-      localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("refreshToken", data.refreshToken);
-      localStorage.setItem("posUser", JSON.stringify(data.user));
-      if (data.context) {
-        if (data.context.companyId) localStorage.setItem("companyId", data.context.companyId);
-        if (data.context.branchId) localStorage.setItem("branchId", data.context.branchId);
-      }
+      persistBrowserSession(data);
       onLogin();
     } catch {
       setError("Não foi possível contactar o servidor. Verifique a ligação ao backend; o início de sessão requer ligação ativa.");
@@ -314,65 +342,86 @@ function Reports() {
   const rows = Array.isArray(data?.rows) ? data.rows as Array<Record<string, unknown>> : [];
   return <section><h2>Relatórios comerciais</h2><div className="customer-fields"><select value={type} onChange={e => setType(e.target.value)}>{[["sales", "Vendas"], ["products", "Produtos"], ["stock", "Stock"], ["purchases", "Compras"], ["expenses", "Despesas"], ["receivables", "Contas a receber"], ["payables", "Contas a pagar"], ["summary", "Resumo financeiro"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input type="date" value={from} onChange={e => setFrom(e.target.value)} /><input type="date" value={to} onChange={e => setTo(e.target.value)} /><button onClick={() => void load()}>Aplicar filtros</button></div>{error && <p className="error-message">{error}</p>}{data && type === "sales" && <div className="cards"><article><small>Documentos</small><strong>{String(data.documents ?? 0)}</strong></article><article><small>Total</small><strong>{formatKwanza(Number(data.totalCents ?? 0))}</strong></article><article><small>Ticket médio</small><strong>{formatKwanza(Number(data.averageTicketCents ?? 0))}</strong></article></div>}{data && type === "summary" && <div className="cards"><article><small>Vendas</small><strong>{formatKwanza(Number(data.salesCents ?? 0))}</strong></article><article><small>Compras</small><strong>{formatKwanza(Number(data.purchasesCents ?? 0))}</strong></article><article><small>Despesas</small><strong>{formatKwanza(Number(data.expensesCents ?? 0))}</strong></article></div>}<table><thead><tr>{rows[0] ? Object.keys(rows[0]).slice(0, 8).map(key => <th key={key}>{key}</th>) : <th>Resultado</th>}</tr></thead><tbody>{rows.slice(0, 200).map((row, index) => <tr key={index}>{Object.keys(row).slice(0, 8).map(key => <td key={key}>{typeof row[key] === "object" ? JSON.stringify(row[key]) : String(row[key] ?? "—")}</td>)}</tr>)}{!rows.length && <tr><td>Sem dados no período selecionado.</td></tr>}</tbody></table></section>;
 }
-type OmnichannelView =
-  | "erp"
-  | "portal-cliente"
-  | "customer-portal"
-  | "portal-fornecedor"
-  | "supplier-portal"
-  | "portal-colaborador"
-  | "employee-portal"
-  | "portal-rh"
-  | "portal-comercial"
-  | "portal-admin"
-  | "mobile-erp"
-  | "copilot";
-
-const ALL_VIEWS: OmnichannelView[] = [
-  "erp",
-  "portal-cliente",
-  "customer-portal",
-  "portal-fornecedor",
-  "supplier-portal",
-  "portal-colaborador",
-  "employee-portal",
-  "portal-rh",
-  "portal-comercial",
-  "portal-admin",
-  "mobile-erp",
-  "copilot",
-];
+function resolveInitialRouteState(): {
+  view: OmnichannelView;
+  postLoginTarget: AuthenticatedAppView | null;
+} {
+  if (typeof window === "undefined") {
+    return { view: "home", postLoginTarget: null };
+  }
+  const isNative = Boolean(
+    (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+  );
+  const hasSession = Boolean(localStorage.getItem("accessToken"));
+  const resolved = resolveRouteFromLocation({
+    pathname: window.location.pathname,
+    hash: window.location.hash,
+    isNativeCapacitor: isNative,
+    protocol: window.location.protocol,
+    savedView: localStorage.getItem("vendaja_omnichannel_view"),
+    hasSession,
+  });
+  const guarded = resolveEffectiveViewWithSession(resolved, hasSession);
+  return {
+    view: guarded.effectiveView,
+    postLoginTarget: guarded.postLoginRedirect,
+  };
+}
 
 function Boot() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [view, setView] = useState<OmnichannelView>(() => {
-    const hash = (typeof window !== "undefined" ? window.location.hash.replace("#", "") : "") as OmnichannelView;
-    if (ALL_VIEWS.includes(hash)) return hash;
-    const saved = localStorage.getItem("vendaja_omnichannel_view") as OmnichannelView;
-    if (ALL_VIEWS.includes(saved)) return saved;
-    if (typeof window !== "undefined" && ((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() || window.innerWidth < 768)) {
-      return "mobile-erp";
-    }
-    return "erp";
-  });
+  const [initialRoute] = useState(() => resolveInitialRouteState());
+  const [view, setView] = useState<OmnichannelView>(initialRoute.view);
+  const [postLoginTarget, setPostLoginTarget] = useState<AuthenticatedAppView | null>(
+    initialRoute.postLoginTarget
+  );
+
+  const hasMainSession = () => Boolean(localStorage.getItem("accessToken"));
 
   useEffect(() => {
-    const handleHash = () => {
-      const next = window.location.hash.replace("#", "") as OmnichannelView;
-      if (ALL_VIEWS.includes(next)) {
-        setView(next);
-      }
+    const syncFromLocation = () => {
+      const isNative = Boolean(
+        (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+      );
+      const activeSession = hasMainSession();
+      const resolved = resolveRouteFromLocation({
+        pathname: window.location.pathname,
+        hash: window.location.hash,
+        isNativeCapacitor: isNative,
+        protocol: window.location.protocol,
+        hasSession: activeSession,
+      });
+      const guarded = resolveEffectiveViewWithSession(resolved, activeSession);
+      setPostLoginTarget(guarded.postLoginRedirect);
+      setView(guarded.effectiveView);
     };
-    window.addEventListener("hashchange", handleHash);
-    return () => window.removeEventListener("hashchange", handleHash);
+
+    window.addEventListener("popstate", syncFromLocation);
+    window.addEventListener("hashchange", syncFromLocation);
+    return () => {
+      window.removeEventListener("popstate", syncFromLocation);
+      window.removeEventListener("hashchange", syncFromLocation);
+    };
   }, []);
 
-  const changeView = (next: OmnichannelView) => {
-    setView(next);
-    window.location.hash = next;
-    localStorage.setItem("vendaja_omnichannel_view", next);
+  const changeView = (next: string) => {
+    const normalized = normalizeRouteToken(next) ?? "home";
+    const activeSession = hasMainSession();
+    const guarded = resolveEffectiveViewWithSession(normalized, activeSession);
+    setPostLoginTarget(guarded.postLoginRedirect);
+    setView(guarded.effectiveView);
+    navigateHistory(guarded.effectiveView);
+    if (activeSession && !isPublicView(guarded.effectiveView)) {
+      localStorage.setItem("vendaja_omnichannel_view", guarded.effectiveView);
+    } else {
+      localStorage.removeItem("vendaja_omnichannel_view");
+    }
   };
+
+  useEffect(() => {
+    updatePageSeo(view);
+  }, [view]);
 
   useEffect(() => {
     let active = true;
@@ -385,6 +434,108 @@ function Boot() {
       .catch((reason: unknown) => { const next = reason instanceof Error ? reason : new Error(String(reason)); console.error("[web] local storage initialization failed", next); if (active) setError(next); });
     return () => { active = false; };
   }, []);
+
+  const renderSiteLayout = (content: React.ReactNode) => (
+    <div className="site-wrapper">
+      <SiteHeader currentView={view} onNavigate={changeView} />
+      <main id="main-content" className="site-main" tabIndex={-1}>
+        <Suspense
+          fallback={
+            <div style={{ padding: "48px 24px", textAlign: "center", color: "#64748b" }} role="status" aria-live="polite">
+              <div className="spinner" style={{ margin: "0 auto 16px" }} />
+              <p>A carregar página...</p>
+            </div>
+          }
+        >
+          {content}
+        </Suspense>
+      </main>
+      <SiteFooter onNavigate={changeView} />
+    </div>
+  );
+
+  // Vistas públicas do site institucional (renderizadas imediatamente sem bloqueio)
+  if (view === "home") {
+    return renderSiteLayout(<HomePage apiUrl={api()} onNavigate={changeView} />);
+  }
+
+  if (view === "solucoes") {
+    return renderSiteLayout(<SolutionsPage onNavigate={changeView} />);
+  }
+
+  if (view === "modulos") {
+    return renderSiteLayout(<ModulesPage onNavigate={changeView} />);
+  }
+
+  if (view === "seguranca") {
+    return renderSiteLayout(<SecurityPage onNavigate={changeView} />);
+  }
+
+  if (view === "conformidade-fiscal") {
+    return renderSiteLayout(<FiscalCompliancePage onNavigate={changeView} />);
+  }
+
+  if (view === "sobre") {
+    return renderSiteLayout(<SobrePage onNavigate={changeView} />);
+  }
+
+  if (view === "privacidade") {
+    return renderSiteLayout(<PrivacyPolicyPage onNavigate={changeView} />);
+  }
+
+  if (view === "termos") {
+    return renderSiteLayout(<TermsPage onNavigate={changeView} />);
+  }
+
+  if (view === "estado") {
+    return renderSiteLayout(<StatusPage apiUrl={api()} onNavigate={changeView} />);
+  }
+
+  if (view === "contacto") {
+    return renderSiteLayout(<ContactPage apiUrl={api()} onNavigate={changeView} />);
+  }
+
+  if (view === "entrar") {
+    return renderSiteLayout(
+      <LoginPage
+        apiUrl={api()}
+        onSuccess={() => {
+          const dest = postLoginTarget ?? "erp";
+          setPostLoginTarget(null);
+          changeView(dest);
+        }}
+        onNavigate={changeView}
+      />
+    );
+  }
+
+  if (view === "criar-conta") {
+    return renderSiteLayout(
+      <BootstrapPage
+        apiUrl={api()}
+        onSuccess={() => {
+          const dest = postLoginTarget ?? "erp";
+          setPostLoginTarget(null);
+          changeView(dest);
+        }}
+        onNavigate={changeView}
+      />
+    );
+  }
+
+  if (requiresMainErpSession(view) && !hasMainSession()) {
+    return renderSiteLayout(
+      <LoginPage
+        apiUrl={api()}
+        onSuccess={() => {
+          const dest = postLoginTarget ?? (view as AuthenticatedAppView);
+          setPostLoginTarget(null);
+          changeView(dest);
+        }}
+        onNavigate={changeView}
+      />
+    );
+  }
 
   if (error) return <main className="startup-error"><h1>Armazenamento local indisponível</h1><p>{error.message}</p><button onClick={() => window.location.reload()}>Recarregar</button></main>;
   if (!ready) return <main className="startup-loading"><div className="spinner" /><p>A iniciar o armazenamento offline…</p></main>;
@@ -421,6 +572,24 @@ function Boot() {
           <span style={{ color: "#94a3b8" }}>Plataforma Digital Integrada</span>
         </div>
         <nav style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => changeView("home")}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "6px",
+              border: "1px solid #0284c7",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "12px",
+              background: "#1e293b",
+              color: "#38bdf8",
+              marginRight: "4px",
+            }}
+            title="Voltar ao Site Institucional VendaJá Angola"
+          >
+            🏠 Início
+          </button>
           <button
             type="button"
             onClick={() => changeView("erp")}
@@ -556,7 +725,7 @@ function Boot() {
             }}
             title="Assistente com Inteligência Artificial para gestão empresarial"
           >
-            🤖 Copilot (IA)
+            🤖 Muambuluisha IA
           </button>
           <button
             type="button"
@@ -575,16 +744,15 @@ function Boot() {
           >
             📱 Mobile ERP
           </button>
-          {localStorage.getItem("accessToken") && (
+          {hasMainSession() && (
             <button
               type="button"
               onClick={() => {
-                localStorage.removeItem("accessToken");
-                localStorage.removeItem("refreshToken");
-                localStorage.removeItem("posUser");
-                localStorage.removeItem("companyId");
-                localStorage.removeItem("branchId");
-                window.location.reload();
+                void logoutSession(api()).finally(() => {
+                  setPostLoginTarget(null);
+                  setView("home");
+                  navigateHistory("home", { replace: true });
+                });
               }}
               style={{
                 padding: "5px 12px",

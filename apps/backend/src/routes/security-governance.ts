@@ -117,11 +117,11 @@ securityGovernanceRouter.get("/roles", requireAuth, async (req, res) => {
   res.json(roles);
 });
 
-const createRoleInput = z.object({
+export const createRoleInput = z.object({
   name: z.string().min(2).max(100),
   code: z.string().min(2).max(50).regex(/^[A-Z0-9_]+$/i),
   description: z.string().max(250).optional(),
-  permissionCodes: z.array(z.string()).optional(),
+  permissionCodes: z.array(z.string()).max(200).optional(),
 });
 
 securityGovernanceRouter.post("/roles", requireAuth, async (req, res) => {
@@ -202,12 +202,18 @@ securityGovernanceRouter.post("/roles/:id/clone", requireAuth, async (req, res) 
   }
 });
 
+export const updateRoleInput = z.object({
+  name: z.string().min(2).max(100).optional(),
+  description: z.string().max(250).optional(),
+  permissionCodes: z.array(z.string()).max(200).optional(),
+});
+
 securityGovernanceRouter.put("/roles/:id", requireAuth, async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const parsed = z.object({
     name: z.string().min(2).max(100).optional(),
     description: z.string().max(250).optional(),
-    permissionCodes: z.array(z.string()).optional(),
+    permissionCodes: z.array(z.string()).max(200).optional(),
   }).safeParse(req.body);
 
   if (!parsed.success) {
@@ -523,6 +529,23 @@ securityGovernanceRouter.get("/policy", requireAuth, async (req, res) => {
   res.json(policy);
 });
 
+export const updatePolicySchema = z.object({
+  minPasswordLength: z.number().int().min(6).max(32).optional(),
+  requireUppercase: z.boolean().optional(),
+  requireLowercase: z.boolean().optional(),
+  requireNumbers: z.boolean().optional(),
+  requireSpecialChars: z.boolean().optional(),
+  passwordExpiryDays: z.number().int().min(0).max(365).optional(),
+  preventPasswordReuseCount: z.number().int().min(0).max(24).optional(),
+  maxFailedLogins: z.number().int().min(3).max(20).optional(),
+  lockoutDurationMinutes: z.number().int().min(1).max(1440).optional(),
+  sessionInactivityMinutes: z.number().int().min(5).max(480).optional(),
+  mfaMandatoryRoles: z.array(z.string()).max(50).optional(),
+  ipWhitelist: z.array(z.string()).max(100).optional(),
+  allowedWorkingHoursStart: z.string().nullable().optional(),
+  allowedWorkingHoursEnd: z.string().nullable().optional(),
+});
+
 securityGovernanceRouter.put("/policy", requireAuth, async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const companyId = resolveCompanyId(req);
@@ -542,8 +565,8 @@ securityGovernanceRouter.put("/policy", requireAuth, async (req, res) => {
     maxFailedLogins: z.number().int().min(3).max(20).optional(),
     lockoutDurationMinutes: z.number().int().min(1).max(1440).optional(),
     sessionInactivityMinutes: z.number().int().min(5).max(480).optional(),
-    mfaMandatoryRoles: z.array(z.string()).optional(),
-    ipWhitelist: z.array(z.string()).optional(),
+    mfaMandatoryRoles: z.array(z.string()).max(50).optional(),
+    ipWhitelist: z.array(z.string()).max(100).optional(),
     allowedWorkingHoursStart: z.string().nullable().optional(),
     allowedWorkingHoursEnd: z.string().nullable().optional(),
   }).safeParse(req.body);

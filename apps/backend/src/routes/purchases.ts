@@ -87,11 +87,11 @@ supplierRouter.post("/:id/prices", requireRole("ADMIN"), async (req, res) => {
   } catch { res.status(400).json({ error: "supplier_price_failed" }); }
 });
 
-const lineInput = z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), unitCostCents: z.number().int().nonnegative(), taxRate: z.number().min(0).max(1).default(0) });
-const purchaseInput = z.object({
+export const lineInput = z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), unitCostCents: z.number().int().nonnegative(), taxRate: z.number().min(0).max(1).default(0) });
+export const purchaseInput = z.object({
   idempotencyKey: z.string().min(1).max(200), number: z.string().min(1).max(80), supplierId: z.string().uuid(),
   procurementOrderId: z.string().uuid().optional().nullable(),
-  lines: z.array(lineInput).min(1), discountCents: z.number().int().nonnegative().default(0),
+  lines: z.array(lineInput).min(1).max(1000), discountCents: z.number().int().nonnegative().default(0),
   paymentMethod: z.enum(["CASH", "TRANSFER", "CREDIT"]).default("CASH"), dueDate: z.coerce.date().optional(),
   documentNumber: z.string().max(100).optional().nullable(), purchasedAt: z.coerce.date().optional(), notes: z.string().max(1000).optional().nullable(),
 });
@@ -181,10 +181,10 @@ purchaseRouter.post("/", requireRole("ADMIN"), async (req, res) => {
   }
 });
 
-const receiptInput = z.object({
+export const receiptInput = z.object({
   reference: z.string().trim().min(1).max(120),
   locationId: z.string().uuid(),
-  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), lotNumber: z.string().trim().max(120).optional(), serialNumber: z.string().trim().max(120).optional(), expiresAt: z.coerce.date().optional() })).min(1),
+  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), lotNumber: z.string().trim().max(120).optional(), serialNumber: z.string().trim().max(120).optional(), expiresAt: z.coerce.date().optional() })).min(1).max(1000),
 });
 
 purchaseRouter.post("/:id/receipts", requireRole("ADMIN"), async (req, res) => {

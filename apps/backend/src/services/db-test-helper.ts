@@ -39,8 +39,14 @@ export async function getEffectiveTestDatabaseUrl(): Promise<string | undefined>
     let resolved = raw;
     if (is5433Reachable) {
       url.port = "5433";
-      resolved = url.toString();
     }
+    if (!url.searchParams.has("connect_timeout")) {
+      url.searchParams.set("connect_timeout", "15");
+    }
+    if (!url.searchParams.has("connection_limit")) {
+      url.searchParams.set("connection_limit", "10");
+    }
+    resolved = url.toString();
     process.env.DATABASE_URL = resolved;
     if (!process.env.JWT_SECRET) {
       process.env.JWT_SECRET = "k9X0m2P9vL5nQ8rT1wY4bZ7cE0aD3fG6h8K1";

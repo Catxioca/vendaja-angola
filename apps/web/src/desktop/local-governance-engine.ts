@@ -258,9 +258,9 @@ export const CANONICAL_SYSTEM_PERMISSIONS: GovernancePermission[] = [
   { id: "p78", code: "BI.CreateDashboard", module: "BI", action: "Create", description: "Construir e personalizar dashboards e widgets analíticos" },
   { id: "p79", code: "BI.Manage", module: "BI", action: "Manage", description: "Administrar regras de alertas executivos e modelos de BI" },
 
-  // Artificial Intelligence Copilot
-  { id: "p80", code: "AI.View", module: "AI", action: "View", description: "Aceder ao assistente inteligente VendaJá Copilot" },
-  { id: "p81", code: "AI.Chat", module: "AI", action: "Chat", description: "Interagir em linguagem natural com o VendaJá Copilot" },
+  // Artificial Intelligence Muambuluisha IA
+  { id: "p80", code: "AI.View", module: "AI", action: "View", description: "Aceder ao assistente inteligente Muambuluisha IA" },
+  { id: "p81", code: "AI.Chat", module: "AI", action: "Chat", description: "Interagir em linguagem natural com a Muambuluisha IA" },
   { id: "p82", code: "AI.Forecast", module: "AI", action: "Forecast", description: "Consultar previsões de vendas, stock e tesouraria por IA" },
   { id: "p83", code: "AI.Analytics", module: "AI", action: "Analytics", description: "Solicitar insights analíticos e deteção de anomalias por IA" },
   { id: "p84", code: "AI.Admin", module: "AI", action: "Admin", description: "Administrar modelos, parâmetros e auditoria de IA" },

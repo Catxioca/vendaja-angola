@@ -262,7 +262,7 @@ export class EnterpriseEmployeePortalService {
       payDate: typeof p.payDate === "object" ? p.payDate.toISOString() : (p.payDate || null),
     }));
 
-    const latestNet = payrolls[0]?.netSalaryCents ?? (isProduction ? employee.baseSalaryCents : 1_277_000_00);
+    const latestNet = payrolls[0]?.netSalaryCents ?? (!isProduction ? 1_277_000_00 : (employee.baseSalaryCents || 0));
     const leaveRequests = this.inMemoryLeaveRequests.get(employee.id) || [];
     const pendingLeaves = leaveRequests.filter((l) => l.status === "PENDING_APPROVAL");
 

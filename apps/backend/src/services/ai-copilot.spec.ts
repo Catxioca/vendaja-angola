@@ -7,7 +7,7 @@ import {
   SYSTEM_PERMISSIONS,
 } from "./enterprise/index.js";
 
-test("VendaJá Copilot: SYSTEM_PERMISSIONS contains canonical AI permission suite (96 total)", () => {
+test("Muambuluisha IA: SYSTEM_PERMISSIONS contains canonical AI permission suite (96 total)", () => {
   assert.equal(SYSTEM_PERMISSIONS.length, 96, "Total de permissões do sistema deve ser 96");
   
   const aiPerms = SYSTEM_PERMISSIONS.filter((p) => p.module === "AI");
@@ -21,7 +21,7 @@ test("VendaJá Copilot: SYSTEM_PERMISSIONS contains canonical AI permission suit
   assert.ok(codes.includes("AI.Admin"), "Deve conter AI.Admin");
 });
 
-test("VendaJá Copilot: NLU intent classification correctly classifies multi-domain queries", async () => {
+test("Muambuluisha IA: NLU intent classification correctly classifies multi-domain queries", async () => {
   const companyId = "test-comp-1";
   const adminUserId = "admin-user";
 
@@ -134,7 +134,7 @@ test("VendaJá Copilot: NLU intent classification correctly classifies multi-dom
   }
 });
 
-test("VendaJá Copilot: RBAC security gatekeeper strictly rejects unauthorized users", async () => {
+test("Muambuluisha IA: RBAC security gatekeeper strictly rejects unauthorized users", async () => {
   const companyId = "test-comp-1";
   const restrictedUserId = "cashier-1";
 
@@ -170,7 +170,7 @@ test("VendaJá Copilot: RBAC security gatekeeper strictly rejects unauthorized u
   }
 });
 
-test("VendaJá Copilot: Proactive insights engine returns non-empty structured alerts", async () => {
+test("Muambuluisha IA: Proactive insights engine returns non-empty structured alerts", async () => {
   const result = await EnterpriseAiCopilotService.getProactiveInsights("test-comp-1");
   assert.ok(result && typeof result.headline === "string", "Deve retornar headline de insights");
   assert.ok(Array.isArray(result.insights), "result.insights deve ser um array");
@@ -186,7 +186,7 @@ test("VendaJá Copilot: Proactive insights engine returns non-empty structured a
   }
 });
 
-test("VendaJá Copilot: Anomaly detection engine flags irregular operations", async () => {
+test("Muambuluisha IA: Anomaly detection engine flags irregular operations", async () => {
   const anomalies = await EnterpriseAiCopilotService.detectAnomalies("test-comp-1");
   assert.ok(Array.isArray(anomalies));
   assert.ok(anomalies.length >= 1, "Deve identificar anomalias ou alertas operacionais");
@@ -199,7 +199,7 @@ test("VendaJá Copilot: Anomaly detection engine flags irregular operations", as
   }
 });
 
-test("VendaJá Copilot: Strategic recommendations engine produces actionable steps with Kwanza impact", async () => {
+test("Muambuluisha IA: Strategic recommendations engine produces actionable steps with Kwanza impact", async () => {
   const recommendations = await EnterpriseAiCopilotService.getRecommendations("test-comp-1");
   assert.ok(Array.isArray(recommendations));
   assert.ok(recommendations.length >= 2, "Deve retornar recomendações estratégicas");
@@ -227,7 +227,7 @@ test("Live Hot-Sync: EnterpriseCloudUpdateService provides dynamic live config w
   assert.ok(config.syncTimestamp);
 });
 
-test("VendaJá Copilot: Mandatory Business Queries return non-empty answers and valid metrics", async () => {
+test("Muambuluisha IA: Mandatory Business Queries return non-empty answers and valid metrics", async () => {
   const companyId = "test-comp-mandatory";
   const userId = "admin-mandatory";
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { formatKwanza } from "@angola/shared";
 import { MODULE_CATALOG, AppModule } from "./modules";
 import { LiveUpdateEngine, LivePatchPayload, BroadcastNotification } from "./live-update-engine";
@@ -34,6 +34,21 @@ export interface CorporateUser {
   allowedModules: AppModule[];
 }
 
+export interface CorporatePanelProps {
+  api?: string;
+  token?: string | null;
+  role?: string;
+  onError?: (msg: string) => void;
+}
+
+function isDemoMode(): boolean {
+  try {
+    return localStorage.getItem("vendaja_demo_mode") === "true";
+  } catch {
+    return false;
+  }
+}
+
 export interface CorporateEvent {
   id: string;
   timestamp: string;
@@ -44,7 +59,7 @@ export interface CorporateEvent {
   description: string;
 }
 
-const DEFAULT_STORES: CorporateStore[] = [
+const DEMO_STORES: CorporateStore[] = [
   {
     id: "hq-store-01",
     code: "SEDE-KINAXIXI",
@@ -115,7 +130,7 @@ const DEFAULT_STORES: CorporateStore[] = [
   },
 ];
 
-const DEFAULT_USERS: CorporateUser[] = [
+const DEMO_USERS: CorporateUser[] = [
   {
     id: "usr-01",
     username: "admin.central",
@@ -172,46 +187,40 @@ const DEFAULT_USERS: CorporateUser[] = [
   },
 ];
 
-export const CorporatePanel: React.FC = () => {
+export const CorporatePanel: React.FC<CorporatePanelProps> = ({
+  api = "",
+  token = null,
+  role = "",
+  onError,
+}) => {
   const [activeTab, setActiveTab] = useState<
     "COCKPIT" | "STORES" | "USERS" | "MODULES" | "LIVE_UPDATES" | "LICENSES" | "BROADCASTS" | "AUDIT" | "SYNC_HUB"
   >("COCKPIT");
 
-  const [stores, setStores] = useState<CorporateStore[]>(DEFAULT_STORES);
-  const [users, setUsers] = useState<CorporateUser[]>(DEFAULT_USERS);
-  const [storeLicenses, setStoreLicenses] = useState<Record<string, { status: "ACTIVE" | "REVOKED"; reason?: string }>>({
-    "br-benguela-04": { status: "REVOKED", reason: "Suspensão temporária por auditoria de conciliação fiscal" },
-  });
+  const normalizedRole = (role || "").toUpperCase();
+  const isAdmin = normalizedRole === "ADMIN" || normalizedRole === "SUPER_ADMIN" || normalizedRole === "ROLE_ADMIN" || normalizedRole === "ROLE_SUPER_ADMIN";
+  const isManager = normalizedRole === "MANAGER" || normalizedRole === "ROLE_MANAGER";
+  const isAuthorized = isAdmin || isManager;
+  const [isForbidden, setIsForbidden] = useState<boolean>(false);
+  const [isServerUnavailable, setIsServerUnavailable] = useState<boolean>(false);
+  const [testingConnection, setTestingConnection] = useState<boolean>(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<string | null>(null);
+  const [isDemo, setIsDemo] = useState<boolean>(() => isDemoMode());
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const [stores, setStores] = useState<CorporateStore[]>([]);
+  const [users, setUsers] = useState<CorporateUser[]>([]);
+  const [events, setEvents] = useState<CorporateEvent[]>([]);
+  const [storeLicenses, setStoreLicenses] = useState<Record<string, { status: "ACTIVE" | "REVOKED"; reason?: string }>>({});
   const [editingPermissionsUser, setEditingPermissionsUser] = useState<CorporateUser | null>(null);
   const [permFormRole, setPermFormRole] = useState<CorporateUser["role"]>("CASHIER");
   const [permFormModules, setPermFormModules] = useState<AppModule[]>(["POS", "STOCK"]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [pendingOutboxCount, setPendingOutboxCount] = useState<number>(0);
-  const [lastSyncTime, setLastSyncTime] = useState<string>("Agora mesmo");
+  const [lastSyncTime, setLastSyncTime] = useState<string>("Aguardando sincronização");
   const [cloudHubOnline, setCloudHubOnline] = useState<boolean>(true);
 
-  const [events, setEvents] = useState<CorporateEvent[]>([
-    {
-      id: "ev-01",
-      timestamp: new Date().toLocaleTimeString(),
-      actorName: "Super Administrador",
-      branchCode: "SEDE-KINAXIXI",
-      eventType: "COCKPIT_SYNCHRONIZED",
-      severity: "INFO",
-      description: "Cockpit Multi-Loja sincronizado com 4 filiais com sucesso.",
-    },
-    {
-      id: "ev-02",
-      timestamp: new Date(Date.now() - 120_000).toLocaleTimeString(),
-      actorName: "Sistema Corporativo",
-      branchCode: "BR-BENGUELA",
-      eventType: "HEARTBEAT_TIMEOUT",
-      severity: "WARN",
-      description: "Filial Benguela Marginal sem telemetria há mais de 5 minutos.",
-    },
-  ]);
-
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("hq-store-01");
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [newStoreCode, setNewStoreCode] = useState("");
   const [newStoreName, setNewStoreName] = useState("");
   const [newStoreIsHq, setNewStoreIsHq] = useState(false);
@@ -221,7 +230,7 @@ export const CorporatePanel: React.FC = () => {
   const [newUserUsername, setNewUserUsername] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserRole, setNewUserRole] = useState<CorporateUser["role"]>("CASHIER");
-  const [newUserBranchId, setNewUserBranchId] = useState("br-talatona-02");
+  const [newUserBranchId, setNewUserBranchId] = useState("");
 
   // Live update form
   const [patchVersion, setPatchVersion] = useState("2.2.4-patch.02");
@@ -242,19 +251,244 @@ export const CorporatePanel: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  const handleClearAndForbid = useCallback((msg?: string) => {
+    setStores([]);
+    setUsers([]);
+    setEvents([]);
+    setStoreLicenses({});
+    setIsForbidden(true);
+    if (msg) showToast(msg);
+    if (msg && onError) onError(msg);
+  }, [onError]);
+
+  const fetchRealData = useCallback(async () => {
+    if (isDemo) return;
+    if (Boolean(role) && !isAuthorized) {
+      handleClearAndForbid("Acesso restrito: Perfil sem privilégios para o Centro Corporativo.");
+      return;
+    }
+    if (!api || !api.trim()) {
+      setIsServerUnavailable(true);
+      setCloudHubOnline(false);
+      return;
+    }
+    if (!token) return;
+
+    setIsLoading(true);
+    setIsServerUnavailable(false);
+    setConnectionTestResult(null);
+
+    try {
+      const authHeader: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+
+      const cockpitRes = await fetch(`${api}/api/v1/corporate/cockpit`, { headers: authHeader });
+      if (cockpitRes.status === 403) {
+        handleClearAndForbid("Acesso negado: Perfil não autorizado a consultar o Centro Corporativo (403).");
+        return;
+      }
+      if (!cockpitRes.ok) {
+        setIsServerUnavailable(true);
+        setCloudHubOnline(false);
+        return;
+      }
+
+      const cockpit = await cockpitRes.json();
+      const loadedStores: CorporateStore[] = Array.isArray(cockpit.stores) ? cockpit.stores : [];
+      setStores(loadedStores);
+      const first = loadedStores[0];
+      if (first && !selectedBranchId) {
+        setSelectedBranchId(first.id);
+        setNewUserBranchId(first.id);
+      }
+      if (cockpit.recentEvents && Array.isArray(cockpit.recentEvents)) {
+        setEvents(
+          cockpit.recentEvents.map((e: any) => ({
+            id: e.id || `ev-${Date.now()}`,
+            timestamp: e.createdAt ? new Date(e.createdAt).toLocaleTimeString() : new Date().toLocaleTimeString(),
+            actorName: e.actorName || "Sistema Central",
+            branchCode: e.branchCode,
+            eventType: e.eventType || "AUDIT",
+            severity: (e.severity as any) || "INFO",
+            description: e.description || "",
+          }))
+        );
+      }
+      setCloudHubOnline(true);
+      setIsServerUnavailable(false);
+      setLastSyncTime(new Date().toLocaleTimeString());
+
+      const usersRes = await fetch(`${api}/api/v1/auth/users`, { headers: authHeader });
+      if (usersRes.status === 403) {
+        setUsers([]);
+      } else if (usersRes.ok) {
+        const uList = await usersRes.json();
+        if (Array.isArray(uList)) {
+          setUsers(
+            uList.map((u: any) => ({
+              id: u.id,
+              username: u.username,
+              displayName: u.displayName || u.username,
+              email: u.email || `${u.username}@vendaja.local`,
+              role: u.role || "CASHIER",
+              branchId: u.branchId,
+              branchName: u.branchName || "Sede Central (Global)",
+              active: u.active !== false,
+              allowedModules: u.modules || ["POS", "STOCK", "TREASURY"],
+            }))
+          );
+        }
+      }
+
+      try {
+        const eventsRes = await fetch(`${api}/api/v1/corporate/events?limit=30`, { headers: authHeader });
+        if (eventsRes.status === 403) {
+          setEvents([]);
+        } else if (eventsRes.ok) {
+          const evList = await eventsRes.json();
+          if (Array.isArray(evList) && evList.length > 0) {
+            setEvents(
+              evList.map((e: any) => ({
+                id: e.id,
+                timestamp: e.createdAt ? new Date(e.createdAt).toLocaleTimeString() : new Date().toLocaleTimeString(),
+                actorName: e.actorName || "Sistema Central",
+                branchCode: e.branchCode,
+                eventType: e.eventType,
+                severity: e.severity || "INFO",
+                description: e.description,
+              }))
+            );
+          }
+        }
+      } catch {
+        // Eventos opcionais
+      }
+    } catch {
+      setCloudHubOnline(false);
+      setIsServerUnavailable(true);
+      const safeMsg = "Servidor corporativo indisponível: Verifique a conectividade com o backend central.";
+      if (onError) onError(safeMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api, token, isDemo, selectedBranchId, role, isAuthorized, handleClearAndForbid, onError]);
+
+  const handleDeactivateDemo = useCallback(() => {
+    try {
+      localStorage.removeItem("vendaja_demo_mode");
+    } catch {
+      // ignore
+    }
+    setIsDemo(false);
+    setStores([]);
+    setUsers([]);
+    setEvents([]);
+    setCloudHubOnline(false);
+    showToast("Modo DEMO desativado. A consultar dados corporativos reais...");
+    void fetchRealData();
+  }, [fetchRealData]);
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setConnectionTestResult(null);
+    try {
+      if (!api || !api.trim()) {
+        setConnectionTestResult("Nenhuma URL da API corporativa configurada.");
+        return;
+      }
+      const bridge = typeof window !== "undefined" && (window as any).pos;
+      if (bridge?.testServerConnection) {
+        const res = await bridge.testServerConnection(api);
+        setConnectionTestResult(res?.message || (res?.ok ? "Ligação bem-sucedida ao servidor central!" : "Servidor central não respondeu."));
+      } else {
+        const check = await fetch(`${api.replace(/\/+$/, "")}/health`, { signal: AbortSignal.timeout(4000) });
+        if (check.ok) {
+          setConnectionTestResult("Ligação estabelecida com sucesso ao endpoint central!");
+        } else {
+          setConnectionTestResult(`Servidor respondeu com código HTTP ${check.status}.`);
+        }
+      }
+    } catch {
+      setConnectionTestResult("Não foi possível alcançar o servidor central. Verifique a conectividade de rede e a URL.");
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isDemo) {
+      setStores(DEMO_STORES);
+      setUsers(DEMO_USERS);
+      setSelectedBranchId("hq-store-01");
+      setNewUserBranchId("hq-store-01");
+      setEvents([
+        {
+          id: "demo-ev-01",
+          timestamp: new Date().toLocaleTimeString(),
+          actorName: "Super Administrador (DEMO)",
+          branchCode: "DEMO-SEDE",
+          eventType: "DEMO_INITIALIZED",
+          severity: "INFO",
+          description: "Dados de demonstração carregados para formação operacional.",
+        },
+      ]);
+    } else {
+      fetchRealData();
+    }
+  }, [isDemo, fetchRealData]);
   // Aggregated totals
   const totalStores = stores.length;
   const onlineStores = stores.filter((s) => s.online).length;
   const offlineStores = totalStores - onlineStores;
   const totalUsers = users.filter((u) => u.active).length;
-  const totalTodaySalesCents = stores.reduce((acc, s) => acc + s.todaySalesCents, 0);
-  const totalCashDrawerCents = stores.reduce((acc, s) => acc + s.cashDrawerCents, 0);
-  const totalDocuments = stores.reduce((acc, s) => acc + s.todayDocumentsCount, 0);
+  const totalTodaySalesCents = stores.reduce((acc, s) => acc + (s.todaySalesCents || 0), 0);
+  const totalCashDrawerCents = stores.reduce((acc, s) => acc + (s.cashDrawerCents || 0), 0);
+  const totalDocuments = stores.reduce((acc, s) => acc + (s.todayDocumentsCount || 0), 0);
 
   // Add store handler
-  const handleAddStore = (e: React.FormEvent) => {
+  const handleAddStore = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem registar filiais.");
+      return;
+    }
     if (!newStoreCode || !newStoreName) return;
+
+    if (api && token && !isDemo) {
+      try {
+        const res = await fetch(`${api}/api/v1/corporate/stores`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            code: newStoreCode.trim().toUpperCase(),
+            name: newStoreName.trim(),
+            isHeadquarters: newStoreIsHq,
+            active: true,
+          }),
+        });
+
+        if (res.status === 403) {
+          handleClearAndForbid("Acesso negado: Perfil não autorizado a criar filiais.");
+          return;
+        }
+
+        if (res.ok) {
+          showToast(`Filial ${newStoreName} cadastrada no hub central com sucesso!`);
+          setNewStoreCode("");
+          setNewStoreName("");
+          setNewStoreIsHq(false);
+          await fetchRealData();
+          return;
+        }
+      } catch (err: any) {
+        showToast(`Erro de rede ao registar filial: ${err.message}`);
+      }
+    }
 
     const newStore: CorporateStore = {
       id: `br-${Date.now().toString(36)}`,
@@ -296,9 +530,49 @@ export const CorporatePanel: React.FC = () => {
   };
 
   // Add user handler
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem registar utilizadores corporativos.");
+      return;
+    }
     if (!newUserUsername || !newUserDisplayName || !newUserEmail) return;
+
+    if (api && token && !isDemo) {
+      try {
+        const res = await fetch(`${api}/api/v1/corporate/users`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: newUserUsername.trim(),
+            displayName: newUserDisplayName.trim(),
+            email: newUserEmail.trim(),
+            role: newUserRole,
+            branchId: newUserBranchId || undefined,
+            password: "TempPass123!#",
+          }),
+        });
+
+        if (res.status === 403) {
+          handleClearAndForbid("Acesso negado: Perfil não autorizado a criar utilizadores corporativos.");
+          return;
+        }
+
+        if (res.ok) {
+          showToast(`Utilizador ${newUserDisplayName} criado no hub central com sucesso!`);
+          setNewUserUsername("");
+          setNewUserDisplayName("");
+          setNewUserEmail("");
+          await fetchRealData();
+          return;
+        }
+      } catch (err: any) {
+        showToast(`Erro de rede ao criar utilizador: ${err.message}`);
+      }
+    }
 
     const targetBranch = stores.find((s) => s.id === newUserBranchId);
 
@@ -335,7 +609,42 @@ export const CorporatePanel: React.FC = () => {
   };
 
   // Instant remote user suspension
-  const handleToggleSuspendUser = (userId: string) => {
+  const handleToggleSuspendUser = async (userId: string) => {
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem suspender ou reativar utilizadores.");
+      return;
+    }
+    const user = users.find((u) => u.id === userId);
+    if (!user) return;
+    const nextActive = !user.active;
+
+    if (api && token && !isDemo) {
+      try {
+        const res = await fetch(`${api}/api/v1/corporate/users/${userId}/suspend`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            reason: nextActive ? "Reativação pela Administração Central" : "Suspensão preventiva pela Administração Central",
+          }),
+        });
+
+        if (res.status === 403) {
+          handleClearAndForbid("Acesso negado: Perfil não autorizado a suspender utilizadores.");
+          return;
+        }
+
+        if (res.ok) {
+          showToast(`Utilizador ${user.displayName} ${nextActive ? "reativado" : "suspenso"} em toda a rede!`);
+          await fetchRealData();
+          return;
+        }
+      } catch {
+        // segue para atualização em memória
+      }
+    }
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === userId) {
@@ -361,7 +670,45 @@ export const CorporatePanel: React.FC = () => {
   };
 
   // Toggle module for selected branch
-  const handleToggleModule = (branchId: string, modCode: AppModule) => {
+  const handleToggleModule = async (branchId: string, modCode: AppModule) => {
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem controlar módulos das filiais.");
+      return;
+    }
+    const targetStore = stores.find((s) => s.id === branchId);
+    if (!targetStore) return;
+    const isActive = targetStore.activeModules.includes(modCode);
+    const nextStatus = isActive ? "INACTIVE" : "ACTIVE";
+
+    if (api && token && !isDemo) {
+      try {
+        const res = await fetch(`${api}/api/v1/corporate/modules/control`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            branchId,
+            moduleCode: modCode,
+            status: nextStatus,
+          }),
+        });
+
+        if (res.status === 403) {
+          handleClearAndForbid("Acesso negado: Perfil não autorizado a controlar módulos.");
+          return;
+        }
+
+        if (res.ok) {
+          showToast(`Módulo ${modCode} [${nextStatus}] remotamente na filial!`);
+          await fetchRealData();
+          return;
+        }
+      } catch {
+        // segue para atualização em memória
+      }
+    }
     setStores((prev) =>
       prev.map((s) => {
         if (s.id === branchId) {
@@ -454,12 +801,47 @@ export const CorporatePanel: React.FC = () => {
     setPermFormModules(user.allowedModules || ["POS", "STOCK"]);
   };
 
-  const handleSavePermissions = (e: React.FormEvent) => {
+  const handleSavePermissions = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem alterar funções e permissões.");
+      return;
+    }
     if (!editingPermissionsUser) return;
 
     const uId = editingPermissionsUser.id;
     const uName = editingPermissionsUser.displayName;
+
+    if (api && token && !isDemo) {
+      try {
+        const res = await fetch(`${api}/api/v1/corporate/users/${uId}/permissions`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            role: permFormRole,
+            modules: permFormModules,
+            branchId: editingPermissionsUser.branchId,
+          }),
+        });
+
+        if (res.status === 403) {
+          handleClearAndForbid("Acesso negado: Perfil não autorizado a alterar permissões.");
+          return;
+        }
+
+        if (res.ok) {
+          showToast(`Permissões de ${uName} salvas no hub central!`);
+          setEditingPermissionsUser(null);
+          await fetchRealData();
+          return;
+        }
+      } catch {
+        // fallback
+      }
+    }
 
     setUsers((prev) =>
       prev.map((u) => {
@@ -508,10 +890,15 @@ export const CorporatePanel: React.FC = () => {
 
   // Real-Time Bidirectional Synchronization (Loja <-> Cloud <-> Sede)
   const handlePerformSync = async () => {
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem forçar sincronização corporativa.");
+      return;
+    }
     setIsSyncing(true);
     try {
       const engine = LiveUpdateEngine.getInstance();
-      const result = await engine.performBidirectionalSync("http://localhost:4000", {
+      const targetApiUrl = api || (typeof window !== "undefined" && (window as any).__POS_API_URL__) || "";
+      const result = await engine.performBidirectionalSync(targetApiUrl, {
         todaySalesCents: totalTodaySalesCents,
         todayDocumentsCount: totalDocuments,
         cashDrawerCents: totalCashDrawerCents,
@@ -549,6 +936,10 @@ export const CorporatePanel: React.FC = () => {
   // Deploy live patch
   const handleDeployPatch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem publicar atualizações.");
+      return;
+    }
     if (!patchVersion || !patchTitle) return;
 
     // Cryptographic SHA-256 signature
@@ -559,6 +950,37 @@ export const CorporatePanel: React.FC = () => {
     const sha256Signature = Array.from(new Uint8Array(hashBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+
+    if (api && token && !isDemo) {
+      try {
+        const res = await fetch(`${api}/api/v1/corporate/live-updates/publish`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            patchVersion,
+            title: patchTitle,
+            category: patchCategory,
+            payloadJson: patchPayload,
+            isCritical: patchCategory === "SECURITY" || patchCategory === "FISCAL_LEGAL",
+          }),
+        });
+
+        if (res.status === 403) {
+          handleClearAndForbid("Acesso negado: Perfil não autorizado a publicar patches.");
+          return;
+        }
+
+        if (res.ok) {
+          showToast(`Patch ${patchVersion} publicado no hub central com assinatura SHA-256!`);
+          await fetchRealData();
+        }
+      } catch {
+        // fallback local
+      }
+    }
 
     const patch: LivePatchPayload = {
       patchId: `patch-${Date.now().toString(36)}`,
@@ -596,9 +1018,46 @@ export const CorporatePanel: React.FC = () => {
   };
 
   // Send broadcast
-  const handleSendBroadcast = (e: React.FormEvent) => {
+  const handleSendBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      showToast("Apenas Administradores podem emitir comunicados.");
+      return;
+    }
     if (!broadcastTitle || !broadcastContent) return;
+
+    if (api && token && !isDemo) {
+      try {
+        const res = await fetch(`${api}/api/v1/corporate/broadcasts`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: broadcastTitle,
+            content: broadcastContent,
+            priority: broadcastPriority,
+            senderUserId: "admin-hq",
+          }),
+        });
+
+        if (res.status === 403) {
+          handleClearAndForbid("Acesso negado: Perfil não autorizado a emitir comunicados.");
+          return;
+        }
+
+        if (res.ok) {
+          showToast("Comunicado transmitido para a rede no hub central com sucesso!");
+          setBroadcastTitle("");
+          setBroadcastContent("");
+          await fetchRealData();
+          return;
+        }
+      } catch {
+        // fallback
+      }
+    }
 
     const engine = LiveUpdateEngine.getInstance();
     engine.receiveBroadcast({
@@ -627,10 +1086,286 @@ export const CorporatePanel: React.FC = () => {
     showToast("Comunicado transmitido para todas as filiais com sucesso!");
   };
 
-  const selectedStore = stores.find((s) => s.id === selectedBranchId) || stores[0];
+    if ((Boolean(role) && !isAuthorized) || isForbidden) {
+    return (
+      <div style={{ padding: "48px 24px", maxWidth: "800px", margin: "40px auto", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+        <div
+          style={{
+            backgroundColor: "#ffffff",
+            border: "1px solid #ef4444",
+            borderRadius: "12px",
+            padding: "32px",
+            textAlign: "center",
+            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+          }}
+        >
+          <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔒</div>
+          <h2 style={{ fontSize: "22px", fontWeight: "bold", color: "#b91c1c", marginBottom: "12px" }}>
+            Acesso Restrito ao Centro Corporativo
+          </h2>
+          <p style={{ color: "#475569", fontSize: "15px", lineHeight: "1.6", marginBottom: "20px" }}>
+            O seu perfil de utilizador (<strong>{role || "OPERADOR"}</strong>) não possui privilégios para consultar ou operar o Centro Corporativo.
+            O acesso a este módulo é restrito a administradores e gestores autorizados da empresa.
+          </p>
+          <div
+            style={{
+              padding: "12px 16px",
+              backgroundColor: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: "8px",
+              color: "#991b1b",
+              fontSize: "13px",
+              fontWeight: 500,
+            }}
+          >
+            Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isServerUnavailable && !isDemo) {
+    return (
+      <div style={{ padding: "32px 24px", maxWidth: "900px", margin: "24px auto", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+        {toastMessage && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "24px",
+              right: "24px",
+              backgroundColor: "#1e293b",
+              color: "#ffffff",
+              padding: "14px 20px",
+              borderRadius: "8px",
+              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
+              zIndex: 9999,
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              fontWeight: 600,
+            }}
+          >
+            <span>✓</span>
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        <div
+          style={{
+            backgroundColor: "#ffffff",
+            border: "1px solid #fed7aa",
+            borderRadius: "12px",
+            padding: "32px",
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "20px" }}>
+            <div
+              style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "50%",
+                backgroundColor: "#fff7ed",
+                border: "2px solid #fdba74",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "24px",
+              }}
+            >
+              🏢
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#9a3412" }}>
+                Servidor corporativo indisponível
+              </h2>
+              <p style={{ margin: "4px 0 0 0", fontSize: "14px", color: "#64748b" }}>
+                O Centro Corporativo requer backend central acessível para consultar filiais, utilizadores, licenças e auditoria.
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              backgroundColor: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              padding: "16px",
+              marginBottom: "24px",
+            }}
+          >
+            <div style={{ fontSize: "13px", color: "#334155", marginBottom: "8px" }}>
+              <strong>URL configurada:</strong>{" "}
+              <code style={{ backgroundColor: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", fontSize: "12px" }}>
+                {api && api.trim() ? api : "Não configurada"}
+              </code>
+            </div>
+            <p style={{ margin: 0, fontSize: "12px", color: "#64748b", lineHeight: 1.5 }}>
+              Para garantir a integridade da gestão multi-loja e do isolamento entre empresas, o Centro Corporativo
+              não apresenta dados fictícios nem aplica fallback em memória como se fossem dados reais.
+            </p>
+          </div>
+
+          {connectionTestResult && (
+            <div
+              style={{
+                padding: "12px 16px",
+                borderRadius: "6px",
+                marginBottom: "20px",
+                fontSize: "13px",
+                fontWeight: 600,
+                backgroundColor: connectionTestResult.includes("sucesso") || connectionTestResult.includes("bem-sucedida") ? "#f0fdf4" : "#fef2f2",
+                color: connectionTestResult.includes("sucesso") || connectionTestResult.includes("bem-sucedida") ? "#166534" : "#991b1b",
+                border: connectionTestResult.includes("sucesso") || connectionTestResult.includes("bem-sucedida") ? "1px solid #bbf7d0" : "1px solid #fecaca",
+              }}
+            >
+              {connectionTestResult}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "20px" }}>
+            <button
+              type="button"
+              onClick={() => void handleTestConnection()}
+              disabled={testingConnection}
+              style={{
+                backgroundColor: "#f1f5f9",
+                color: "#0f172a",
+                border: "1px solid #cbd5e1",
+                padding: "10px 18px",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: testingConnection ? "not-allowed" : "pointer",
+              }}
+            >
+              {testingConnection ? "A testar ligação…" : "Testar ligação"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void fetchRealData()}
+              disabled={isLoading}
+              style={{
+                backgroundColor: "#0284c7",
+                color: "#ffffff",
+                border: "none",
+                padding: "10px 20px",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: isLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              {isLoading ? "A carregar…" : "Tentar novamente"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.setItem("vendaja_demo_mode", "true");
+                  setIsDemo(true);
+                  showToast("Modo DEMO ativado exclusivamente para demonstração.");
+                } catch {
+                  // ignore
+                }
+              }}
+              style={{
+                backgroundColor: "transparent",
+                color: "#64748b",
+                border: "1px dashed #cbd5e1",
+                padding: "10px 16px",
+                borderRadius: "6px",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+                marginLeft: "auto",
+              }}
+            >
+              Ativar Modo DEMO (Apenas Teste)
+            </button>
+          </div>
+
+          <div
+            style={{
+              padding: "12px 16px",
+              backgroundColor: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: "8px",
+              color: "#991b1b",
+              fontSize: "12px",
+              fontWeight: 500,
+              textAlign: "center",
+            }}
+          >
+            Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const firstStore = stores[0];
+  const selectedStore = stores.find((s) => s.id === selectedBranchId) || firstStore;
 
   return (
     <div style={{ padding: "24px", maxWidth: "1400px", margin: "0 auto", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      {isDemo && (
+        <div
+          role="status"
+          aria-label="Aviso de Modo DEMO"
+          style={{
+            backgroundColor: "#fffbeb",
+            border: "2px solid #f59e0b",
+            borderRadius: "10px",
+            padding: "16px 20px",
+            marginBottom: "20px",
+            color: "#92400e",
+            fontSize: "13px",
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "16px",
+            boxShadow: "0 2px 8px rgba(245, 158, 11, 0.12)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "24px" }} aria-hidden="true">⚠️</span>
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", color: "#b45309" }}>
+                MODO DEMO ATIVO — Dados ilustrativos
+              </div>
+              <p style={{ margin: "4px 0 0 0", fontSize: "12px", fontWeight: 500, color: "#92400e" }}>
+                Os dados exibidos nesta vista são estritamente demonstrativos para formação e testes locais. Não afetam a base de dados real nem a fiscalidade.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDeactivateDemo}
+            style={{
+              backgroundColor: "#b45309",
+              color: "#ffffff",
+              border: "none",
+              padding: "10px 18px",
+              borderRadius: "6px",
+              fontSize: "12px",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            Desativar Modo DEMO e voltar aos dados reais
+          </button>
+        </div>
+      )}
       {/* Toast Alert */}
       {toastMessage && (
         <div
@@ -696,17 +1431,17 @@ export const CorporatePanel: React.FC = () => {
               display: "flex",
               alignItems: "center",
               gap: "6px",
-              backgroundColor: "#f0fdf4",
-              border: "1px solid #bbf7d0",
+              backgroundColor: cloudHubOnline ? "#f0fdf4" : "#fffbeb",
+              border: cloudHubOnline ? "1px solid #bbf7d0" : "1px solid #fde68a",
               padding: "6px 12px",
               borderRadius: "6px",
-              color: "#166534",
+              color: cloudHubOnline ? "#166534" : "#92400e",
               fontSize: "13px",
               fontWeight: 600,
             }}
           >
-            <span style={{ width: "8px", height: "8px", backgroundColor: "#22c55e", borderRadius: "50%", display: "inline-block" }} />
-            Rede Conectada (4 Filiais Ativas)
+            <span style={{ width: "8px", height: "8px", backgroundColor: cloudHubOnline ? "#22c55e" : "#d97706", borderRadius: "50%", display: "inline-block" }} />
+            {cloudHubOnline ? `Rede Conectada (${stores.filter((s) => s.online).length} Filiais Ativas)` : "Rede Desconectada (Servidor Indisponível)"}
           </div>
           <button
             onClick={() => showToast("Telemetria e Cockpit Corporativo sincronizados com sucesso!")}
@@ -755,13 +1490,13 @@ export const CorporatePanel: React.FC = () => {
               {cloudHubOnline ? "Sincronização Corporativa em Tempo Real: ONLINE (Loja Mãe ⇄ Cloud Hub ⇄ Filiais)" : "Operação Offline Ativa: Operações enfileiradas para sincronização posterior"}
             </div>
             <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
-              Última sincronização: <strong>{lastSyncTime}</strong> • Fila de envio pendente: <strong>{pendingOutboxCount} itens</strong> • Hub Cloud: <code>api.vendaja.ao</code>
+              Última sincronização: <strong>{lastSyncTime}</strong> • Fila de envio pendente: <strong>{pendingOutboxCount} itens</strong> • Hub Central: <code>{api && api.trim() ? api : "Não configurado"}</code>
             </div>
           </div>
         </div>
         <button
           onClick={handlePerformSync}
-          disabled={isSyncing}
+          disabled={isSyncing || !isAdmin}
           style={{
             backgroundColor: "#0284c7",
             color: "#ffffff",
@@ -1696,7 +2431,7 @@ export const CorporatePanel: React.FC = () => {
                 <span>{cloudHubOnline ? "🟢 Conectado (Cloud Online)" : "🔴 Modo Offline Local"}</span>
               </div>
               <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-                {cloudHubOnline ? "Comunicação em tempo real com api.vendaja.ao" : "Operações salvas em buffer SQLite local"}
+                {cloudHubOnline ? `Comunicação em tempo real com ${api || "servidor central"}` : "Operações salvas em buffer de sincronização local"}
               </div>
             </div>
 
@@ -1791,7 +2526,7 @@ export const CorporatePanel: React.FC = () => {
               <div style={{ backgroundColor: "#ffffff", border: "2px solid #16a34a", borderRadius: "8px", padding: "14px" }}>
                 <div style={{ fontSize: "20px", marginBottom: "4px" }}>☁️</div>
                 <div style={{ fontWeight: 800, color: "#16a34a", fontSize: "14px" }}>CLOUD HUB</div>
-                <div style={{ fontSize: "11px", color: "#64748b" }}>api.vendaja.ao</div>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>{api || "Servidor Central"}</div>
                 <div style={{ fontSize: "10px", backgroundColor: "#dcfce7", color: "#15803d", borderRadius: "4px", padding: "2px 4px", marginTop: "6px", fontWeight: 600 }}>
                   Fila Bidirecional Segura & Idempotente
                 </div>

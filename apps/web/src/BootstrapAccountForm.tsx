@@ -27,7 +27,7 @@ export function BootstrapAccountForm({ apiUrl, onComplete, onCancel }: { apiUrl:
 
   useEffect(() => {
     let active = true;
-    fetch(`${apiUrl}/api/v1/auth/bootstrap/status`)
+    fetch(`${apiUrl}/api/v1/auth/bootstrap/status`, { credentials: "include" })
       .then((res) => res.json())
       .then((data: { bootstrapAllowed?: boolean }) => {
         if (!active) return;
@@ -94,6 +94,7 @@ export function BootstrapAccountForm({ apiUrl, onComplete, onCancel }: { apiUrl:
     try {
       const response = await fetch(`${apiUrl}/api/v1/auth/bootstrap`, {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           company: {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
-const electronVersion = "44.3.0";
+const electronVersion = "44.10.2";
 const architecture = process.arch === "arm64" ? "arm64" : "x64";
 const platformName = platform() === "win32" ? "win32" : platform() === "darwin" ? "darwin" : "linux";
 const electronCache = process.env.ELECTRON_CACHE ??

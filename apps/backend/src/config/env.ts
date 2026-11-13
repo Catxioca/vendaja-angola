@@ -18,6 +18,8 @@ const rawEnvSchema = z.object({
   COMPANY_NIF: z.string().trim().min(1).default('5001234567'),
   COMPANY_NAME: z.string().trim().min(1).default('VendaJá Angola Lda'),
   CORS_ORIGIN: z.string().trim().min(1).default('*'),
+  COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).optional(),
+  COOKIE_CROSS_SITE: z.coerce.boolean().optional(),
   TRUST_PROXY: z.coerce.boolean().default(false),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   SAFT_AO_XSD_PATH: z.string().trim().min(1).optional(),

@@ -300,7 +300,7 @@ test("Biometrics & Access Control: Multi-modal enrollment and identification eng
     assert.ok(metrics.devicesTotal >= 1);
   });
 
-  await t.test("11. Integração com VendaJá Copilot: Perguntas em Linguagem Natural com dados reais", async () => {
+  await t.test("11. Integração com Muambuluisha IA: Perguntas em Linguagem Natural com dados reais", async () => {
     const adminUserId = "admin-biometrics-user";
     EnterpriseRbacService.hasPermission = async () => true;
 

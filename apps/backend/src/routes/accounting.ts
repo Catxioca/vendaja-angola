@@ -49,7 +49,7 @@ const accountUpdateSchema = z.object({
   description: z.string().max(300).optional().nullable(),
 });
 
-const journalSchema = z.object({
+export const journalSchema = z.object({
   description: z.string().min(2).max(260),
   entryDate: z.coerce.date().optional(),
   journalType: z.string().max(40).default("GENERAL"),
@@ -70,7 +70,8 @@ const journalSchema = z.object({
           "line must have debit or credit"
         )
     )
-    .min(2),
+    .min(2)
+    .max(1000),
 });
 
 const journalEntrySchema = z.object({
@@ -311,15 +312,16 @@ accountingRouter.delete("/chart/:id", requireRole("ADMIN", "ROLE_ADMIN"), async 
   res.json({ message: "account_deleted_successfully", id: account.id });
 });
 
+export const templateSchema = z.object({
+  chartVersion: z.string().min(1).default("PGC-AO-2026"),
+  source: z.string().min(1).default("Decreto Presidencial n.º 82/01 - Modelo de Referência"),
+  responsibleParty: z.string().min(1).default("Contabilista Certificado OCPCA"),
+  effectiveDate: z.coerce.date().default(() => new Date()),
+  accounts: z.array(accountCreateSchema).max(500).optional(),
+});
+
 accountingRouter.post("/chart/import-template", requireRole("ADMIN", "ROLE_ADMIN"), async (req, res) => {
   const tenant = companyContext(req);
-  const templateSchema = z.object({
-    chartVersion: z.string().min(1).default("PGC-AO-2026"),
-    source: z.string().min(1).default("Decreto Presidencial n.º 82/01 - Modelo de Referência"),
-    responsibleParty: z.string().min(1).default("Contabilista Certificado OCPCA"),
-    effectiveDate: z.coerce.date().default(() => new Date()),
-    accounts: z.array(accountCreateSchema).optional(),
-  });
 
   const parsed = templateSchema.safeParse(req.body);
   if (!parsed.success) {

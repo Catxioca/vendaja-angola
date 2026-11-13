@@ -18,7 +18,7 @@ const lineInput = z.object({
   serialNumber: z.string().trim().max(120).optional(),
   expiresAt: z.coerce.date().optional(),
 });
-const documentInput = z.object({
+export const documentInput = z.object({
   type: z.enum(["QUOTE", "CUSTOMER_ORDER", "DELIVERY_NOTE", "CUSTOMER_RETURN", "SUPPLIER_RETURN", "CREDIT_NOTE", "DEBIT_NOTE"]),
   series: z.string().trim().min(1).max(20).default("A"),
   number: z.string().trim().min(1).max(80).optional(),
@@ -27,7 +27,7 @@ const documentInput = z.object({
   supplierId: z.string().uuid().optional().nullable(),
   sourceId: z.string().uuid().optional().nullable(),
   locationId: z.string().uuid().optional().nullable(),
-  lines: z.array(lineInput).min(1),
+  lines: z.array(lineInput).min(1).max(1000),
 }).superRefine((value, context) => {
   if ((value.type === "DELIVERY_NOTE" || value.type === "CUSTOMER_RETURN" || value.type === "SUPPLIER_RETURN") && !value.locationId) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["locationId"], message: "location_required_for_return" });

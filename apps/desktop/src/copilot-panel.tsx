@@ -93,7 +93,7 @@ export function EnterpriseCopilotPanel({
     {
       id: "initial",
       sender: "copilot",
-      text: "Olá! Sou o **VendaJá Copilot**, o seu assistente de inteligência empresarial. Pergunte-me sobre faturação, clientes em dívida, previsões de vendas, controlo de stocks ou custos com pessoal. Todos os dados são extraídos em tempo real da base de dados do ERP.",
+      text: "Olá! Sou o **Muambuluisha IA — Assistente inteligente do VendaJá Angola**. Pergunte-me sobre faturação, clientes em dívida, previsões de vendas, controlo de stocks ou custos com pessoal. Todos os dados são extraídos em tempo real da base de dados do ERP.",
       timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
       domain: "GENERAL",
     },
@@ -142,7 +142,7 @@ export function EnterpriseCopilotPanel({
             {
               id: "ins-offline-1",
               type: "INFO",
-              title: "VendaJá Copilot (Motor Local Ativo)",
+              title: "Muambuluisha IA (Motor Local Ativo)",
               description: `Terminal a operar em contingência local com ${count} documento(s) emitidos hoje. Consultas e cálculos executam diretamente sobre o storage offline.`,
               domain: "SYSTEM",
             },
@@ -260,7 +260,7 @@ export function EnterpriseCopilotPanel({
         const licenseMsg: ChatMessage = {
           id: `c-${Date.now()}`,
           sender: "copilot",
-          text: "🔒 **Módulo IA não licenciado.**\n\nO VendaJá Copilot requer a ativação do módulo **'AI'** na sua licença comercial (Plano ENTERPRISE). Para desbloquear o assistente empresarial inteligente, dirija-se a **Definições > Licenciamento** e introduza uma chave de licença que contemple o módulo de Inteligência Artificial.",
+          text: "🔒 **Módulo IA não licenciado.**\n\nO Muambuluisha IA requer a ativação do módulo **'AI'** na sua licença comercial (Plano ENTERPRISE). Para desbloquear o assistente empresarial inteligente, dirija-se a **Definições > Licenciamento** e introduza uma chave de licença que contemple o módulo de Inteligência Artificial.",
           timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
           domain: "ERROR",
         };
@@ -330,7 +330,7 @@ export function EnterpriseCopilotPanel({
         }
       }
     } catch (netErr: unknown) {
-      console.warn("[VendaJá Copilot] Falha ao comunicar com backend central; acionando motor local offline:", netErr);
+      console.warn("[Muambuluisha IA] Falha ao comunicar com backend central; acionando motor local offline:", netErr);
       setConnectionStatus("OFFLINE");
       backendSuccess = false;
     }
@@ -457,7 +457,7 @@ export function EnterpriseCopilotPanel({
           <span style={{ fontSize: "28px" }}>🤖</span>
           <div>
             <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "8px" }}>
-              VendaJá Copilot (IA Empresarial)
+              Muambuluisha IA — Assistente inteligente do VendaJá Angola
               <span
                 style={{
                   fontSize: "11px",
@@ -494,7 +494,7 @@ export function EnterpriseCopilotPanel({
         {/* TABS */}
         <div style={{ display: "flex", gap: "6px" }}>
           {[
-            { id: "chat", label: "💬 Chat Copilot" },
+            { id: "chat", label: "💬 Chat Muambuluisha IA" },
             { id: "forecast", label: "📈 Previsões Preditivas" },
             { id: "anomalies", label: "⚠️ Deteção de Anomalias" },
             { id: "recommendations", label: "💡 Recomendações" },
@@ -698,7 +698,7 @@ export function EnterpriseCopilotPanel({
             {loading && (
               <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "8px", color: "#6366f1", fontSize: "12px" }}>
                 <span className="spinner" style={{ width: "14px", height: "14px" }} />
-                <span>O VendaJá Copilot está a analisar os dados reais do ERP...</span>
+                <span>O Muambuluisha IA está a analisar os dados reais do ERP...</span>
               </div>
             )}
           </div>
@@ -737,7 +737,7 @@ export function EnterpriseCopilotPanel({
               type="text"
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
-              placeholder="Pergunte ao VendaJá Copilot (ex: 'Quanto vendi hoje?', 'Produtos com stock baixo')..."
+              placeholder="Pergunte à Muambuluisha IA (ex: 'Quanto vendi hoje?', 'Produtos com stock baixo')..."
               style={{
                 flex: 1,
                 padding: "10px 14px",

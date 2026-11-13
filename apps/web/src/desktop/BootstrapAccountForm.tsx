@@ -96,6 +96,7 @@ export function BootstrapAccountForm({
         const timeout = setTimeout(() => controller.abort(), 3500);
         const response = await fetch(`${apiUrl}/api/v1/auth/bootstrap`, {
           method: "POST",
+          credentials: "include",
           headers: { "content-type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify({

@@ -6,7 +6,7 @@ import { audit } from "../services/security.js";
 
 export const procurementRouter = Router();
 procurementRouter.use(requireAuth, requireCompanyContext, requireModuleAccess("STOCK"));
-const lines = z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), unitCostCents: z.number().int().nonnegative().optional() })).min(1);
+export const lines = z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive(), unitCostCents: z.number().int().nonnegative().optional() })).min(1).max(500);
 
 procurementRouter.get("/requests", async (_req, res) => res.json(await prisma.procurementRequest.findMany({ include: { lines: true, quotations: true }, orderBy: { createdAt: "desc" }, take: 200 })));
 procurementRouter.post("/requests", requireRole("ADMIN"), async (req, res) => {

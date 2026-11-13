@@ -170,7 +170,7 @@ describe("AdminEnterpriseManager (Fase 5 - Mobile ERP)", () => {
     }
   });
 
-  it("4. IA Copilot exige sessão autenticada e rejeita execução em modo offline", async () => {
+  it("4. Muambuluisha IA exige sessão autenticada e rejeita execução em modo offline", async () => {
     // 4.1 Rejeita offline
     await assert.rejects(
       async () => {
@@ -250,6 +250,54 @@ describe("AdminEnterpriseManager (Fase 5 - Mobile ERP)", () => {
     for (const item of integrations) {
       assert.equal(item.configured, false);
       assert.ok(item.message.length > 5);
+    }
+  });
+
+  it("6. Módulo RH Mobile: Dados reais autorizados, tratamento de erro e respeito a RBAC", async () => {
+    // 6.1 Rejeita utilizador não autorizado (ex: OPERATOR)
+    await assert.rejects(
+      async () => {
+        await manager.getEmployees(
+          "http://localhost:4000",
+          "mock-token",
+          "empresa-1",
+          "sede",
+          "OPERATOR"
+        );
+      },
+      /hr_permission_denied/
+    );
+
+    // 6.2 Consulta autorizada para ADMIN ou MANAGER
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: string, opts: any) => {
+      if (url.includes("/api/v1/hr/employees")) {
+        assert.equal(opts.headers["x-company-id"], "empresa-1");
+        assert.equal(opts.headers["x-branch-id"], "sede");
+        return {
+          ok: true,
+          json: async () => [
+            { id: "emp-1", fullName: "Maria Isabel", position: "Supervisora de Caixa", department: "Operações", active: true },
+            { id: "emp-2", fullName: "João Mendes", position: "Técnico de Faturação", department: "Financeiro", active: true },
+          ],
+        };
+      }
+      return originalFetch(url, opts);
+    };
+
+    try {
+      const list = await manager.getEmployees(
+        "http://localhost:4000",
+        "mock-token",
+        "empresa-1",
+        "sede",
+        "ADMIN"
+      );
+      assert.equal(list.length, 2);
+      assert.equal(list[0]!.fullName, "Maria Isabel");
+      assert.equal(list[1]!.position, "Técnico de Faturação");
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

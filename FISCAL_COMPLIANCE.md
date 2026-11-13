@@ -1,4 +1,4 @@
-# Conformidade Fiscal e Preparação para Homologação AGT
+# Enquadramento Fiscal e Preparação Técnica
 
 > **Declaração Obrigatória:**
 > **“Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.”**

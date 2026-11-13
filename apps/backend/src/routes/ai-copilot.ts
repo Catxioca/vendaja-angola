@@ -17,7 +17,7 @@ function getContext(req: Request) {
 
 /**
  * POST /api/v1/ai/chat
- * Natural language chat with VendaJá Copilot
+ * Natural language chat with Muambuluisha IA
  */
 aiCopilotRouter.post("/chat", requireAuth, requireCompanyContext, requireRole("ADMIN", "ROLE_ADMIN", "MANAGER", "ROLE_MANAGER", "ACCOUNTANT", "ROLE_ACCOUNTANT"), async (req: Request, res: Response): Promise<void> => {
   try {
@@ -43,7 +43,7 @@ aiCopilotRouter.post("/chat", requireAuth, requireCompanyContext, requireRole("A
     });
   } catch (error: any) {
     res.status(500).json({
-      error: "Falha ao processar consulta no VendaJá Copilot.",
+      error: "Falha ao processar consulta na Muambuluisha IA.",
       details: error.message,
     });
   }
@@ -70,7 +70,7 @@ aiCopilotRouter.get("/status", async (req: Request, res: Response): Promise<void
       modelsReady: true,
       engineType: "DETERMINISTIC_RULES_AND_DW",
       externalLlmProvider: "NONE",
-      disclaimer: "O VendaJá Copilot opera através de um motor de intenções determinístico e consultas analíticas no Data Warehouse local. Nenhum modelo generativo externo (OpenAI/Gemini/Claude) está configurado em produção.",
+      disclaimer: "A Muambuluisha IA opera através de um motor de intenções determinístico e consultas analíticas no Data Warehouse local. Nenhum modelo generativo externo (OpenAI/Gemini/Claude) está configurado em produção.",
       supportedDomains: [
         "SALES",
         "FINANCE",

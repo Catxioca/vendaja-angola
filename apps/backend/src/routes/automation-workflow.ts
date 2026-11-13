@@ -142,13 +142,20 @@ automationWorkflowRouter.get("/instances/:id", requireAuth, async (req: Request,
   res.json(instance);
 });
 
+export const flatPrimitiveValue = z.union([z.string().max(500), z.number().finite(), z.boolean(), z.null()]);
+
+export const workflowMetadataSchema = z
+  .record(z.string().max(64), flatPrimitiveValue)
+  .refine((obj) => Object.keys(obj).length <= 50, { message: "metadata_max_keys_exceeded" })
+  .optional();
+
 // Create / Start a workflow instance
-const createInstanceSchema = z.object({
+export const createInstanceSchema = z.object({
   workflowIdOrEntity: z.string().min(1),
   entityId: z.string().min(1),
   entityName: z.string().optional(),
   amountCents: z.union([z.number(), z.string()]).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: workflowMetadataSchema,
 });
 
 automationWorkflowRouter.post("/instances", requireAuth, async (req: Request, res: Response) => {
@@ -378,7 +385,25 @@ automationWorkflowRouter.get("/rules", requireAuth, async (req: Request, res: Re
   res.json(EnterpriseRulesService.listRules(companyId));
 });
 
-const registerRuleSchema = z.object({
+export const comparisonOperatorsSchema = z
+  .object({
+    $lt: z.union([z.number().finite(), z.string().max(500)]).optional(),
+    $gt: z.union([z.number().finite(), z.string().max(500)]).optional(),
+    $lte: z.union([z.number().finite(), z.string().max(500)]).optional(),
+    $gte: z.union([z.number().finite(), z.string().max(500)]).optional(),
+  })
+  .strict();
+
+export const conditionExpressionSchema = z
+  .record(z.string().max(64), z.union([flatPrimitiveValue, comparisonOperatorsSchema]))
+  .refine((obj) => Object.keys(obj).length <= 20, { message: "condition_expression_max_keys_exceeded" })
+  .optional();
+
+export const actionConfigSchema = z
+  .record(z.string().max(64), flatPrimitiveValue)
+  .refine((obj) => Object.keys(obj).length <= 30, { message: "action_config_max_keys_exceeded" });
+
+export const registerRuleSchema = z.object({
   name: z.string().min(3),
   description: z.string().optional(),
   triggerEvent: z.enum([
@@ -391,9 +416,9 @@ const registerRuleSchema = z.object({
     "DAILY_CLOSING_COMPLETED",
     "BACKUP_FAILED",
   ]),
-  conditionExpression: z.record(z.unknown()).optional(),
+  conditionExpression: conditionExpressionSchema,
   actionType: z.enum(["DISPATCH_NOTIFICATION", "CREATE_TASK", "QUEUE_JOB", "TRIGGER_WORKFLOW"]),
-  actionConfig: z.record(z.unknown()),
+  actionConfig: actionConfigSchema,
   active: z.boolean().optional(),
 });
 
@@ -421,11 +446,16 @@ automationWorkflowRouter.patch("/rules/:id", requireAuth, async (req: Request, r
   }
 });
 
-const triggerEventSchema = z.object({
+export const triggerPayloadSchema = z
+  .record(z.string().max(64), flatPrimitiveValue)
+  .refine((obj) => Object.keys(obj).length <= 50, { message: "trigger_payload_max_keys_exceeded" })
+  .default({});
+
+export const triggerEventSchema = z.object({
   triggerEvent: z.string().min(1),
   entityName: z.string().optional(),
   entityId: z.string().optional(),
-  payload: z.record(z.unknown()).default({}),
+  payload: triggerPayloadSchema,
 });
 
 automationWorkflowRouter.post("/rules/trigger", requireAuth, async (req: Request, res: Response) => {
@@ -475,7 +505,12 @@ automationWorkflowRouter.get("/queue/metrics", requireAuth, async (req: Request,
   res.json(EnterpriseQueueService.getQueueMetrics(companyId));
 });
 
-const enqueueJobSchema = z.object({
+export const jobPayloadSchema = z
+  .record(z.string().max(64), flatPrimitiveValue)
+  .refine((obj) => Object.keys(obj).length <= 20, { message: "job_payload_max_keys_exceeded" })
+  .optional();
+
+export const enqueueJobSchema = z.object({
   type: z.enum([
     "EXPORT_SAFT",
     "GENERATE_REPORT",
@@ -484,7 +519,7 @@ const enqueueJobSchema = z.object({
     "STOCK_REVALUATION",
     "DATA_SYNC",
   ]),
-  payload: z.record(z.unknown()).optional(),
+  payload: jobPayloadSchema,
 });
 
 automationWorkflowRouter.post("/queue", requireAuth, async (req: Request, res: Response) => {

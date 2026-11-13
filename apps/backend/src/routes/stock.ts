@@ -13,16 +13,16 @@ stockRouter.use(requireModuleAccess("STOCK"));
 
 const locationInput = z.object({ warehouseId: z.string().uuid(), code: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(120) });
 const warehouseInput = z.object({ code: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(120) });
-const transferInput = z.object({
+export const transferInput = z.object({
   sourceLocationId: z.string().uuid(),
   destinationLocationId: z.string().uuid(),
   reference: z.string().trim().min(1).max(120),
-  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive() })).min(1),
+  lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().positive() })).min(1).max(1000),
 });
-const inventoryInput = z.object({
+export const inventoryInput = z.object({
   locationId: z.string().uuid(),
   reference: z.string().trim().min(1).max(120),
-  lines: z.array(z.object({ productId: z.string().uuid(), countedQuantity: z.number().int().nonnegative() })).min(1),
+  lines: z.array(z.object({ productId: z.string().uuid(), countedQuantity: z.number().int().nonnegative() })).min(1).max(5000),
 }).superRefine((value, context) => {
   if (new Set(value.lines.map((line) => line.productId)).size !== value.lines.length) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["lines"], message: "duplicate_product" });

@@ -1272,7 +1272,7 @@ export function EnterpriseFinancialPanel({
             <div>
               <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>Fichas de Ativos Fixos (Imobilizado Corpóreo)</h3>
               <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>
-                Depreciações fiscais automáticas por quotas constantes em conformidade com o Código do Imposto Industrial angolano.
+                Depreciações por quotas constantes parametrizáveis segundo o plano de contas da empresa.
               </p>
             </div>
             <div style={{ display: "flex", gap: "10px" }}>

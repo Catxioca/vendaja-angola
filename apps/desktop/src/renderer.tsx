@@ -941,7 +941,7 @@ function App() {
     requiresAdmin?: boolean;
   }> = [
     { key: "corporate", label: "Centro Corporativo (Sede)", category: "Administração & Sede", icon: "🏢", module: "CORPORATE", requiresAdmin: true },
-    { key: "copilot", label: "VendaJá Copilot (IA)", category: "Inteligência Artificial", icon: "🤖", module: "AI" },
+    { key: "copilot", label: "Muambuluisha IA", category: "Inteligência Artificial", icon: "🤖", module: "AI" },
     { key: "biometrics", label: "Biometria & Acessos", category: "Segurança & Acessos", icon: "👁️", module: "BIOMETRICS", requiresAdmin: true },
     { key: "dashboard", label: "Dashboard Executivo", category: "Dashboard", icon: "📊", module: "DASHBOARD" },
     { key: "pdv", label: "Balcão POS", category: "Vendas & POS", icon: "🛒", module: "POS" },

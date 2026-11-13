@@ -17,7 +17,23 @@ function requireAdmin(req: AuthRequest, res: Response): boolean {
 }
 
 platformRouter.get("/context", async (req, res) => {
-  const memberships = await prisma.companyMembership.findMany({ where: { userId: actor(req as AuthRequest), active: true }, include: { company: true, branch: true }, orderBy: { company: { legalName: "asc" } } });
+  const auth = req as AuthRequest;
+  const requestedCompanyId = req.header("x-company-id")?.trim() || undefined;
+  if (requestedCompanyId) {
+    if (auth.context?.companyId && requestedCompanyId !== auth.context.companyId) {
+      res.status(403).json({ error: "company_context_forbidden" });
+      return;
+    }
+    const allowed = await prisma.companyMembership.findFirst({
+      where: { userId: actor(auth), companyId: requestedCompanyId, active: true },
+      select: { id: true },
+    });
+    if (!allowed) {
+      res.status(403).json({ error: "company_context_forbidden" });
+      return;
+    }
+  }
+  const memberships = await prisma.companyMembership.findMany({ where: { userId: actor(auth), active: true }, include: { company: true, branch: true }, orderBy: { company: { legalName: "asc" } } });
   res.json(memberships);
 });
 
@@ -97,8 +113,11 @@ platformRouter.post("/bank-accounts", async (req, res) => {
   res.status(201).json(account);
 });
 
+export const bankStatementSchema = z.object({ statementDate: z.coerce.date(), openingBalanceCents: z.number().int(), closingBalanceCents: z.number().int(), lines: z.array(z.object({ occurredAt: z.coerce.date(), description: z.string().min(1), amountCents: z.number().int(), externalId: z.string().optional() })).max(5000) });
+
 platformRouter.post("/bank-accounts/:id/statements", async (req, res) => {
-  const parsed = z.object({ statementDate: z.coerce.date(), openingBalanceCents: z.number().int(), closingBalanceCents: z.number().int(), lines: z.array(z.object({ occurredAt: z.coerce.date(), description: z.string().min(1), amountCents: z.number().int(), externalId: z.string().optional() })) }).safeParse(req.body);
+
+  const parsed = bankStatementSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_statement" }); return; }
   const bank = await prisma.bankAccount.findFirst({ where: { id: String(req.params.id), companyId: context(req as AuthRequest).companyId } });
   if (!bank) { res.status(404).json({ error: "bank_account_not_found" }); return; }

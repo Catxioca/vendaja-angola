@@ -48,6 +48,7 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
 
   // Enterprise state
   const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
+  const [hrError, setHrError] = useState<string | null>(null);
   const [biKpis, setBiKpis] = useState<BiKpiSummary | null>(null);
   const [hqCockpit, setHqCockpit] = useState<HeadquartersCockpit | null>(null);
   const [aiQuery, setAiQuery] = useState("");
@@ -65,6 +66,7 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
     if (!token) return;
     setIsLoading(true);
     setError(null);
+    setHrError(null);
     try {
       if (activeTab === "admin") {
         const [termList, licStatus] = await Promise.all([
@@ -87,8 +89,17 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
           }
         }
       } else {
-        const [empList, kpis, hq] = await Promise.all([
-          manager.getEmployees(serverUrl, token, companyId, branchId).catch(() => []),
+        const isHrAuthorized = ["ADMIN", "ROLE_ADMIN", "HR_MANAGER", "ROLE_HR", "MANAGER", "ROLE_MANAGER"].includes(userRole.toUpperCase());
+        let empList: EmployeeSummary[] = [];
+        if (isHrAuthorized) {
+          try {
+            empList = await manager.getEmployees(serverUrl, token, companyId, branchId, userRole);
+          } catch (e: any) {
+            setHrError(e.message || "Erro ao consultar lista de colaboradores.");
+          }
+        }
+
+        const [kpis, hq] = await Promise.all([
           manager.getBiKpis(serverUrl, token, companyId, branchId).catch(() => null),
           manager.getHeadquartersCockpit(serverUrl, token, companyId, companyId).catch(() => null),
         ]);
@@ -113,7 +124,7 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
       setAiResponse(res.answer);
       setAiQuery("");
     } catch (err: any) {
-      setError(err.message || "Falha na consulta ao Copilot.");
+      setError(err.message || "Falha na consulta à Muambuluisha IA.");
     } finally {
       setIsLoading(false);
     }
@@ -221,7 +232,7 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
               cursor: "pointer",
             }}
           >
-            🏢 RH, BI, HQ & IA Copilot
+            🏢 RH, BI, HQ & Muambuluisha IA
           </button>
         </div>
 
@@ -335,7 +346,7 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
               {/* AI Copilot Card */}
               <div style={{ background: "#f8fafc", padding: 16, borderRadius: 12, border: "1px solid #e2e8f0" }}>
                 <h3 style={{ margin: "0 0 6px 0", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-                  🤖 VendaJá AI Copilot (Online)
+                  🤖 Muambuluisha IA (Online)
                 </h3>
                 <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
                   Assistente analítico corporativo. Exige sessão autenticada e conexão de rede.
@@ -344,7 +355,7 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
                 <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                   <input
                     type="text"
-                    placeholder={isOnline ? "Pergunte sobre vendas, stocks ou regras fiscais..." : "Copilot indisponível offline"}
+                    placeholder={isOnline ? "Pergunte sobre vendas, stocks ou regras fiscais..." : "Muambuluisha IA indisponível offline"}
                     value={aiQuery}
                     disabled={!isOnline || isLoading}
                     onChange={(e) => setAiQuery(e.target.value)}
@@ -376,7 +387,7 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
 
                 {aiResponse && (
                   <div style={{ background: "#ffffff", padding: 12, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, color: "#1e293b" }}>
-                    <strong>Copilot:</strong> {aiResponse}
+                    <strong>Muambuluisha IA:</strong> {aiResponse}
                   </div>
                 )}
               </div>
@@ -420,11 +431,32 @@ export const AdminEnterpriseModal: React.FC<AdminEnterpriseModalProps> = ({
 
               {/* HR Overview */}
               <div style={{ background: "#f8fafc", padding: 16, borderRadius: 12, border: "1px solid #e2e8f0" }}>
-                <h3 style={{ margin: "0 0 10px 0", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-                  Recursos Humanos (RH)
-                </h3>
-                {employees.length === 0 ? (
-                  <div style={{ fontSize: 13, color: "#64748b" }}>Nenhum funcionário cadastrado nesta filial.</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+                    Recursos Humanos (RH)
+                  </h3>
+                  {employees.length > 0 && (
+                    <span style={{ fontSize: 11, background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: 12, fontWeight: 700 }}>
+                      {employees.length} colaborador{employees.length > 1 ? "es" : ""}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, fontStyle: "italic" }}>
+                  Configurações laborais e remuneratórias sujeitas a fonte oficial e validação por profissional habilitado.
+                </div>
+
+                {!["ADMIN", "ROLE_ADMIN", "HR_MANAGER", "ROLE_HR", "MANAGER", "ROLE_MANAGER"].includes(userRole.toUpperCase()) ? (
+                  <div style={{ background: "#fef3c7", padding: "10px 12px", borderRadius: 8, fontSize: 12, color: "#92400e" }}>
+                    🔒 Acesso restrito: Dados de colaboradores exigem perfil ADMIN, HR_MANAGER ou MANAGER de filial.
+                  </div>
+                ) : hrError ? (
+                  <div style={{ background: "#fee2e2", padding: "10px 12px", borderRadius: 8, fontSize: 12, color: "#991b1b" }}>
+                    ⚠️ {hrError}
+                  </div>
+                ) : employees.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "#64748b", padding: "8px 0" }}>
+                    Nenhum colaborador cadastrado nesta filial.
+                  </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {employees.map((e) => (

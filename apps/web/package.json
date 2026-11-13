@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/mobile/*.spec.ts src/desktop/*.spec.ts"
+    "test": "tsx --test src/mobile/*.spec.ts src/desktop/*.spec.ts src/site/*.spec.ts"
   },
   "dependencies": {
     "@angola/shared": "*",
@@ -24,6 +24,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.4.5"
   }
 }

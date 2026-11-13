@@ -531,6 +531,7 @@ export function MobileShell({ apiUrl }: Props) {
     try {
       const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: loginIdentifier, password: loginPassword }),
       });
@@ -1776,9 +1777,9 @@ export function MobileShell({ apiUrl }: Props) {
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
               <div className="flex justify-between items-center mb-2">
-                <h3 className="font-bold text-base text-amber-400">⚖️ Conformidade, Fiscalidade & Administração</h3>
+                <h3 className="font-bold text-base text-amber-400">⚖️ Gestão Fiscal & Administração</h3>
                 <span className="text-[10px] bg-amber-950 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-800">
-                  Homologação AGT Pendente
+                  Não homologado
                 </span>
               </div>
               <div className="text-[11px] text-slate-400 mb-3">

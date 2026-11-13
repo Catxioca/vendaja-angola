@@ -1,13 +1,16 @@
 import type { AuthTokens, TenantContext, UserProfile } from "./types";
 
 /**
- * Adaptador de Armazenamento Seguro para Android / Capacitor / PWA
+ * Adaptador de Persistência Local Ofuscada (AES-GCM) para Android / Capacitor / PWA
  *
- * Em conformidade com as diretrizes de segurança enterprise:
- * 1. Tokens de acesso, refresh tokens, PIN e licenças nunca são gravados em texto limpo.
- * 2. Utiliza cofre criptográfico AES-GCM (256 bits) com derivação de chave PBKDF2 (100.000 iterações).
- * 3. Chave e salt são vinculados à instalação do dispositivo, impedindo extração direta de dump.
- * 4. Fallback Web/PWA claramente documentado e isolado com avisos de auditoria.
+ * Aviso arquitetural importante:
+ * 1. Em browsers Web padrão, `localStorage` NÃO constitui armazenamento seguro ou confidencial:
+ *    qualquer script ativo na mesma origem pode ler ou manipular chaves armazenadas localmente.
+ * 2. Este adaptador cifra os dados com AES-GCM (256 bits) e derivação PBKDF2 (100.000 iterações)
+ *    derivados de entropia local do dispositivo para evitar exposição direta em texto limpo em dumps casuais.
+ * 3. Em aplicações Web autenticadas, o `refreshToken` deve permanecer em cookie `HttpOnly`, `Secure`
+ *    e `SameSite` gerido pelo servidor, guardando no browser apenas o mínimo necessário.
+ * 4. Palavras-passe, PIN em claro e perfis empresariais completos nunca são gravados no browser.
  * 5. Não armazena nem transporta segredos hardcoded no repositório Git.
  */
 
@@ -135,7 +138,7 @@ export class SecureStorageAdapter {
   }
 
   /**
-   * Grava a sessão autenticada no cofre seguro encriptado.
+   * Grava a sessão autenticada no armazenamento local cifrado (não confidencial no browser Web).
    */
   public async storeSession(tokens: AuthTokens, user: UserProfile): Promise<void> {
     const payload: VaultPayload = {
@@ -180,7 +183,7 @@ export class SecureStorageAdapter {
   }
 
   /**
-   * Remove com segurança a sessão do cofre.
+   * Remove a sessão e dados associados do armazenamento local.
    */
   public clearSession(): void {
     this.memoryCache = null;
@@ -208,7 +211,7 @@ export class SecureStorageAdapter {
   }
 
   /**
-   * Armazena com segurança o PIN do operador para desbloqueio rápido de ecrã.
+   * Armazena o hash SHA-256 com salt do PIN de operador para desbloqueio local de ecrã (nunca em texto limpo).
    */
   public async storePin(pin: string): Promise<void> {
     if (!/^\d{4,6}$/.test(pin)) {

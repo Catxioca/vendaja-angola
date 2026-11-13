@@ -804,7 +804,7 @@ export function LockedModuleModal({
         <div className="locked-features-box">
           <h4>Vantagens ao desbloquear este módulo:</h4>
           <ul>
-            <li>Operação 100% em conformidade com o Decreto Presidencial e AGT Angola</li>
+            <li>Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.</li>
             <li>Autonomia completa offline sem perda de registos</li>
             <li>Integração total com os módulos de faturação, caixa e contabilidade</li>
           </ul>

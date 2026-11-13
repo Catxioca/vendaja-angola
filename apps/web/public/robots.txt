@@ -1,0 +1,36 @@
+# VendaJá Angola — Ficheiro de Controlo de Rastreio (Robots)
+User-agent: *
+Allow: /
+Allow: /solucoes
+Allow: /modulos
+Allow: /seguranca
+Allow: /conformidade-fiscal
+Allow: /sobre
+Allow: /contacto
+Allow: /estado
+Allow: /privacidade
+Allow: /termos
+
+# Impedir indexação de APIs, autenticação (/entrar, /criar-conta), /app, portais e rotas autenticadas
+Disallow: /api/
+Disallow: /app
+Disallow: /entrar
+Disallow: /login
+Disallow: /criar-conta
+Disallow: /bootstrap
+Disallow: /erp
+Disallow: /mobile-erp
+Disallow: /mobile
+Disallow: /copilot
+Disallow: /portal-cliente
+Disallow: /customer-portal
+Disallow: /portal-fornecedor
+Disallow: /supplier-portal
+Disallow: /portal-colaborador
+Disallow: /employee-portal
+Disallow: /portal-rh
+Disallow: /portal-comercial
+Disallow: /portal-admin
+Disallow: /portal-
+
+# Sitemap omitido: origem canónica pública não configurada para este ambiente.

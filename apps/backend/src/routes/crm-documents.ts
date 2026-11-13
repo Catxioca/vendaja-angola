@@ -152,7 +152,7 @@ crmDocumentsRouter.get("/opportunities/:id", requireAuth, async (req: Request, r
   res.json(opp);
 });
 
-const createOppSchema = z.object({
+export const createOppSchema = z.object({
   title: z.string().min(2),
   customerId: z.string().optional(),
   customerName: z.string().optional(),
@@ -162,7 +162,7 @@ const createOppSchema = z.object({
   probabilityPercent: z.number().min(0).max(100).default(20),
   expectedCloseDate: z.string().optional(),
   assignedToUserId: z.string().optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).max(50).optional(),
   notes: z.string().optional(),
 });
 
@@ -283,7 +283,7 @@ crmDocumentsRouter.get("/proposals/:id", requireAuth, async (req: Request, res: 
   res.json(prop);
 });
 
-const createProposalSchema = z.object({
+export const createProposalSchema = z.object({
   title: z.string().min(2),
   customerId: z.string().optional(),
   customerName: z.string().optional(),
@@ -303,7 +303,7 @@ const createProposalSchema = z.object({
       taxRate: z.number().optional(),
       totalCents: z.number().int().nonnegative(),
     })
-  ).min(1),
+  ).min(1).max(500),
 });
 
 crmDocumentsRouter.post("/proposals", requireAuth, async (req: Request, res: Response) => {
@@ -428,7 +428,7 @@ crmDocumentsRouter.get("/documents/:id", requireAuth, async (req: Request, res: 
   res.json(doc);
 });
 
-const uploadDocumentSchema = z.object({
+export const uploadDocumentSchema = z.object({
   title: z.string().min(2),
   description: z.string().optional(),
   category: z.enum([
@@ -447,7 +447,7 @@ const uploadDocumentSchema = z.object({
   fileExtension: z.string().optional(),
   sizeBytes: z.number().int().nonnegative().optional(),
   rawContent: z.string().optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).max(50).optional(),
   relatedEntityType: z.string().optional(),
   relatedEntityId: z.string().optional(),
   expiryDate: z.string().optional(),

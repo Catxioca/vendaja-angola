@@ -263,8 +263,13 @@ export class AdminEnterpriseManager {
     serverUrl: string,
     token: string,
     companyId: string,
-    branchId?: string | null
+    branchId?: string | null,
+    userRole?: string
   ): Promise<EmployeeSummary[]> {
+    if (userRole && !["ADMIN", "ROLE_ADMIN", "HR_MANAGER", "ROLE_HR", "MANAGER", "ROLE_MANAGER"].includes(userRole.toUpperCase())) {
+      throw new Error("hr_permission_denied: Apenas perfis autorizados de administração ou gerência têm acesso aos dados de RH.");
+    }
+
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       "x-company-id": companyId,
@@ -274,7 +279,8 @@ export class AdminEnterpriseManager {
 
     const res = await fetch(`${serverUrl}/api/v1/hr/employees`, { headers });
     if (!res.ok) {
-      throw new Error("hr_employees_failed");
+      const err = await res.json().catch(() => ({ error: "hr_employees_failed" }));
+      throw new Error(err.message || err.error || "hr_employees_failed");
     }
 
     return await res.json();
@@ -360,7 +366,7 @@ export class AdminEnterpriseManager {
     }
 
     if (!token) {
-      throw new Error("ai_unauthorized: É necessária uma sessão autenticada para utilizar o VendaJá Copilot.");
+      throw new Error("ai_unauthorized: É necessária uma sessão autenticada para utilizar o Muambuluisha IA.");
     }
 
     const headers: Record<string, string> = {
@@ -378,7 +384,7 @@ export class AdminEnterpriseManager {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: "ai_query_failed" }));
-      throw new Error(err.message || err.error || "Falha ao comunicar com o VendaJá Copilot.");
+      throw new Error(err.message || err.error || "Falha ao comunicar com o Muambuluisha IA.");
     }
 
     const json = await res.json();

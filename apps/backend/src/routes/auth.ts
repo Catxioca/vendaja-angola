@@ -1,3 +1,4 @@
+import type { Request, Response } from "express";
 import { Router } from "express";
 import crypto from "node:crypto";
 import { z } from "zod";
@@ -15,6 +16,97 @@ import {
 export const authRouter = Router();
 authRouter.use(distributedRateLimit({ name: "auth", limit: 30, windowMs: 60_000 }));
 
+export const REFRESH_COOKIE_NAME = "vendaja_refresh_token";
+const REFRESH_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+export function extractCookie(cookieHeader: string | undefined, name: string): string | undefined {
+  if (!cookieHeader) return undefined;
+  for (const part of cookieHeader.split(";")) {
+    const trimmed = part.trim();
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    if (key === name) {
+      const value = trimmed.slice(eqIndex + 1).trim();
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
+
+function shouldUseSecureCookie(req: Request): boolean {
+  const forwardedProto = typeof req.header("x-forwarded-proto") === "string"
+    ? req.header("x-forwarded-proto")!.split(",")[0]?.trim().toLowerCase()
+    : "";
+  return Boolean(req.secure || forwardedProto === "https" || process.env.NODE_ENV === "production");
+}
+
+export interface RefreshCookieOptions {
+  httpOnly: true;
+  secure: boolean;
+  sameSite: "lax" | "strict" | "none";
+  path: "/api/v1/auth";
+}
+
+export function resolveRefreshCookieOptions(req: Request): RefreshCookieOptions {
+  const configuredSameSite = process.env.COOKIE_SAME_SITE?.trim().toLowerCase();
+  const explicitCrossSite = process.env.COOKIE_CROSS_SITE === "true";
+
+  let sameSite: "lax" | "strict" | "none" = "lax";
+  if (configuredSameSite === "none" || (!configuredSameSite && explicitCrossSite)) {
+    sameSite = "none";
+  } else if (configuredSameSite === "strict") {
+    sameSite = "strict";
+  }
+
+  // SameSite=None exige obrigatoriamente Secure=true em navegadores modernos.
+  const secure = sameSite === "none" ? true : shouldUseSecureCookie(req);
+  return {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: "/api/v1/auth",
+  };
+}
+
+function setRefreshCookie(req: Request, res: Response, refreshToken: string): void {
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+    ...resolveRefreshCookieOptions(req),
+    maxAge: REFRESH_COOKIE_MAX_AGE_SECONDS * 1000,
+  });
+}
+
+function clearRefreshCookie(req: Request, res: Response): void {
+  res.clearCookie(REFRESH_COOKIE_NAME, resolveRefreshCookieOptions(req));
+}
+
+export const passwordPolicySchema = z
+  .string()
+  .min(8, "A password deve ter pelo menos 8 caracteres.")
+  .max(256)
+  .refine(
+    (val) => /[a-z]/i.test(val) && /\d/.test(val),
+    "A password deve combinar letras e números."
+  );
+
+export const managedPasswordPolicySchema = z
+  .string()
+  .min(12, "A password deve ter pelo menos 12 caracteres.")
+  .max(256)
+  .refine(
+    (val) => /[a-z]/i.test(val) && /\d/.test(val),
+    "A password deve combinar letras e números."
+  );
+
+export const pinPolicySchema = z
+  .string()
+  .regex(/^\d{4,6}$/, "O PIN deve ter entre 4 e 6 dígitos numéricos.")
+  .refine((val) => !/^(\d)\1+$/.test(val), "O PIN não pode repetir apenas o mesmo dígito.");
+
 const emptyToUndefined = (val: unknown) => typeof val === "string" ? (val.trim() || undefined) : val;
 const sanitizeUsername = (val: unknown) => {
   if (typeof val !== "string") return val;
@@ -30,7 +122,7 @@ export const bootstrapInput = z.object({
       z.string().min(1).max(32).regex(/^[A-Z0-9._-]+$/, "O código da filial deve conter apenas letras, números, ponto, hífen ou underscore.").default("MAIN")
     ),
     branchName: z.string().trim().min(2, "O nome da filial deve ter pelo menos 2 caracteres.").max(160).default("Sede"),
-  }),
+  }).strict(),
   admin: z.object({
     username: z.preprocess(
       sanitizeUsername,
@@ -38,10 +130,10 @@ export const bootstrapInput = z.object({
     ),
     email: z.string().trim().email("Introduza um endereço de e-mail válido."),
     displayName: z.string().trim().min(2, "O nome completo deve ter pelo menos 2 caracteres.").max(160),
-    password: z.string().min(8, "A password deve ter pelo menos 8 caracteres.").max(256),
-    pin: z.preprocess(emptyToUndefined, z.string().regex(/^\d{4,6}$/, "O PIN deve ter entre 4 e 6 dígitos numéricos.").optional()),
-  }),
-});
+    password: passwordPolicySchema,
+    pin: z.preprocess(emptyToUndefined, pinPolicySchema.optional()),
+  }).strict(),
+}).strict();
 
 /** Public, one-time bootstrap for a company that has no administrator.
  * It never trusts a client role and uses an atomic company claim to prevent
@@ -55,6 +147,30 @@ authRouter.get("/bootstrap/status", async (_req, res) => {
 });
 
 authRouter.post("/bootstrap", async (req, res) => {
+  if (req.header("x-company-id")?.trim() || req.header("x-branch-id")?.trim()) {
+    res.status(403).json({
+      error: "company_context_forbidden",
+      message: "Cabeçalho de empresa ou filial não permitido durante a inicialização.",
+    });
+    return;
+  }
+
+  const rawBody = req.body as Record<string, unknown> | undefined;
+  const rawCompany = rawBody?.company as Record<string, unknown> | undefined;
+  if (
+    rawBody &&
+    (rawBody.companyId !== undefined ||
+      rawBody.branchId !== undefined ||
+      rawCompany?.id !== undefined ||
+      rawCompany?.companyId !== undefined)
+  ) {
+    res.status(400).json({
+      error: "company_id_forbidden",
+      message: "O identificador da empresa é gerado exclusivamente pelo servidor.",
+    });
+    return;
+  }
+
   const parsed = bootstrapInput.safeParse(req.body);
   if (!parsed.success) {
     const errorDetails = parsed.error.flatten();
@@ -70,9 +186,14 @@ authRouter.post("/bootstrap", async (req, res) => {
     return;
   }
 
-  // Self-healing schema check: ensure Branch.isHeadquarters exists before inserting
+  // Self-healing schema check: ensure Branch.isHeadquarters exists before inserting (without taking DDL lock on every concurrent call)
   try {
-    await prisma.$executeRawUnsafe(`ALTER TABLE "Branch" ADD COLUMN IF NOT EXISTS "isHeadquarters" BOOLEAN NOT NULL DEFAULT false;`);
+    const colRows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'Branch' AND column_name = 'isHeadquarters') AS "exists";`
+    );
+    if (!colRows[0]?.exists) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Branch" ADD COLUMN IF NOT EXISTS "isHeadquarters" BOOLEAN NOT NULL DEFAULT false;`);
+    }
   } catch (schemaErr) {
     console.warn("[auth/bootstrap] Schema auto-heal notice:", schemaErr);
   }
@@ -90,6 +211,11 @@ authRouter.post("/bootstrap", async (req, res) => {
       if (existingAdmin) {
         throw new Error("bootstrap_unavailable");
       }
+
+      // Claim exclusivo do registo único antes de criar empresa/utilizador para bloquear corridas concorrentes
+      await tx.systemBootstrap.create({
+        data: { id: "primary" },
+      });
 
       const company = await tx.company.create({
         data: {
@@ -137,10 +263,9 @@ authRouter.post("/bootstrap", async (req, res) => {
             modules: ["POS", "STOCK", "HR", "ACCOUNTING", "DASHBOARD", "SETTINGS"],
           },
         }),
-        tx.systemBootstrap.upsert({
+        tx.systemBootstrap.update({
           where: { id: "primary" },
-          create: { id: "primary", companyId: company.id, userId: created.id },
-          update: { companyId: company.id, userId: created.id },
+          data: { companyId: company.id, userId: created.id },
         }),
       ]);
 
@@ -158,6 +283,7 @@ authRouter.post("/bootstrap", async (req, res) => {
 
     const tokens = issueTokens(user.user);
     await persistRefreshToken(user.user.id, tokens.refreshToken);
+    setRefreshCookie(req, res, tokens.refreshToken);
     res.status(201).json({
       ...tokens,
       token: tokens.accessToken,
@@ -212,8 +338,8 @@ const managedUserInput = z.object({
   email: z.string().email(),
   displayName: z.string().min(2).max(160),
   role: managedRole,
-  password: z.string().min(12).max(256).optional(),
-  pin: z.string().regex(/^\d{4,6}$/).optional(),
+  password: managedPasswordPolicySchema.optional(),
+  pin: pinPolicySchema.optional(),
 });
 const requireUserManagement = (req: Express.Request, res: import("express").Response): boolean => {
   if (normalizeRole((req as AuthRequest).context?.role ?? (req as AuthRequest).user?.role) !== "ROLE_ADMIN") {
@@ -274,8 +400,8 @@ authRouter.get("/attendants", requireAuth, async (req, res) => {
 authRouter.post("/attendants", requireAuth, async (req, res) => {
   const actor = (req as AuthRequest).user;
   if (!["ROLE_ADMIN", "ROLE_HR"].includes(normalizeRole(actor?.role))) { res.status(403).json({ error: "forbidden" }); return; }
-  const parsed = z.object({ displayName: z.string().min(2), nif: z.string().min(5), phone: z.string().min(7), pin: z.string().regex(/^\d{4,6}$/), username: z.string().min(2).optional() }).safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "invalid_attendant", message: "Nome, NIF, telefone e PIN de 4 a 6 dígitos são obrigatórios." }); return; }
+  const parsed = z.object({ displayName: z.string().min(2), nif: z.string().min(5), phone: z.string().min(7), pin: pinPolicySchema, username: z.string().min(2).optional() }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "invalid_attendant", message: "Nome, NIF, telefone e PIN válido de 4 a 6 dígitos são obrigatórios." }); return; }
   try {
     const administrators = await prisma.user.findMany({ where: { role: { in: ["ADMIN", "admin", "ROLE_ADMIN"] }, pinHash: { not: null } }, select: { pinHash: true } });
     if ((await Promise.all(administrators.map((administrator) => administrator.pinHash ? verifyPassword(parsed.data.pin, administrator.pinHash) : false))).some(Boolean)) { res.status(409).json({ error: "attendant_pin_conflict", message: "O PIN individual deve ser diferente do PIN mestre do Administrador." }); return; }
@@ -288,7 +414,7 @@ authRouter.post("/attendants", requireAuth, async (req, res) => {
 authRouter.patch("/attendants/:id", requireAuth, async (req, res) => {
   const actor = (req as AuthRequest).user;
   if (!["ROLE_ADMIN", "ROLE_HR"].includes(normalizeRole(actor?.role))) { res.status(403).json({ error: "forbidden" }); return; }
-  const parsed = z.object({ displayName: z.string().min(2), nif: z.string().min(5), phone: z.string().min(7), pin: z.string().regex(/^\d{4,6}$/).optional() }).safeParse(req.body);
+  const parsed = z.object({ displayName: z.string().min(2), nif: z.string().min(5), phone: z.string().min(7), pin: pinPolicySchema.optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "invalid_attendant", message: "Dados do atendedor inválidos." }); return; }
   const user = await prisma.user.update({ where: { id: String(req.params.id) }, data: { displayName: parsed.data.displayName, nif: parsed.data.nif, phone: parsed.data.phone, ...(parsed.data.pin ? { pinHash: await hashPassword(parsed.data.pin) } : {}) }, select: { id: true, username: true, displayName: true, nif: true, phone: true, role: true } });
   await audit("ATTENDANT_UPDATED", actor?.id, "USER", user.id);
@@ -435,6 +561,7 @@ authRouter.post("/login", async (req, res) => {
     include: { company: true, branch: true },
   });
 
+  setRefreshCookie(req, res, tokens.refreshToken);
   res.json({
     ...tokens,
     token: tokens.accessToken,
@@ -455,9 +582,13 @@ authRouter.post("/login", async (req, res) => {
     } : null,
   });
 });
-authRouter.post("/logout", requireAuth, async (req, res) => {
+authRouter.post("/logout", (req, res, next) => {
+  clearRefreshCookie(req, res);
+  next();
+}, requireAuth, async (req, res) => {
   const actor = (req as AuthRequest).user;
-  const refreshToken = z.object({ refreshToken: z.string().optional() }).safeParse(req.body).data?.refreshToken;
+  const bodyRefreshToken = z.object({ refreshToken: z.string().optional() }).safeParse(req.body).data?.refreshToken;
+  const refreshToken = bodyRefreshToken || extractCookie(req.header("cookie"), REFRESH_COOKIE_NAME);
   if (refreshToken) await prisma.refreshToken.updateMany({ where: { tokenHash: tokenHash(refreshToken), userId: actor?.id }, data: { revokedAt: new Date() } });
   else if (actor) await prisma.refreshToken.updateMany({ where: { userId: actor.id, revokedAt: null }, data: { revokedAt: new Date() } });
 
@@ -472,20 +603,36 @@ authRouter.post("/logout", requireAuth, async (req, res) => {
     module: "SECURITY",
   });
 
+  clearRefreshCookie(req, res);
   res.json({ loggedOut: true });
 });
 authRouter.post("/refresh", async (req, res) => {
-  const parsed = z.object({ refreshToken: z.string().min(20) }).safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "invalid_refresh_token" }); return; }
+  const cookieToken = extractCookie(req.header("cookie"), REFRESH_COOKIE_NAME);
+  const rawRefreshToken =
+    typeof (req.body as { refreshToken?: unknown } | undefined)?.refreshToken === "string" &&
+    (req.body as { refreshToken: string }).refreshToken.trim().length > 0
+      ? (req.body as { refreshToken: string }).refreshToken.trim()
+      : cookieToken;
+
+  const parsed = z.object({ refreshToken: z.string().min(20) }).safeParse({ refreshToken: rawRefreshToken });
+  if (!parsed.success) {
+    clearRefreshCookie(req, res);
+    res.status(400).json({ error: "invalid_refresh_token" });
+    return;
+  }
   const hash = tokenHash(parsed.data.refreshToken);
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: hash }, include: { user: true } });
   if (!row || row.revokedAt || row.expiresAt < new Date()) {
     await audit("REFRESH_TOKEN_REJECTED", undefined, "REFRESH_TOKEN", undefined, { reason: row ? "expired_or_revoked" : "missing" });
+    clearRefreshCookie(req, res);
     res.status(401).json({ error: "invalid_refresh_token" });
     return;
   }
   await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
-  const tokens = issueTokens(row.user); await persistRefreshToken(row.userId, tokens.refreshToken); res.json(tokens);
+  const tokens = issueTokens(row.user);
+  await persistRefreshToken(row.userId, tokens.refreshToken);
+  setRefreshCookie(req, res, tokens.refreshToken);
+  res.json(tokens);
 });
 authRouter.post("/authorize", requireAuth, async (req, res) => {
   const parsed = z.object({
@@ -551,7 +698,7 @@ authRouter.post("/authorize", requireAuth, async (req, res) => {
   });
 });
 authRouter.patch("/profile", requireAuth, async (req, res) => {
-  const parsed = z.object({ username: z.string().min(2).max(80), displayName: z.string().min(1).max(120), currentPassword: z.string().optional(), currentPin: z.string().regex(/^\d{6}$/).optional(), newPassword: z.string().min(8).optional(), newPin: z.string().regex(/^\d{6}$/).optional() }).safeParse(req.body);
+  const parsed = z.object({ username: z.string().min(2).max(80), displayName: z.string().min(1).max(120), currentPassword: z.string().optional(), currentPin: z.string().regex(/^\d{4,6}$/).optional(), newPassword: passwordPolicySchema.optional(), newPin: pinPolicySchema.optional() }).safeParse(req.body);
   const actor = (req as AuthRequest).user;
   if (!parsed.success || !actor) { res.status(400).json({ error: "invalid_profile" }); return; }
   const user = await prisma.user.findUnique({ where: { id: actor.id } });

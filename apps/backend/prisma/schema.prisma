@@ -931,6 +931,8 @@ model Employee {
   transportAllowanceExempt Boolean   @default(true)
   housingAllowanceExempt   Boolean   @default(false)
   otherAllowancesExempt    Boolean   @default(false)
+  biometricConsentGiven    Boolean   @default(false)
+  biometricRefId           String?
   active                   Boolean   @default(true)
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
@@ -959,8 +961,49 @@ model Payroll {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
   employee                Employee  @relation(fields: [employeeId], references: [id])
+  snapshot                PayrollSnapshot?
+  rectifications          PayrollRectification[]
 
   @@unique([employeeId, month])
+}
+
+model PayrollSnapshot {
+  id               String                 @id @default(uuid())
+  companyId        String
+  payrollId        String                 @unique
+  month            String
+  version          String
+  configSnapshot   Json
+  integrityHash    String
+  closedAt         DateTime               @default(now())
+  closedBy         String
+  createdAt        DateTime               @default(now())
+  payroll          Payroll                @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  rectifications   PayrollRectification[]
+
+  @@unique([companyId, payrollId])
+  @@index([companyId, month])
+}
+
+model PayrollRectification {
+  id                     String           @id @default(uuid())
+  companyId              String
+  payrollId              String
+  snapshotId             String?
+  rectificationNumber    String
+  adjustmentCents        Int
+  originalNetSalaryCents Int
+  adjustedNetSalaryCents Int
+  reason                 String
+  notes                  String?
+  integrityHash          String
+  createdBy              String
+  createdAt              DateTime         @default(now())
+  payroll                Payroll          @relation(fields: [payrollId], references: [id], onDelete: Restrict)
+  snapshot               PayrollSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, rectificationNumber])
+  @@index([companyId, payrollId])
 }
 
 model Account {

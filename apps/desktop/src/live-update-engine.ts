@@ -79,7 +79,7 @@ export class LiveUpdateEngine {
   private branchCode: string = "";
   private branchName: string = "";
   private isHeadquarters: boolean = false;
-  private appVersion: string = "3.2.2-rc.1";
+  private appVersion: string = "3.2.2-rc.3";
   private hardwareId: string = "";
   private terminalId: string = "";
 
@@ -646,7 +646,7 @@ export class LiveUpdateEngine {
           }
 
           // Acknowledge command
-          fetch(`${apiUrl}/api/v1/corporate/commands/${cmd.id}/ack`, {
+          fetch(`${targetUrl}/api/v1/corporate/commands/${cmd.id}/ack`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -673,13 +673,17 @@ export class LiveUpdateEngine {
       // Offline fallback: keep outbox queued
       this.isOnlineStatus = false;
       this.notifyListeners();
+      const rawMsg = String(err?.message || "");
+      const isConnectionIssue = /failed to fetch|networkerror|load failed|econnrefused|connect eacces/i.test(rawMsg);
       return {
         success: false,
         online: false,
         syncedOutboxCount: 0,
         receivedCommandsCount: 0,
         appliedCommands: [],
-        error: err.message || "Servidor corporativo inacessível (Modo Offline Ativo)",
+        error: isConnectionIssue
+          ? "Servidor corporativo indisponível ou inacessível (Modo Offline Ativo)"
+          : (rawMsg || "Servidor corporativo inacessível (Modo Offline Ativo)"),
       };
     }
   }

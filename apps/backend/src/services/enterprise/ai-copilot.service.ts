@@ -83,7 +83,7 @@ export interface CopilotRecommendation {
 
 export class EnterpriseAiCopilotService {
   /**
-   * Main Natural Language Query processor for VendaJá Copilot
+   * Main Natural Language Query processor for Muambuluisha IA
    */
   public static async query(data: {
     query: string;
@@ -150,7 +150,7 @@ export class EnterpriseAiCopilotService {
       action: "QUERY_EXECUTED",
       userId: data.userId,
       companyId: data.companyId,
-      details: { message: `VendaJá Copilot respondeu à pergunta sobre ${domain}: "${data.query}"` },
+      details: { message: `Muambuluisha IA respondeu à pergunta sobre ${domain}: "${data.query}"` },
       metadata: {
         query: data.query,
         intent,
@@ -990,13 +990,13 @@ export class EnterpriseAiCopilotService {
         const recs = await this.getRecommendations(companyId);
 
         return {
-          textAnswer: `O VendaJá Copilot gerou **${recs.length} recomendações estratégicas de negócio**, com potencial de impacto financeiro estimado em **${formatKwanza(recs.reduce((acc, r) => acc + r.impactKz * 100, 0))}**.`,
+          textAnswer: `A Muambuluisha IA gerou **${recs.length} recomendações estratégicas de negócio**, com potencial de impacto financeiro estimado em **${formatKwanza(recs.reduce((acc, r) => acc + r.impactKz * 100, 0))}**.`,
           metrics: [
             { label: "Recomendações Ativas", value: `${recs.length} ações` },
             { label: "Impacto Estimado", value: formatKwanza(recs.reduce((acc, r) => acc + r.impactKz * 100, 0)), trend: "UP" },
           ],
           table: {
-            title: "Recomendações do VendaJá Copilot",
+            title: "Recomendações da Muambuluisha IA",
             headers: ["Prioridade", "Categoria", "Iniciativa Recomendada", "Ação Prática"],
             rows: recs.map((r) => [r.priority, r.category, r.title, r.actionableStep]),
           },
@@ -1152,9 +1152,9 @@ export class EnterpriseAiCopilotService {
 
       default: {
         return {
-          textAnswer: `Olá! Sou o **VendaJá Copilot**, o seu assistente corporativo inteligente. Posso ajudar com análises de **Vendas**, **Financeiro & Tesouraria**, **Stocks**, **Recursos Humanos**, **CRM**, **Previsões de Negócio**, **Deteção de Anomalias** e **Recomendações**. Experimente fazer uma pergunta em linguagem natural!`,
+          textAnswer: `Olá! Sou a **Muambuluisha IA**, o assistente corporativo inteligente do VendaJá Angola. Posso ajudar com análises de **Vendas**, **Financeiro & Tesouraria**, **Stocks**, **Recursos Humanos**, **CRM**, **Previsões de Negócio**, **Deteção de Anomalias** e **Recomendações**. Experimente fazer uma pergunta em linguagem natural!`,
           metrics: [
-            { label: "Status do Copilot", value: "Ativo & Pronto" },
+            { label: "Status da Muambuluisha IA", value: "Ativo & Pronto" },
             { label: "Base de Dados", value: "Conectada (Real)" },
           ],
           insights: [
@@ -1344,7 +1344,7 @@ export class EnterpriseAiCopilotService {
     generatedAt: string;
   }> {
     return {
-      headline: "Resumo Inteligente VendaJá Copilot — Oportunidades & Alertas em Tempo Real",
+      headline: "Resumo Inteligente Muambuluisha IA — Oportunidades & Alertas em Tempo Real",
       insights: [
         {
           id: "ins-01",

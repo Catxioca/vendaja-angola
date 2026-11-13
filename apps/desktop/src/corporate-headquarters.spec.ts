@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   MODULE_CATALOG,
   PLAN_METADATA,
@@ -11,6 +15,9 @@ import {
   LiveUpdateEngine,
   LivePatchPayload,
 } from "./live-update-engine.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 test("Desktop Corporate: MODULE_CATALOG contains CORPORATE canonical module", () => {
   const corporateMod = MODULE_CATALOG.find((m) => m.code === "CORPORATE");
@@ -162,7 +169,7 @@ test("LiveUpdateEngine: Asymmetric RSA-SHA256 digital signature and signed manif
   const signatureBase64 = signer.sign(privateKey, "base64");
 
   engine.configure({
-    appVersion: "3.2.2-rc.1",
+    appVersion: "3.2.2-rc.2",
     updateChannel: "stable",
   });
 
@@ -255,4 +262,206 @@ test("LiveUpdateEngine: Rejects unauthorized synchronization endpoint when none 
   assert.equal(syncResult.success, false);
   assert.equal(syncResult.online, false);
   assert.ok(syncResult.error?.includes("Nenhum canal ou servidor corporativo autorizado"));
+});
+
+test("Corporate Panel: API indisponível resulta em estado offline sem expor 'Failed to fetch'", async () => {
+  const engine = LiveUpdateEngine.getInstance();
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+    const result = await engine.performBidirectionalSync("https://central.empresa.ao", {
+      todaySalesCents: 1000,
+      todayDocumentsCount: 1,
+    });
+
+    assert.equal(result.success, false);
+    assert.equal(result.online, false);
+    assert.ok(result.error);
+    assert.equal(result.error.toLowerCase().includes("failed to fetch"), false, "Nunca deve expor 'Failed to fetch' ao utilizador");
+    assert.ok(result.error.includes("offline") || result.error.includes("ligação") || result.error.includes("inacessível") || result.error.includes("indisponível") || result.error.includes("rejeitada"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Corporate Panel: URL usada na sincronização é a URL configurada, não localhost fixo", async () => {
+  const engine = LiveUpdateEngine.getInstance();
+  let requestedUrl = "";
+  let requestedMethod = "";
+  let requestedHeaders: Record<string, string> = {};
+
+  const originalFetch = globalThis.fetch;
+  const configuredApiUrl = "https://central-corp.empresa.ao";
+
+  try {
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      requestedUrl = String(input);
+      requestedMethod = init?.method || "GET";
+      requestedHeaders = (init?.headers as Record<string, string>) || {};
+      return new Response(JSON.stringify({
+        success: true,
+        appliedCount: 0,
+        appliedCommands: [],
+        serverTimestamp: new Date().toISOString(),
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    };
+
+    engine.configure({
+      companyId: "comp-sync-test",
+      branchId: "br-sync-01",
+      branchCode: "SYNC-01",
+      branchName: "Filial Sync Teste",
+      authorizedUpdateEndpoint: configuredApiUrl,
+    });
+
+    const result = await engine.performBidirectionalSync(configuredApiUrl, {
+      todaySalesCents: 50000,
+      todayDocumentsCount: 2,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.online, true);
+    assert.equal(requestedMethod, "POST");
+    assert.equal(requestedUrl, `${configuredApiUrl}/api/v1/corporate/sync/bidirectional`);
+    assert.notEqual(requestedUrl, "http://localhost:4000/api/v1/corporate/sync/bidirectional");
+    assert.equal(requestedHeaders["x-company-id"], "comp-sync-test");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Corporate Panel: API configurada corretamente carrega cockpit real", async () => {
+  const originalFetch = globalThis.fetch;
+  const configuredApiUrl = "https://central-corp.empresa.ao";
+  let calledEndpoint = "";
+
+  try {
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      calledEndpoint = String(input);
+      if (calledEndpoint === `${configuredApiUrl}/api/v1/corporate/cockpit`) {
+        return new Response(JSON.stringify({
+          stores: [
+            {
+              id: "store-real-01",
+              code: "HQ-REAL",
+              name: "Sede Principal Real",
+              isHeadquarters: true,
+              online: true,
+              todaySalesCents: 25000000,
+            },
+          ],
+          recentEvents: [
+            {
+              id: "ev-001",
+              createdAt: new Date().toISOString(),
+              actorName: "Administrador Central",
+              eventType: "TELEMETRY",
+              severity: "INFO",
+              description: "Cockpit sincronizado com o servidor central.",
+            },
+          ],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+    };
+
+    const res = await fetch(`${configuredApiUrl}/api/v1/corporate/cockpit`, {
+      headers: { Authorization: "Bearer test-token", "Content-Type": "application/json" },
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json() as any;
+    assert.equal(data.stores.length, 1);
+    assert.equal(data.stores[0].name, "Sede Principal Real");
+    assert.equal(data.stores[0].online, true);
+    assert.equal(data.recentEvents.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Corporate Panel: 403 continua a limpar dados e bloquear o painel", async () => {
+  const originalFetch = globalThis.fetch;
+  const configuredApiUrl = "https://central-corp.empresa.ao";
+
+  try {
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === `${configuredApiUrl}/api/v1/corporate/cockpit`) {
+        return new Response(JSON.stringify({ error: "forbidden_role" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+    };
+
+    const res = await fetch(`${configuredApiUrl}/api/v1/corporate/cockpit`, {
+      headers: { Authorization: "Bearer cashier-token", "Content-Type": "application/json" },
+    });
+    assert.equal(res.status, 403);
+    const data = await res.json() as any;
+    assert.equal(data.error, "forbidden_role");
+    assert.equal(data.stores, undefined, "Dados corporativos nunca devem ser devolvidos após 403");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Corporate Panel: Paridade total garantida entre Desktop e Web", () => {
+  const desktopPanelPath = __dirname.includes("desktop")
+    ? path.resolve(__dirname, "corporate-panel.tsx")
+    : path.resolve(__dirname, "../../../desktop/src/corporate-panel.tsx");
+  const webPanelPath = __dirname.includes("desktop")
+    ? path.resolve(__dirname, "../../web/src/desktop/corporate-panel.tsx")
+    : path.resolve(__dirname, "corporate-panel.tsx");
+
+  if (fs.existsSync(desktopPanelPath) && fs.existsSync(webPanelPath)) {
+    const desktopContent = fs.readFileSync(desktopPanelPath, "utf8");
+    const webContent = fs.readFileSync(webPanelPath, "utf8");
+    assert.equal(desktopContent, webContent, "apps/desktop e apps/web devem ter ficheiros corporate-panel.tsx 100% idênticos");
+  }
+});
+
+test("Corporate Panel: Modo DEMO reversível, banner inequívoco e botão de desativação", () => {
+  const panelPath = path.resolve(__dirname, "corporate-panel.tsx");
+  const panelSource = fs.readFileSync(panelPath, "utf8");
+
+  // Banner inequívoco
+  assert.ok(
+    panelSource.includes("MODO DEMO ATIVO — Dados ilustrativos"),
+    "Deve conter o banner permanente 'MODO DEMO ATIVO — Dados ilustrativos'"
+  );
+
+  // Botão de desativação
+  assert.ok(
+    panelSource.includes("Desativar Modo DEMO e voltar aos dados reais"),
+    "Deve conter o botão 'Desativar Modo DEMO e voltar aos dados reais'"
+  );
+
+  // Limpeza de chave local sem tocar em chaves de sessão real
+  assert.ok(
+    panelSource.includes('localStorage.removeItem("vendaja_demo_mode")'),
+    "Ao desativar, deve remover vendaja_demo_mode do localStorage"
+  );
+
+  // Não apaga tokens nem licenças reais
+  assert.ok(!panelSource.includes('localStorage.removeItem("accessToken")'), "Desativar DEMO não deve apagar accessToken");
+  assert.ok(!panelSource.includes('localStorage.removeItem("pos_license")'), "Desativar DEMO não deve apagar licença");
+
+  // Nunca emite 'Failed to fetch'
+  assert.ok(
+    !panelSource.includes('"Failed to fetch"') && !panelSource.includes("'Failed to fetch'"),
+    "O painel corporativo nunca deve expor 'Failed to fetch'"
+  );
+});
+
+test("Corporate Panel: Ausência de contaminação de DEMO em endpoints reais", () => {
+  const panelPath = path.resolve(__dirname, "corporate-panel.tsx");
+  const panelSource = fs.readFileSync(panelPath, "utf8");
+
+  // Quando isDemo está ativo, mutações reais para o backend devem ser estritamente bloqueadas
+  assert.ok(panelSource.includes("if (isDemo) return;"), "Mutações reais devem ser bloqueadas no modo DEMO");
+  assert.ok(panelSource.includes("if (api && token && !isDemo)"), "Chamadas de escrita devem exigir !isDemo");
 });

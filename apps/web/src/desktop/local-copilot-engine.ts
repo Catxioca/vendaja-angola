@@ -72,7 +72,7 @@ export class EnterpriseLocalCopilotEngine {
 
     if (lower.includes("failed to fetch") || lower.includes("econnrefused") || lower.includes("networkerror") || lower.includes("load failed")) {
       return {
-        userMessage: `Serviço central de IA parado ou backend inacessível em ${targetUrl}. O VendaJá Copilot ativou o motor local offline com base na base de dados do seu terminal.`,
+        userMessage: `Serviço central de IA parado ou backend inacessível em ${targetUrl}. A Muambuluisha IA ativou o motor local offline com base na base de dados do seu terminal.`,
         code: "SERVICE_UNREACHABLE",
         isOffline: true,
       };
@@ -152,7 +152,7 @@ export class EnterpriseLocalCopilotEngine {
 
       if (!hasAiModule) {
         const text =
-          "🔒 Módulo IA não licenciado. O VendaJá Copilot requer a ativação do módulo 'AI' na sua licença comercial (Plano ENTERPRISE). Aceda a Definições > Licenciamento para ativar a licença modular correspondente.";
+          "🔒 Módulo IA não licenciado. A Muambuluisha IA requer a ativação do módulo 'AI' na sua licença comercial (Plano ENTERPRISE). Aceda a Definições > Licenciamento para ativar a licença modular correspondente.";
         return {
           query: queryText,
           intent: "LICENSE_BLOCKED",
@@ -672,7 +672,7 @@ export class EnterpriseLocalCopilotEngine {
 
       default: {
         return {
-          textAnswer: `Sou o **VendaJá Copilot** a operar em **Modo Local Offline**. Posso responder a perguntas sobre:
+          textAnswer: `Sou a **Muambuluisha IA** a operar em **Modo Local Offline** (Assistente inteligente do VendaJá Angola). Posso responder a perguntas sobre:
 - **Vendas**: *"Quanto vendi hoje?"*, *"Quantas faturas foram emitidas esta semana?"*
 - **Caixa**: *"Qual o saldo atual de caixa?"*
 - **Stocks**: *"Quais produtos estão com stock crítico?"*

@@ -42,7 +42,7 @@ corporateHeadquartersRouter.get("/cockpit", requireRole("ADMIN", "MANAGER"), asy
  * GET /api/v1/corporate/stores
  * List stores and branches
  */
-corporateHeadquartersRouter.get("/stores", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.get("/stores", requireRole("ADMIN", "MANAGER"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const cockpit = await EnterpriseCorporateHeadquartersService.getHeadquartersCockpit(companyId);
@@ -56,7 +56,7 @@ corporateHeadquartersRouter.get("/stores", async (req: Request, res: Response): 
  * POST /api/v1/corporate/stores
  * Register or update store
  */
-corporateHeadquartersRouter.post("/stores", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/stores", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -82,7 +82,7 @@ corporateHeadquartersRouter.post("/stores", async (req: Request, res: Response):
  * POST /api/v1/corporate/stores/heartbeat
  * Store telemetry heartbeat ingestion
  */
-corporateHeadquartersRouter.post("/stores/heartbeat", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/stores/heartbeat", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const body = req.body || {};
@@ -103,7 +103,7 @@ corporateHeadquartersRouter.post("/stores/heartbeat", async (req: Request, res: 
  * POST /api/v1/corporate/users
  * Centralized User Creation from Headquarters
  */
-corporateHeadquartersRouter.post("/users", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/users", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -141,7 +141,7 @@ corporateHeadquartersRouter.post("/users", async (req: Request, res: Response): 
  * POST /api/v1/corporate/users/:id/suspend
  * Immediate user suspension across all branches
  */
-corporateHeadquartersRouter.post("/users/:id/suspend", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/users/:id/suspend", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -170,7 +170,7 @@ corporateHeadquartersRouter.post("/users/:id/suspend", async (req: Request, res:
  * PUT /api/v1/corporate/users/:id/role
  * Reassign store and role
  */
-corporateHeadquartersRouter.put("/users/:id/role", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.put("/users/:id/role", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -199,7 +199,7 @@ corporateHeadquartersRouter.put("/users/:id/role", async (req: Request, res: Res
  * POST /api/v1/corporate/modules/control
  * Remote module activation/deactivation per branch
  */
-corporateHeadquartersRouter.post("/modules/control", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/modules/control", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -228,7 +228,7 @@ corporateHeadquartersRouter.post("/modules/control", async (req: Request, res: R
  * POST /api/v1/corporate/live-updates/publish
  * Publish live patch / module component without new installer
  */
-corporateHeadquartersRouter.post("/live-updates/publish", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/live-updates/publish", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -264,7 +264,7 @@ corporateHeadquartersRouter.post("/live-updates/publish", async (req: Request, r
  * GET /api/v1/corporate/live-updates/check
  * Check pending live patches for branch
  */
-corporateHeadquartersRouter.get("/live-updates/check", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.get("/live-updates/check", requireRole("ADMIN", "MANAGER"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const branchId = String(req.query.branchId || "HQ");
@@ -291,7 +291,7 @@ corporateHeadquartersRouter.get("/live-updates/check", async (req: Request, res:
  * POST /api/v1/corporate/broadcasts
  * Issue corporate circular / notice to stores
  */
-corporateHeadquartersRouter.post("/broadcasts", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/broadcasts", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -324,7 +324,7 @@ corporateHeadquartersRouter.post("/broadcasts", async (req: Request, res: Respon
  * GET /api/v1/corporate/events
  * Real-time event stream
  */
-corporateHeadquartersRouter.get("/events", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.get("/events", requireRole("ADMIN", "MANAGER"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const limit = parseInt(String(req.query.limit || "50"), 10);
@@ -339,7 +339,7 @@ corporateHeadquartersRouter.get("/events", async (req: Request, res: Response): 
  * PUT /api/v1/corporate/users/:id/permissions
  * Remote granular permission & modules update
  */
-corporateHeadquartersRouter.put("/users/:id/permissions", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.put("/users/:id/permissions", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -368,7 +368,7 @@ corporateHeadquartersRouter.put("/users/:id/permissions", async (req: Request, r
  * POST /api/v1/corporate/licenses/:terminalId/revoke
  * Remote license revocation / freeze for store terminal
  */
-corporateHeadquartersRouter.post("/licenses/:terminalId/revoke", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/licenses/:terminalId/revoke", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -398,7 +398,7 @@ corporateHeadquartersRouter.post("/licenses/:terminalId/revoke", async (req: Req
  * POST /api/v1/corporate/licenses/:terminalId/restore
  * Remote license restoration for store terminal
  */
-corporateHeadquartersRouter.post("/licenses/:terminalId/restore", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/licenses/:terminalId/restore", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -427,7 +427,7 @@ corporateHeadquartersRouter.post("/licenses/:terminalId/restore", async (req: Re
  * GET /api/v1/corporate/licenses/:terminalId/status
  * Query store license status
  */
-corporateHeadquartersRouter.get("/licenses/:terminalId/status", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.get("/licenses/:terminalId/status", requireRole("ADMIN", "MANAGER"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const terminalId = String(req.params.terminalId);
@@ -449,7 +449,7 @@ corporateHeadquartersRouter.get("/licenses/:terminalId/status", async (req: Requ
  * POST /api/v1/corporate/sync/bidirectional
  * Unified real-time bidirectional sync (Loja <-> Cloud <-> Sede)
  */
-corporateHeadquartersRouter.post("/sync/bidirectional", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/sync/bidirectional", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const actorName = getActorName(req);
@@ -477,7 +477,7 @@ corporateHeadquartersRouter.post("/sync/bidirectional", async (req: Request, res
  * GET /api/v1/corporate/commands/pending
  * Branch queries pending corporate commands from Sede
  */
-corporateHeadquartersRouter.get("/commands/pending", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.get("/commands/pending", requireRole("ADMIN", "MANAGER"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const branchId = String(req.query.branchId || "");
@@ -508,7 +508,7 @@ corporateHeadquartersRouter.get("/commands/pending", async (req: Request, res: R
  * POST /api/v1/corporate/commands/:id/ack
  * Branch acknowledges execution of a corporate command
  */
-corporateHeadquartersRouter.post("/commands/:id/ack", async (req: Request, res: Response): Promise<void> => {
+corporateHeadquartersRouter.post("/commands/:id/ack", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = getCompanyId(req);
     const commandId = String(req.params.id);

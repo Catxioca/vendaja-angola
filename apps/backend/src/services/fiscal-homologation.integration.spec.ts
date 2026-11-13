@@ -35,7 +35,7 @@ integration("PostgreSQL Fiscal Engine: FiscalConfig, Sequence and Multi-rate Cal
         companyName: `Fiscal Corp ${suffix}`,
         companyNif: "5412345678",
         softwareCertificationNumber: "PENDING_HOMOLOGATION",
-        softwareVersion: "3.2.2-rc.1",
+        softwareVersion: "3.2.2-rc.3",
         baseCurrency: "AOA",
         fiscalRegime: "GERAL",
         invoiceSeries: `F${suffix.slice(0, 3)}`,
@@ -142,21 +142,24 @@ integration("PostgreSQL Fiscal Engine: Concurrent Sequence & Chained Hash Alloca
     // 5 concurrent workers requesting sequence increments atomically
     const allocatedNumbers = await Promise.all(
       [1, 2, 3, 4, 5].map(() =>
-        prisma.$transaction(async (tx) => {
-          const current = await tx.fiscalSequence.update({
-            where: {
-              companyId_branchScopeId_documentType_series_fiscalYear: {
-                companyId: company.id,
-                branchScopeId: "__COMPANY__",
-                documentType: docType,
-                series,
-                fiscalYear,
+        prisma.$transaction(
+          async (tx) => {
+            const current = await tx.fiscalSequence.update({
+              where: {
+                companyId_branchScopeId_documentType_series_fiscalYear: {
+                  companyId: company.id,
+                  branchScopeId: "__COMPANY__",
+                  documentType: docType,
+                  series,
+                  fiscalYear,
+                },
               },
-            },
-            data: { nextNumber: { increment: 1 } },
-          });
-          return current.nextNumber - 1;
-        })
+              data: { nextNumber: { increment: 1 } },
+            });
+            return current.nextNumber - 1;
+          },
+          { maxWait: 15000, timeout: 20000 }
+        )
       )
     );
 

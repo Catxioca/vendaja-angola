@@ -1,6 +1,13 @@
 import test, { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import "dotenv/config";
+
+process.env.NODE_ENV = "test";
+process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://commerce:commerce@localhost:5432/angola_commerce?schema=public";
+process.env.JWT_SECRET = process.env.JWT_SECRET || "k9X0m2P9vL5nQ8rT1wY4bZ7cE0aD3fG6h8K1";
+process.env.FISCAL_CONFIG_KEY = process.env.FISCAL_CONFIG_KEY || "j8V0n3Q9wM6oR9sU2xZ5cA8dF1bE4gH7m3J2";
+
 import qrcode from "qrcode";
 import * as ZXing from "@zxing/library";
 

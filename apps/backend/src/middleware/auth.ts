@@ -6,18 +6,45 @@ export interface AuthRequest extends Express.Request { user?: { id: string; role
 export const requireAuth: RequestHandler = (req, res, next) => {
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) { res.status(401).json({ error: "missing_token", message: "Sessão não encontrada. Por favor, faça login novamente." }); return; }
-  try { (req as AuthRequest).user = jwt.verify(token, getEnv().JWT_SECRET) as { id: string; role: string }; next(); }
+  try { const payload = jwt.verify(token, getEnv().JWT_SECRET) as any; (req as AuthRequest).user = { id: payload.id, role: payload.role }; if (payload.context?.companyId) { (req as AuthRequest).context = payload.context; } next(); }
   catch (error) { console.warn("[auth] rejected bearer token", { path: req.path, reason: error instanceof Error ? error.message : "invalid_token" }); res.status(401).json({ error: "invalid_token", message: "Sessão expirada. Por favor, faça login novamente." }); }
 };
 export const requireCompanyContext: RequestHandler = async (req, res, next) => {
   const auth = req as AuthRequest;
-  const requestedCompanyId = req.header("x-company-id") ?? undefined;
-  const requestedBranchId = req.header("x-branch-id") ?? undefined;
+  const requestedCompanyId = req.header("x-company-id")?.trim() || undefined;
+  const requestedBranchId = req.header("x-branch-id")?.trim() || undefined;
+  const bodyCompanyId =
+    req.body && typeof req.body === "object" && !Array.isArray(req.body) && typeof (req.body as Record<string, unknown>).companyId === "string"
+      ? String((req.body as Record<string, unknown>).companyId).trim() || undefined
+      : undefined;
+
+  if (auth.context?.companyId) {
+    if (requestedCompanyId && requestedCompanyId !== auth.context.companyId) {
+      res.status(403).json({ error: "company_context_forbidden" });
+      return;
+    }
+    if (requestedBranchId && auth.context.branchId && requestedBranchId !== auth.context.branchId) {
+      res.status(403).json({ error: "company_context_forbidden" });
+      return;
+    }
+    if (bodyCompanyId && bodyCompanyId !== auth.context.companyId) {
+      res.status(403).json({ error: "company_context_forbidden" });
+      return;
+    }
+    next();
+    return;
+  }
+
   if (!auth.user?.id) { res.status(401).json({ error: "missing_token" }); return; }
+  if (requestedCompanyId && bodyCompanyId && requestedCompanyId !== bodyCompanyId) {
+    res.status(403).json({ error: "company_context_forbidden" });
+    return;
+  }
+  const effectiveRequestedCompanyId = requestedCompanyId ?? bodyCompanyId;
   try {
     const { prisma } = await import("../db.js");
     const memberships = await prisma.companyMembership.findMany({
-      where: { userId: auth.user.id, active: true, ...(requestedCompanyId ? { companyId: requestedCompanyId } : {}), ...(requestedBranchId ? { branchId: requestedBranchId } : {}) },
+      where: { userId: auth.user.id, active: true, ...(effectiveRequestedCompanyId ? { companyId: effectiveRequestedCompanyId } : {}), ...(requestedBranchId ? { branchId: requestedBranchId } : {}) },
       select: { id: true, companyId: true, branchId: true, role: true },
       take: 2,
     });
@@ -44,16 +71,17 @@ export type AppModule = "POS" | "STOCK" | "HR" | "ACCOUNTING" | "DASHBOARD" | "S
 const moduleRoles: Record<AppModule, string[]> = {
   POS: ["ROLE_ADMIN", "ROLE_CASHIER"],
   STOCK: ["ROLE_ADMIN"],
-  HR: ["ROLE_ADMIN", "ROLE_HR"],
+  HR: ["ROLE_ADMIN", "ROLE_HR", "ROLE_MANAGER"],
   ACCOUNTING: ["ROLE_ADMIN", "ROLE_ACCOUNTANT"],
   DASHBOARD: ["ROLE_ADMIN", "ROLE_CASHIER", "ROLE_HR", "ROLE_ACCOUNTANT"],
   SETTINGS: ["ROLE_ADMIN"],
 };
 export function normalizeRole(role?: string): string {
   const value = (role ?? "").toUpperCase();
-  if (value === "ADMIN") return "ROLE_ADMIN";
+  if (value === "ADMIN" || value === "SUPER_ADMIN" || value === "ROLE_SUPER_ADMIN") return "ROLE_ADMIN";
   if (value === "OPERATOR" || value === "CASHIER") return "ROLE_CASHIER";
-  if (value === "HR") return "ROLE_HR";
+  if (value === "HR" || value === "HR_MANAGER" || value === "ROLE_HR_MANAGER") return "ROLE_HR";
+  if (value === "MANAGER" || value === "ROLE_MANAGER") return "ROLE_MANAGER";
   if (value === "ACCOUNTANT" || value === "ACCOUNTING") return "ROLE_ACCOUNTANT";
   return value.startsWith("ROLE_") ? value : `ROLE_${value}`;
 }

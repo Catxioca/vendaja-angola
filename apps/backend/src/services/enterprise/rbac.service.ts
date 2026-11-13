@@ -111,9 +111,9 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
   { code: "BI.CreateDashboard", module: "BI", screen: "DashboardBuilder", action: "Create", description: "Construir e personalizar dashboards e widgets analíticos" },
   { code: "BI.Manage", module: "BI", screen: "Configuration", action: "Manage", description: "Administrar regras de alertas executivos e modelos de BI" },
 
-  // Artificial Intelligence, VendaJá Copilot & Machine Learning (Fase 10)
-  { code: "AI.View", module: "AI", screen: "Copilot", action: "View", description: "Aceder ao assistente inteligente VendaJá Copilot" },
-  { code: "AI.Chat", module: "AI", screen: "Copilot", action: "Chat", description: "Interagir em linguagem natural com o VendaJá Copilot" },
+  // Artificial Intelligence, Muambuluisha IA & Machine Learning (Fase 10)
+  { code: "AI.View", module: "AI", screen: "Copilot", action: "View", description: "Aceder ao assistente inteligente Muambuluisha IA" },
+  { code: "AI.Chat", module: "AI", screen: "Copilot", action: "Chat", description: "Interagir em linguagem natural com a Muambuluisha IA" },
   { code: "AI.Forecast", module: "AI", screen: "Copilot", action: "Forecast", description: "Consultar previsões de vendas, stock e tesouraria por IA" },
   { code: "AI.Analytics", module: "AI", screen: "Copilot", action: "Analytics", description: "Solicitar insights analíticos e deteção de anomalias por IA" },
   { code: "AI.Admin", module: "AI", screen: "Copilot", action: "Admin", description: "Administrar modelos, parâmetros e auditoria de IA" },

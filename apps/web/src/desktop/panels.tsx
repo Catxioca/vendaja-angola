@@ -1600,14 +1600,56 @@ type EmployeeRow = {
   transportAllowanceCents?: number;
   housingAllowanceCents?: number;
   otherAllowancesCents?: number;
+  biometricConsentGiven?: boolean;
+  biometricRefId?: string | null;
   active?: boolean;
 };
 
 export function HRPanel({ api, token, admin, onError }: Props) {
+  const [activeTab, setActiveTab] = useState<"dashboard" | "employees" | "attendance" | "payrolls" | "config">("dashboard");
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
-  const [payrollReport, setPayrollReport] = useState<{ rows: Array<{ id: string; employee: EmployeeRow; grossSalaryCents: number; inssEmployeeCents: number; inssEmployerCents: number; irtCents: number; netSalaryCents: number }>; totals?: { netSalaryCents: number } }>({ rows: [] });
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [payrollReport, setPayrollReport] = useState<{
+    rows: Array<{
+      id: string;
+      month: string;
+      status: string;
+      employee: EmployeeRow;
+      grossSalaryCents: number;
+      inssEmployeeCents: number;
+      inssEmployerCents: number;
+      irtCents: number;
+      netSalaryCents: number;
+    }>;
+    totals?: {
+      grossSalaryCents: number;
+      inssEmployeeCents: number;
+      inssEmployerCents: number;
+      irtCents: number;
+      netSalaryCents: number;
+    };
+  }>({ rows: [] });
   const [payrollMonth, setPayrollMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [leaveRecords, setLeaveRecords] = useState<any[]>([]);
+  const [hrConfig, setHrConfig] = useState<any>(null);
   const [message, setMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorState, setErrorState] = useState<string | null>(null);
+
+  // Modais de Governação e Imutabilidade
+  const [activeModal, setActiveModal] = useState<"none" | "snapshot" | "rectify" | "rectifications">("none");
+  const [selectedPayroll, setSelectedPayroll] = useState<any | null>(null);
+  const [snapshotData, setSnapshotData] = useState<any | null>(null);
+  const [rectificationsList, setRectificationsList] = useState<any[]>([]);
+  const [rectifyAdjustmentKz, setRectifyAdjustmentKz] = useState<number>(0);
+  const [rectifyReason, setRectifyReason] = useState("");
+  const [rectifyNotes, setRectifyNotes] = useState("");
+
+  const regulatoryNotice = "Configurações laborais e remuneratórias sujeitas a fonte oficial e validação por profissional habilitado.";
+
+  // Formulário do colaborador
   const [form, setForm] = useState({
     fullName: "",
     nif: "",
@@ -1621,50 +1663,1026 @@ export function HRPanel({ api, token, admin, onError }: Props) {
     transportAllowanceCents: 0,
     housingAllowanceCents: 0,
     otherAllowancesCents: 0,
+    biometricConsentGiven: false,
+    biometricRefId: "",
   });
 
-  const load = () => request<EmployeeRow[]>(`${api}/api/v1/hr/employees`, token)
-    .then(setEmployees)
-    .catch(() => setEmployees([]));
+  // Formulário de registo de ponto / assiduidade
+  const [attendanceForm, setAttendanceForm] = useState({
+    employeeId: "",
+    date: new Date().toISOString().slice(0, 10),
+    checkIn: "08:00",
+    checkOut: "17:00",
+    status: "PRESENT",
+    delayMinutes: 0,
+    overtimeMinutes: 0,
+  });
 
-  useEffect(() => { void load(); }, []);
+  // Formulário de pedido de férias / licença
+  const [leaveForm, setLeaveForm] = useState({
+    employeeId: "",
+    type: "VACATION",
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: new Date().toISOString().slice(0, 10),
+    daysCount: 22,
+    justification: "",
+  });
 
-  const save = async () => {
-    if (!admin) return onError("Apenas o administrador pode gerir RH.");
+  // Formulário de parametrização de remuneração
+  const [configForm, setConfigForm] = useState({
+    effectiveDate: "2026-01-01",
+    responsibleName: "Contabilista / Diretor RH",
+    responsibleRole: "Contabilista Certificado",
+    officialSource: "Código do IRT / Regulamento do INSS / LGT de Angola",
+    approvalReference: "PARAM-RH-2026",
+    inssEmployeeRate: 0.03,
+    inssEmployerRate: 0.08,
+    allowanceExemptionCapKz: 30000,
+  });
+
+  const loadAll = async () => {
+    if (!token) return;
+    setLoading(true);
+    setErrorState(null);
+    try {
+      const [dash, emps, att, leaves, rep, cfg] = await Promise.all([
+        request<any>(`${api}/api/v1/hr/dashboard`, token).catch(() => null),
+        request<EmployeeRow[]>(`${api}/api/v1/hr/employees`, token).catch(() => []),
+        request<any[]>(`${api}/api/v1/hr/attendance`, token).catch(() => []),
+        request<any[]>(`${api}/api/v1/hr/leaves`, token).catch(() => []),
+        request<any>(`${api}/api/v1/hr/payrolls/report?month=${payrollMonth}`, token).catch(() => ({ rows: [] })),
+        request<any>(`${api}/api/v1/hr/config`, token).catch(() => null),
+      ]);
+      setDashboard(dash);
+      setEmployees(emps);
+      setAttendanceRecords(att);
+      setLeaveRecords(leaves);
+      setPayrollReport(rep);
+      if (cfg) {
+        setHrConfig(cfg);
+        setConfigForm({
+          effectiveDate: cfg.effectiveDate || "2026-01-01",
+          responsibleName: cfg.responsibleName || "",
+          responsibleRole: cfg.responsibleRole || "",
+          officialSource: cfg.officialSource || "",
+          approvalReference: cfg.approvalReference || "",
+          inssEmployeeRate: cfg.inssEmployeeRate || 0.03,
+          inssEmployerRate: cfg.inssEmployerRate || 0.08,
+          allowanceExemptionCapKz: Math.round((cfg.allowanceExemptionCapCents || 3000000) / 100),
+        });
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Falha ao carregar dados de Recursos Humanos.";
+      setErrorState(errMsg);
+      onError(errMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAll();
+  }, [api, token, payrollMonth]);
+
+  const saveEmployee = async () => {
+    if (!admin) return onError("Apenas utilizadores com perfil de gestão podem criar colaboradores.");
+    if (!form.fullName.trim() || !form.position.trim()) return onError("Nome e Cargo são obrigatórios.");
     try {
       await request(`${api}/api/v1/hr/employees`, token, {
         method: "POST",
-        body: JSON.stringify({ ...form, baseSalaryCents: money(String(form.baseSalaryCents / 100)), foodAllowanceCents: money(String(form.foodAllowanceCents / 100)), transportAllowanceCents: money(String(form.transportAllowanceCents / 100)), housingAllowanceCents: money(String(form.housingAllowanceCents / 100)), otherAllowancesCents: money(String(form.otherAllowancesCents / 100)) }),
+        body: JSON.stringify({
+          ...form,
+          baseSalaryCents: money(String(form.baseSalaryCents / 100)),
+          foodAllowanceCents: money(String(form.foodAllowanceCents / 100)),
+          transportAllowanceCents: money(String(form.transportAllowanceCents / 100)),
+          housingAllowanceCents: money(String(form.housingAllowanceCents / 100)),
+          otherAllowancesCents: money(String(form.otherAllowancesCents / 100)),
+          biometricConsentGiven: form.biometricConsentGiven,
+          biometricRefId: form.biometricConsentGiven && form.biometricRefId.trim() ? form.biometricRefId.trim() : null,
+        }),
       });
-      setForm({ fullName: "", nif: "", inss: "", position: "", department: "", contractType: "FIXED", iban: "", baseSalaryCents: 0, foodAllowanceCents: 0, transportAllowanceCents: 0, housingAllowanceCents: 0, otherAllowancesCents: 0 });
-      setMessage("Colaborador registado.");
-      await load();
+      setForm({
+        fullName: "",
+        nif: "",
+        inss: "",
+        position: "",
+        department: "",
+        contractType: "FIXED",
+        iban: "",
+        baseSalaryCents: 0,
+        foodAllowanceCents: 0,
+        transportAllowanceCents: 0,
+        housingAllowanceCents: 0,
+        otherAllowancesCents: 0,
+        biometricConsentGiven: false,
+        biometricRefId: "",
+      });
+      setMessage("Colaborador registado com sucesso.");
+      const updated = await request<EmployeeRow[]>(`${api}/api/v1/hr/employees`, token);
+      setEmployees(updated);
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Falha ao registrar colaborador.");
+      onError(e instanceof Error ? e.message : "Falha ao registar colaborador.");
+    }
+  };
+
+  const deactivateEmployee = async (id: string) => {
+    if (!admin) return onError("Apenas administradores podem desativar colaboradores.");
+    try {
+      await request(`${api}/api/v1/hr/employees/${id}`, token, { method: "DELETE" });
+      setMessage("Colaborador desativado (histórico fiscal e remuneratório preservado).");
+      const updated = await request<EmployeeRow[]>(`${api}/api/v1/hr/employees`, token);
+      setEmployees(updated);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao desativar colaborador.");
+    }
+  };
+
+  const revokeBiometricConsent = async (id: string) => {
+    if (!admin) return onError("Apenas administradores podem revogar consentimento biométrico.");
+    try {
+      await request(`${api}/api/v1/hr/employees/${id}/biometric-consent/revoke`, token, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Revogação formal de consentimento biométrico solicitada" }),
+      });
+      setMessage("Consentimento biométrico revogado com sucesso. Trilha de auditoria preservada.");
+      const updated = await request<EmployeeRow[]>(`${api}/api/v1/hr/employees`, token);
+      setEmployees(updated);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao revogar consentimento biométrico.");
+    }
+  };
+
+  const recordAttendance = async () => {
+    if (!attendanceForm.employeeId) return onError("Selecione um colaborador.");
+    try {
+      await request(`${api}/api/v1/hr/attendance`, token, {
+        method: "POST",
+        body: JSON.stringify(attendanceForm),
+      });
+      setMessage("Assiduidade registada com sucesso.");
+      const att = await request<any[]>(`${api}/api/v1/hr/attendance`, token);
+      setAttendanceRecords(att);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao registar assiduidade.");
+    }
+  };
+
+  const submitLeave = async () => {
+    if (!leaveForm.employeeId) return onError("Selecione um colaborador.");
+    try {
+      await request(`${api}/api/v1/hr/leaves`, token, {
+        method: "POST",
+        body: JSON.stringify(leaveForm),
+      });
+      setMessage("Pedido de férias/licença submetido com sucesso.");
+      const leaves = await request<any[]>(`${api}/api/v1/hr/leaves`, token);
+      setLeaveRecords(leaves);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao submeter pedido.");
+    }
+  };
+
+  const approveLeave = async (id: string) => {
+    try {
+      await request(`${api}/api/v1/hr/leaves/${id}/approve`, token, { method: "PATCH" });
+      setMessage("Férias/Licença aprovada com sucesso.");
+      const leaves = await request<any[]>(`${api}/api/v1/hr/leaves`, token);
+      setLeaveRecords(leaves);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao aprovar pedido.");
     }
   };
 
   const computePayroll = async (employeeId: string) => {
     try {
-      const payload = await request<{ payslip: { employee: string; month: string; netSalaryCents: number } }>(`${api}/api/v1/hr/payrolls/compute`, token, {
-        method: "POST",
-        body: JSON.stringify({ employeeId, month: new Date().toISOString().slice(0, 7) }),
-      });
+      const payload = await request<{ payslip: { employee: string; month: string; netSalaryCents: number } }>(
+        `${api}/api/v1/hr/payrolls/compute`,
+        token,
+        {
+          method: "POST",
+          body: JSON.stringify({ employeeId, month: payrollMonth }),
+        }
+      );
       setMessage(`Salário processado para ${payload.payslip.employee}: ${formatKwanza(payload.payslip.netSalaryCents)}`);
-      await load();
+      const rep = await request<any>(`${api}/api/v1/hr/payrolls/report?month=${payrollMonth}`, token);
+      setPayrollReport(rep);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Falha ao processar salário.");
     }
   };
-  const processMonth = async () => {
-    if (!admin) return onError("Apenas o administrador pode processar a folha.");
-    try { await request(`${api}/api/v1/hr/payrolls/process-month`, token, { method: "POST", body: JSON.stringify({ month: payrollMonth }) }); setMessage(`Folha de ${payrollMonth} processada.`); await loadReport(); } catch (e) { onError(e instanceof Error ? e.message : "Falha ao processar folha."); }
-  };
-  const loadReport = async () => { try { setPayrollReport(await request<typeof payrollReport>(`${api}/api/v1/hr/payrolls/report?month=${payrollMonth}`, token)); } catch { setPayrollReport({ rows: [] }); } };
-  useEffect(() => { void loadReport(); }, [payrollMonth]);
 
-  return <section className="panel"><h2>Recursos Humanos</h2><div className="card form-grid"><h3>Nova ficha do colaborador</h3><label>Nome completo<input value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} /></label><label>NIF<input value={form.nif} onChange={e => setForm({ ...form, nif: e.target.value })} /></label><label>INSS<input value={form.inss} onChange={e => setForm({ ...form, inss: e.target.value })} /></label><label>Cargo<input value={form.position} onChange={e => setForm({ ...form, position: e.target.value })} /></label><label>Departamento<input value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} /></label><label>Tipo de contrato<select value={form.contractType} onChange={e => setForm({ ...form, contractType: e.target.value })}><option value="FIXED">Fixo</option><option value="PART_TIME">Parcial</option><option value="TEMPORARY">Temporário</option><option value="INTERNSHIP">Estágio</option></select></label><label>IBAN<input value={form.iban} onChange={e => setForm({ ...form, iban: e.target.value })} /></label><label>Salário base (Kz)<input type="number" value={form.baseSalaryCents / 100} onChange={e => setForm({ ...form, baseSalaryCents: money(e.target.value) })} /></label><label>Subsídio alimentação (Kz)<input type="number" value={form.foodAllowanceCents / 100} onChange={e => setForm({ ...form, foodAllowanceCents: money(e.target.value) })} /></label><label>Subsídio transporte (Kz)<input type="number" value={form.transportAllowanceCents / 100} onChange={e => setForm({ ...form, transportAllowanceCents: money(e.target.value) })} /></label><label>Subsídio habitação (Kz)<input type="number" value={form.housingAllowanceCents / 100} onChange={e => setForm({ ...form, housingAllowanceCents: money(e.target.value) })} /></label><label>Outros adicionais (Kz)<input type="number" value={form.otherAllowancesCents / 100} onChange={e => setForm({ ...form, otherAllowancesCents: money(e.target.value) })} /></label><button className="checkout" onClick={() => void save()}>Guardar colaborador</button>{message && <p className="success">{message}</p>}</div>
-    <div className="table-wrap"><table><thead><tr><th>Colaborador</th><th>Cargo</th><th>Salário Base</th><th>Contrato</th><th>Processamento</th></tr></thead><tbody>{employees.map(employee => <tr key={employee.id}><td>{employee.fullName}<small>{employee.nif ?? "Sem NIF"}</small></td><td>{employee.position}</td><td>{formatKwanza(employee.baseSalaryCents)}</td><td>{employee.contractType}</td><td><button onClick={() => void computePayroll(employee.id)}>Processar folha</button></td></tr>)}</tbody></table></div><div className="card"><h3>Processamento mensal e recibos</h3><div className="modal-actions"><label>Mês<input type="month" value={payrollMonth} onChange={e => setPayrollMonth(e.target.value)} /></label>{admin && <button className="checkout" onClick={() => void processMonth()}>Processar folha mensal</button>}<button onClick={() => void loadReport()}>Atualizar relatório</button></div><div className="table-wrap"><table><thead><tr><th>Colaborador</th><th>Bruto</th><th>INSS</th><th>IRT</th><th>Líquido</th><th>Recibo</th></tr></thead><tbody>{payrollReport.rows.map(row => <tr key={row.id}><td>{row.employee.fullName}</td><td>{formatKwanza(row.grossSalaryCents)}</td><td>{formatKwanza(row.inssEmployeeCents)}</td><td>{formatKwanza(row.irtCents)}</td><td>{formatKwanza(row.netSalaryCents)}</td><td><button onClick={() => window.open(`${api}/api/v1/hr/payrolls/${row.id}/payslip`, "_blank")}>Ver recibo</button></td></tr>)}</tbody></table></div></div></section>;
+  const processMonthBatch = async () => {
+    if (!admin) return onError("Apenas administradores podem processar folha em lote.");
+    try {
+      await request(`${api}/api/v1/hr/payrolls/process-month`, token, {
+        method: "POST",
+        body: JSON.stringify({ month: payrollMonth }),
+      });
+      setMessage(`Folha do mês ${payrollMonth} processada com sucesso.`);
+      const rep = await request<any>(`${api}/api/v1/hr/payrolls/report?month=${payrollMonth}`, token);
+      setPayrollReport(rep);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao processar folha mensal.");
+    }
+  };
+
+  const closeMonthFormal = async () => {
+    if (!admin) return onError("Apenas administradores podem fechar formalmente a folha salarial.");
+    try {
+      const res = await request<any>(`${api}/api/v1/hr/payrolls/close-month`, token, {
+        method: "POST",
+        body: JSON.stringify({ month: payrollMonth }),
+      });
+      setMessage(res.message || `Processamento salarial de ${payrollMonth} fechado com sucesso.`);
+      const rep = await request<any>(`${api}/api/v1/hr/payrolls/report?month=${payrollMonth}`, token);
+      setPayrollReport(rep);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao fechar mês.");
+    }
+  };
+
+  const closeSingleReceipt = async (id: string) => {
+    if (!admin) return onError("Apenas administradores podem fechar recibos individualmente.");
+    try {
+      await request(`${api}/api/v1/hr/payrolls/${id}/close`, token, { method: "POST" });
+      setMessage("Recibo salarial fechado com sucesso e snapshot imutável gravado.");
+      const rep = await request<any>(`${api}/api/v1/hr/payrolls/report?month=${payrollMonth}`, token);
+      setPayrollReport(rep);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao fechar recibo.");
+    }
+  };
+
+  const viewSnapshot = async (payroll: any) => {
+    try {
+      const snap = await request<any>(`${api}/api/v1/hr/payrolls/${payroll.id}/snapshot`, token);
+      setSelectedPayroll(payroll);
+      setSnapshotData(snap);
+      setActiveModal("snapshot");
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao obter snapshot imutável.");
+    }
+  };
+
+  const openRectifyModal = (payroll: any) => {
+    if (!admin) return onError("Apenas administradores podem retificar recibos fechados.");
+    setSelectedPayroll(payroll);
+    setRectifyAdjustmentKz(0);
+    setRectifyReason("");
+    setRectifyNotes("");
+    setActiveModal("rectify");
+  };
+
+  const submitRectification = async () => {
+    if (!selectedPayroll) return;
+    if (!rectifyReason.trim()) return onError("O motivo da retificação é obrigatório.");
+    try {
+      const res = await request<any>(`${api}/api/v1/hr/payrolls/${selectedPayroll.id}/rectify`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          adjustmentCents: money(String(rectifyAdjustmentKz)),
+          reason: rectifyReason,
+          notes: rectifyNotes || null,
+        }),
+      });
+      setMessage(res.message || "Retificação registada com sucesso em trilha de auditoria.");
+      setActiveModal("none");
+      const rep = await request<any>(`${api}/api/v1/hr/payrolls/report?month=${payrollMonth}`, token);
+      setPayrollReport(rep);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao submeter retificação.");
+    }
+  };
+
+  const viewRectifications = async (payroll: any) => {
+    try {
+      const rects = await request<any[]>(`${api}/api/v1/hr/payrolls/${payroll.id}/rectifications`, token);
+      setSelectedPayroll(payroll);
+      setRectificationsList(rects);
+      setActiveModal("rectifications");
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao carregar retificações.");
+    }
+  };
+
+  const saveConfig = async () => {
+    if (!admin) return onError("Apenas administradores podem parametrizar encargos de RH.");
+    try {
+      const payload = {
+        effectiveDate: configForm.effectiveDate,
+        responsibleName: configForm.responsibleName,
+        responsibleRole: configForm.responsibleRole,
+        officialSource: configForm.officialSource,
+        approvalReference: configForm.approvalReference,
+        inssEmployeeRate: Number(configForm.inssEmployeeRate),
+        inssEmployerRate: Number(configForm.inssEmployerRate),
+        allowanceExemptionCapCents: money(String(configForm.allowanceExemptionCapKz)),
+        irtBrackets: hrConfig?.irtBrackets || [
+          { minCents: 0, maxCents: 500000, rate: 0 },
+          { minCents: 500000, maxCents: 1500000, rate: 0.1 },
+          { minCents: 1500000, maxCents: 3500000, rate: 0.15 },
+          { minCents: 3500000, maxCents: 7000000, rate: 0.2 },
+          { minCents: 7000000, maxCents: Number.POSITIVE_INFINITY, rate: 0.25 },
+        ],
+      };
+      await request(`${api}/api/v1/hr/config`, token, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      setMessage("Parametrização de remuneração gravada e auditada com sucesso.");
+      const cfg = await request<any>(`${api}/api/v1/hr/config`, token);
+      setHrConfig(cfg);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Falha ao gravar parametrização.");
+    }
+  };
+
+  const filteredEmployees = employees.filter((emp) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      emp.fullName.toLowerCase().includes(q) ||
+      (emp.nif && emp.nif.toLowerCase().includes(q)) ||
+      emp.position.toLowerCase().includes(q) ||
+      (emp.department && emp.department.toLowerCase().includes(q))
+    );
+  });
+
+  return (
+    <section className="panel" style={{ maxWidth: "1200px", margin: "0 auto", padding: "16px" }}>
+      {/* TÍTULO E SUBTÍTULO */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "22px", fontWeight: 800, color: "#0f172a" }}>
+            👥 Recursos Humanos Enterprise
+          </h2>
+          <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+            Gestão operacional de pessoal, contratos, assiduidade, férias, processamento salarial, recibos fechados e retenções.
+          </p>
+        </div>
+      </div>
+
+      {/* AVISO REGULATÓRIO MANDATÓRIO */}
+      <div
+        role="note"
+        style={{
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: "8px",
+          padding: "10px 16px",
+          marginBottom: "16px",
+          color: "#1e40af",
+          fontSize: "12px",
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+        }}
+      >
+        <span>ℹ️</span>
+        <span>{regulatoryNotice}</span>
+      </div>
+
+      {loading && (
+        <div role="status" style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", color: "#64748b" }}>
+          ⏳ A carregar dados de Recursos Humanos...
+        </div>
+      )}
+
+      {errorState && (
+        <div role="alert" style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: 600 }}>
+          ⚠️ {errorState} <button onClick={() => void loadAll()} style={{ marginLeft: "8px", padding: "2px 8px", fontSize: "11px" }}>Tentar novamente</button>
+        </div>
+      )}
+
+      {message && (
+        <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: 600 }}>
+          ✓ {message}
+        </div>
+      )}
+
+      {/* ABAS DE NAVEGAÇÃO */}
+      <div style={{ display: "flex", gap: "8px", borderBottom: "2px solid #e2e8f0", marginBottom: "20px", flexWrap: "wrap" }}>
+        {[
+          { id: "dashboard", label: "📊 Indicadores Reais" },
+          { id: "employees", label: "👥 Fichas de Colaboradores" },
+          { id: "attendance", label: "⏱️ Assiduidade & Férias" },
+          { id: "payrolls", label: "💵 Processamento Salarial" },
+          { id: "config", label: "⚙️ Parametrização & Encargos" },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id as any)}
+            style={{
+              padding: "10px 16px",
+              background: "transparent",
+              border: "none",
+              borderBottom: activeTab === t.id ? "3px solid #0284c7" : "3px solid transparent",
+              color: activeTab === t.id ? "#0284c7" : "#64748b",
+              fontWeight: 700,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ABA 1: DASHBOARD REAL */}
+      {activeTab === "dashboard" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Total Colaboradores</div>
+              <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "4px" }}>
+                {dashboard?.totalEmployees ?? employees.length}
+              </div>
+              <small style={{ color: "#10b981", fontWeight: 600 }}>
+                {dashboard?.activeEmployees ?? employees.filter((e) => e.active !== false).length} ativos
+              </small>
+            </div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Departamentos Ativos</div>
+              <div style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginTop: "4px" }}>
+                {dashboard?.departmentsCount ?? 0}
+              </div>
+              <small style={{ color: "#64748b" }}>Centros operacionais</small>
+            </div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Massa Salarial Base</div>
+              <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f766e", marginTop: "4px" }}>
+                {formatKwanza(dashboard?.totalBaseSalaryCents ?? 0)}
+              </div>
+              <small style={{ color: "#64748b" }}>Sem horas extras/adicionais</small>
+            </div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
+              <div style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>Folha do Mês ({payrollMonth})</div>
+              <div style={{ fontSize: "20px", fontWeight: 800, color: "#0284c7", marginTop: "4px" }}>
+                {formatKwanza(dashboard?.currentMonthTotals?.netSalaryCents ?? 0)}
+              </div>
+              <small style={{ color: "#64748b" }}>Líquido a pagar</small>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 style={{ margin: "0 0 12px", fontSize: "15px" }}>Departamentos e Funções Mapeadas</h3>
+            {dashboard?.departmentsList?.length ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {dashboard.departmentsList.map((dep: string) => (
+                  <span key={dep} style={{ background: "#f1f5f9", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", color: "#334155" }}>
+                    🏢 {dep}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: "#64748b", fontSize: "13px" }}>Nenhum departamento cadastrado ainda.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA 2: COLABORADORES */}
+      {activeTab === "employees" && (
+        <div>
+          {admin && (
+            <div className="card form-grid" style={{ marginBottom: "20px" }}>
+              <h3 style={{ gridColumn: "1 / -1", margin: 0, fontSize: "16px" }}>Nova Ficha de Colaborador</h3>
+              <label>Nome completo *<input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></label>
+              <label>NIF<input value={form.nif} onChange={(e) => setForm({ ...form, nif: e.target.value })} placeholder="NIF angolano" /></label>
+              <label>Número INSS<input value={form.inss} onChange={(e) => setForm({ ...form, inss: e.target.value })} placeholder="Inscrição na Segurança Social" /></label>
+              <label>Cargo / Função *<input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} required /></label>
+              <label>Departamento<input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></label>
+              <label>Tipo de Contrato
+                <select value={form.contractType} onChange={(e) => setForm({ ...form, contractType: e.target.value })}>
+                  <option value="FIXED">Efetivo / Fixo</option>
+                  <option value="PART_TIME">Tempo Parcial</option>
+                  <option value="TEMPORARY">A Termo / Temporário</option>
+                  <option value="INTERNSHIP">Estágio Profissional</option>
+                </select>
+              </label>
+              <label>IBAN Bancário<input value={form.iban} onChange={(e) => setForm({ ...form, iban: e.target.value })} placeholder="AO06..." /></label>
+              <label>Salário Base (Kz)<input type="number" min="0" value={form.baseSalaryCents / 100} onChange={(e) => setForm({ ...form, baseSalaryCents: money(e.target.value) })} /></label>
+              <label>Subsídio Alimentação (Kz)<input type="number" min="0" value={form.foodAllowanceCents / 100} onChange={(e) => setForm({ ...form, foodAllowanceCents: money(e.target.value) })} /></label>
+              <label>Subsídio Transporte (Kz)<input type="number" min="0" value={form.transportAllowanceCents / 100} onChange={(e) => setForm({ ...form, transportAllowanceCents: money(e.target.value) })} /></label>
+              <label>Subsídio Habitação (Kz)<input type="number" min="0" value={form.housingAllowanceCents / 100} onChange={(e) => setForm({ ...form, housingAllowanceCents: money(e.target.value) })} /></label>
+              <label>Outros Proventos (Kz)<input type="number" min="0" value={form.otherAllowancesCents / 100} onChange={(e) => setForm({ ...form, otherAllowancesCents: money(e.target.value) })} /></label>
+              <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px", color: "#475569", background: "#f8fafc", padding: "10px", borderRadius: "6px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input type="checkbox" id="biomConsent" checked={form.biometricConsentGiven} onChange={(e) => setForm({ ...form, biometricConsentGiven: e.target.checked })} />
+                  Colaborador consente com registo eletrónico de assiduidade nos termos da Lei de Proteção de Dados (apenas token técnico, sem biometria bruta).
+                </label>
+                {form.biometricConsentGiven && (
+                  <label>Token Técnico de Terminal (biometricRefId):
+                    <input value={form.biometricRefId} onChange={(e) => setForm({ ...form, biometricRefId: e.target.value })} placeholder="Ex: zk-token-01" />
+                  </label>
+                )}
+              </div>
+              <button className="checkout" style={{ gridColumn: "1 / -1" }} onClick={() => void saveEmployee()}>
+                Guardar Ficha do Colaborador
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+            <input
+              type="text"
+              placeholder="Pesquisar por nome, NIF, cargo ou departamento..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ flex: 1, padding: "8px 12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+            />
+          </div>
+
+          <div className="table-wrap">
+            {filteredEmployees.length ? (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Colaborador</th>
+                    <th>Cargo & Departamento</th>
+                    <th>Salário Base</th>
+                    <th>Contrato</th>
+                    <th>Biometria</th>
+                    <th>Estado</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEmployees.map((emp) => (
+                    <tr key={emp.id}>
+                      <td>
+                        <strong>{emp.fullName}</strong>
+                        <br />
+                        <small style={{ color: "#64748b" }}>NIF: {emp.nif || "N/A"} · INSS: {emp.inss || "N/A"}</small>
+                      </td>
+                      <td>
+                        {emp.position}
+                        <br />
+                        <small style={{ color: "#0284c7" }}>{emp.department || "Geral"}</small>
+                      </td>
+                      <td>{formatKwanza(emp.baseSalaryCents)}</td>
+                      <td>{emp.contractType || "FIXED"}</td>
+                      <td>
+                        {emp.biometricConsentGiven ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span style={{ color: "#16a34a", fontWeight: 700, fontSize: "11px" }}>✓ Ativa</span>
+                            {admin && (
+                              <button
+                                onClick={() => void revokeBiometricConsent(emp.id)}
+                                style={{ padding: "2px 6px", fontSize: "10px", color: "#dc2626", border: "1px solid #dc2626", background: "transparent", borderRadius: "4px" }}
+                              >
+                                Revogar
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: "#64748b", fontSize: "11px" }}>Sem token</span>
+                        )}
+                      </td>
+                      <td>
+                        <span style={{ color: emp.active !== false ? "#16a34a" : "#dc2626", fontWeight: 700 }}>
+                          {emp.active !== false ? "Ativo" : "Inativo"}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: "4px" }}>
+                          <button onClick={() => void computePayroll(emp.id)} style={{ padding: "4px 8px", fontSize: "11px" }}>
+                            Processar
+                          </button>
+                          {admin && emp.active !== false && (
+                            <button onClick={() => void deactivateEmployee(emp.id)} style={{ padding: "4px 8px", fontSize: "11px", color: "#dc2626" }}>
+                              Desativar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{ padding: "32px", textAlign: "center", color: "#64748b" }}>
+                <p>Nenhum colaborador encontrado com os critérios indicados.</p>
+                <small>Cadastre o primeiro colaborador para iniciar a gestão de RH.</small>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA 3: ASSIDUIDADE & FÉRIAS */}
+      {activeTab === "attendance" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+          {/* Registo de ponto */}
+          <div className="card">
+            <h3>⏱️ Registo de Ponto / Assiduidade</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
+              <label>Colaborador
+                <select value={attendanceForm.employeeId} onChange={(e) => setAttendanceForm({ ...attendanceForm, employeeId: e.target.value })}>
+                  <option value="">Selecione...</option>
+                  {employees.filter((e) => e.active !== false).map((e) => (
+                    <option key={e.id} value={e.id}>{e.fullName} ({e.position})</option>
+                  ))}
+                </select>
+              </label>
+              <label>Data<input type="date" value={attendanceForm.date} onChange={(e) => setAttendanceForm({ ...attendanceForm, date: e.target.value })} /></label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <label>Entrada<input type="time" value={attendanceForm.checkIn} onChange={(e) => setAttendanceForm({ ...attendanceForm, checkIn: e.target.value })} /></label>
+                <label>Saída<input type="time" value={attendanceForm.checkOut} onChange={(e) => setAttendanceForm({ ...attendanceForm, checkOut: e.target.value })} /></label>
+              </div>
+              <label>Estado
+                <select value={attendanceForm.status} onChange={(e) => setAttendanceForm({ ...attendanceForm, status: e.target.value })}>
+                  <option value="PRESENT">Presente</option>
+                  <option value="ABSENT_JUSTIFIED">Falta Justificada</option>
+                  <option value="ABSENT_UNJUSTIFIED">Falta Injustificada</option>
+                  <option value="LATE">Atraso</option>
+                </select>
+              </label>
+              <button className="checkout" onClick={() => void recordAttendance()}>Gravar Registo de Ponto</button>
+            </div>
+
+            <h4 style={{ marginTop: "16px", marginBottom: "8px" }}>Últimos Registos</h4>
+            <div className="table-wrap">
+              {attendanceRecords.length ? (
+                <table>
+                  <thead>
+                    <tr><th>Data</th><th>Status</th><th>Horas</th></tr>
+                  </thead>
+                  <tbody>
+                    {attendanceRecords.slice(0, 5).map((r) => (
+                      <tr key={r.id}>
+                        <td>{new Date(r.date).toLocaleDateString("pt-AO")}</td>
+                        <td>{r.status}</td>
+                        <td>{Math.round((r.workedMinutes || 0) / 60)}h</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p style={{ color: "#64748b", fontSize: "12px" }}>Sem registos recentes.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Pedidos de Férias e Licenças */}
+          <div className="card">
+            <h3>🏖️ Pedidos de Férias & Licenças</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
+              <label>Colaborador
+                <select value={leaveForm.employeeId} onChange={(e) => setLeaveForm({ ...leaveForm, employeeId: e.target.value })}>
+                  <option value="">Selecione...</option>
+                  {employees.filter((e) => e.active !== false).map((e) => (
+                    <option key={e.id} value={e.id}>{e.fullName}</option>
+                  ))}
+                </select>
+              </label>
+              <label>Tipo
+                <select value={leaveForm.type} onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })}>
+                  <option value="VACATION">Férias Legais</option>
+                  <option value="JUSTIFIED_ABSENCE">Ausência Justificada</option>
+                  <option value="MEDICAL">Baixa Médica</option>
+                  <option value="MATERNITY_PATERNITY">Parentalidade</option>
+                </select>
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <label>Início<input type="date" value={leaveForm.startDate} onChange={(e) => setLeaveForm({ ...leaveForm, startDate: e.target.value })} /></label>
+                <label>Fim<input type="date" value={leaveForm.endDate} onChange={(e) => setLeaveForm({ ...leaveForm, endDate: e.target.value })} /></label>
+              </div>
+              <label>Dias<input type="number" min="1" value={leaveForm.daysCount} onChange={(e) => setLeaveForm({ ...leaveForm, daysCount: parseInt(e.target.value, 10) || 1 })} /></label>
+              <label>Justificação<input value={leaveForm.justification} onChange={(e) => setLeaveForm({ ...leaveForm, justification: e.target.value })} placeholder="Motivo/Despacho" /></label>
+              <button className="checkout" onClick={() => void submitLeave()}>Submeter Pedido</button>
+            </div>
+
+            <h4 style={{ marginTop: "16px", marginBottom: "8px" }}>Férias e Licenças</h4>
+            <div className="table-wrap">
+              {leaveRecords.length ? (
+                <table>
+                  <thead>
+                    <tr><th>Data</th><th>Tipo</th><th>Aprovação</th></tr>
+                  </thead>
+                  <tbody>
+                    {leaveRecords.map((l) => (
+                      <tr key={l.id}>
+                        <td>{new Date(l.date).toLocaleDateString("pt-AO")}</td>
+                        <td>{l.status}</td>
+                        <td>
+                          {l.syncedToPayroll ? (
+                            <span style={{ color: "#16a34a", fontWeight: 700 }}>Aprovado</span>
+                          ) : (
+                            <button onClick={() => void approveLeave(l.id)} style={{ padding: "2px 8px", fontSize: "11px" }}>Aprovar</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p style={{ color: "#64748b", fontSize: "12px" }}>Nenhum pedido de férias pendente.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABA 4: PROCESSAMENTO SALARIAL */}
+      {activeTab === "payrolls" && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 700 }}>Mês de Referência:
+                <input
+                  type="month"
+                  value={payrollMonth}
+                  onChange={(e) => setPayrollMonth(e.target.value)}
+                  style={{ marginLeft: "8px", padding: "6px 10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {admin && (
+                <>
+                  <button className="checkout" onClick={() => void processMonthBatch()}>
+                    ⚡ Processar Folha Mensal em Lote
+                  </button>
+                  <button
+                    onClick={() => void closeMonthFormal()}
+                    style={{ background: "#166534", color: "#fff", padding: "8px 14px", border: "none", borderRadius: "6px", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    🔒 Fechar Mês Formalmente
+                  </button>
+                </>
+              )}
+              <button onClick={() => void loadAll()}>Atualizar</button>
+            </div>
+          </div>
+
+          <div className="table-wrap">
+            {payrollReport.rows.length ? (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Colaborador</th>
+                    <th>Estado</th>
+                    <th>Salário Bruto</th>
+                    <th>INSS Trabalhador</th>
+                    <th>Retenção IRT</th>
+                    <th>Líquido a Pagar</th>
+                    <th>Ações de Auditoria</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payrollReport.rows.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <strong>{row.employee?.fullName || "Colaborador"}</strong>
+                        <br />
+                        <small style={{ color: "#64748b" }}>{row.employee?.position || ""}</small>
+                      </td>
+                      <td>
+                        {row.status === "CLOSED" ? (
+                          <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: "4px", fontWeight: 700, fontSize: "11px" }}>
+                            FECHADO (IMUTÁVEL)
+                          </span>
+                        ) : (
+                          <span style={{ background: "#fef9c3", color: "#854d0e", padding: "2px 8px", borderRadius: "4px", fontWeight: 700, fontSize: "11px" }}>
+                            ABERTO
+                          </span>
+                        )}
+                      </td>
+                      <td>{formatKwanza(row.grossSalaryCents)}</td>
+                      <td style={{ color: "#dc2626" }}>-{formatKwanza(row.inssEmployeeCents)}</td>
+                      <td style={{ color: "#dc2626" }}>-{formatKwanza(row.irtCents)}</td>
+                      <td style={{ fontWeight: 800, color: "#0f766e" }}>{formatKwanza(row.netSalaryCents)}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                          <button
+                            onClick={() => window.open(`${api}/api/v1/hr/payrolls/${row.id}/payslip`, "_blank")}
+                            style={{ padding: "4px 8px", fontSize: "11px" }}
+                          >
+                            📄 Recibo
+                          </button>
+                          {admin && row.status !== "CLOSED" && (
+                            <button
+                              onClick={() => void closeSingleReceipt(row.id)}
+                              style={{ padding: "4px 8px", fontSize: "11px", background: "#f97316", color: "#fff", border: "none", borderRadius: "4px" }}
+                            >
+                              🔒 Fechar
+                            </button>
+                          )}
+                          {admin && row.status === "CLOSED" && (
+                            <>
+                              <button
+                                onClick={() => void viewSnapshot(row)}
+                                style={{ padding: "4px 8px", fontSize: "11px", background: "#0284c7", color: "#fff", border: "none", borderRadius: "4px" }}
+                              >
+                                📜 Snapshot
+                              </button>
+                              <button
+                                onClick={() => openRectifyModal(row)}
+                                style={{ padding: "4px 8px", fontSize: "11px", background: "#6366f1", color: "#fff", border: "none", borderRadius: "4px" }}
+                              >
+                                📝 Retificar
+                              </button>
+                              <button
+                                onClick={() => void viewRectifications(row)}
+                                style={{ padding: "4px 8px", fontSize: "11px", background: "#64748b", color: "#fff", border: "none", borderRadius: "4px" }}
+                              >
+                                🔍 Histórico
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: "#f8fafc", fontWeight: 800 }}>
+                    <td colSpan={2}>TOTAIS CONSOLIDADOS ({payrollMonth})</td>
+                    <td>{formatKwanza(payrollReport.totals?.grossSalaryCents ?? 0)}</td>
+                    <td style={{ color: "#dc2626" }}>-{formatKwanza(payrollReport.totals?.inssEmployeeCents ?? 0)}</td>
+                    <td style={{ color: "#dc2626" }}>-{formatKwanza(payrollReport.totals?.irtCents ?? 0)}</td>
+                    <td style={{ color: "#0f766e" }}>{formatKwanza(payrollReport.totals?.netSalaryCents ?? 0)}</td>
+                    <td>{payrollReport.rows.length} folhas</td>
+                  </tr>
+                </tfoot>
+              </table>
+            ) : (
+              <div style={{ padding: "32px", textAlign: "center", color: "#64748b" }}>
+                <p>Nenhuma folha salarial processada para o mês <strong>{payrollMonth}</strong>.</p>
+                {admin && <small>Clique em "Processar Folha Mensal em Lote" para apurar vencimentos.</small>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA 5: PARAMETRIZAÇÃO & ENCARGOS */}
+      {activeTab === "config" && (
+        <div className="card">
+          <div style={{ marginBottom: "16px" }}>
+            <h3 style={{ margin: 0, fontSize: "16px" }}>Parametrização Contabilística & Remuneratória</h3>
+            <p style={{ margin: "4px 0", fontSize: "12px", color: "#64748b" }}>
+              Defina as taxas de encargos e vigência para apuramento dos vencimentos desta empresa.
+            </p>
+          </div>
+
+          <div className="form-grid">
+            <label>Data de Vigência
+              <input type="date" value={configForm.effectiveDate} onChange={(e) => setConfigForm({ ...configForm, effectiveDate: e.target.value })} disabled={!admin} />
+            </label>
+            <label>Responsável Técnico / Contabilista
+              <input value={configForm.responsibleName} onChange={(e) => setConfigForm({ ...configForm, responsibleName: e.target.value })} placeholder="Nome do profissional" disabled={!admin} />
+            </label>
+            <label>Cargo do Responsável
+              <input value={configForm.responsibleRole} onChange={(e) => setConfigForm({ ...configForm, responsibleRole: e.target.value })} placeholder="Ex: Contabilista Certificado" disabled={!admin} />
+            </label>
+            <label>Fonte Oficial / Legislação
+              <input value={configForm.officialSource} onChange={(e) => setConfigForm({ ...configForm, officialSource: e.target.value })} placeholder="CIRS / LGT / Regulamento INSS" disabled={!admin} />
+            </label>
+            <label>Referência de Aprovação
+              <input value={configForm.approvalReference} onChange={(e) => setConfigForm({ ...configForm, approvalReference: e.target.value })} placeholder="Despacho / Resolução" disabled={!admin} />
+            </label>
+            <label>Taxa INSS Trabalhador (Ex: 0.03 para 3%)
+              <input type="number" step="0.005" min="0" max="0.5" value={configForm.inssEmployeeRate} onChange={(e) => setConfigForm({ ...configForm, inssEmployeeRate: parseFloat(e.target.value) || 0 })} disabled={!admin} />
+            </label>
+            <label>Taxa INSS Entidade Empregadora (Ex: 0.08 para 8%)
+              <input type="number" step="0.005" min="0" max="0.5" value={configForm.inssEmployerRate} onChange={(e) => setConfigForm({ ...configForm, inssEmployerRate: parseFloat(e.target.value) || 0 })} disabled={!admin} />
+            </label>
+            <label>Teto de Isenção Subsídios Alimentação/Transporte (Kz)
+              <input type="number" min="0" value={configForm.allowanceExemptionCapKz} onChange={(e) => setConfigForm({ ...configForm, allowanceExemptionCapKz: parseFloat(e.target.value) || 0 })} disabled={!admin} />
+            </label>
+
+            {admin ? (
+              <button className="checkout" style={{ gridColumn: "1 / -1", marginTop: "12px" }} onClick={() => void saveConfig()}>
+                Guardar Parametrização Aprovada
+              </button>
+            ) : (
+              <p style={{ gridColumn: "1 / -1", color: "#64748b", fontSize: "12px", fontStyle: "italic" }}>
+                🔒 Modo de consulta: apenas utilizadores administradores podem alterar configurações remuneratórias.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: INSPEÇÃO DE SNAPSHOT IMUTÁVEL */}
+      {activeModal === "snapshot" && snapshotData && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "8px", maxWidth: "600px", width: "90%", maxHeight: "90vh", overflowY: "auto" }}>
+            <h3 style={{ margin: "0 0 12px", color: "#0f172a" }}>📜 Snapshot Imutável de Remuneração</h3>
+            <p style={{ fontSize: "13px", color: "#64748b" }}>
+              Snapshot histórico persistido e congelado no fecho do recibo. Modificações ou rasuras bloqueadas pelo PostgreSQL.
+            </p>
+            <div style={{ background: "#f8fafc", padding: "12px", borderRadius: "6px", fontSize: "12px", marginBottom: "16px" }}>
+              <p><strong>Recibo ID:</strong> {snapshotData.payrollId}</p>
+              <p><strong>Mês de Exercício:</strong> {snapshotData.month}</p>
+              <p><strong>Versão da Configuração:</strong> {snapshotData.version}</p>
+              <p><strong>Fechado em:</strong> {new Date(snapshotData.closedAt).toLocaleString("pt-AO")}</p>
+              <p><strong>Fechado por:</strong> {snapshotData.closedBy}</p>
+              <p style={{ wordBreak: "break-all" }}>
+                <strong>Hash de Integridade (SHA-256):</strong><br />
+                <code style={{ background: "#e2e8f0", padding: "2px 4px", borderRadius: "4px" }}>{snapshotData.integrityHash}</code>
+              </p>
+            </div>
+            <button onClick={() => setActiveModal("none")} style={{ padding: "8px 16px" }}>Fechar</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: FORMULÁRIO DE RETIFICAÇÃO AUDITADA */}
+      {activeModal === "rectify" && selectedPayroll && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "8px", maxWidth: "520px", width: "90%" }}>
+            <h3 style={{ margin: "0 0 12px", color: "#0f172a" }}>📝 Retificação Salarial Auditada</h3>
+            <p style={{ fontSize: "13px", color: "#64748b" }}>
+              O recibo original permanece inalterado. O ajuste será registado em novo registo append-only com hash criptográfico.
+            </p>
+            <div style={{ background: "#eff6ff", padding: "10px", borderRadius: "6px", fontSize: "12px", marginBottom: "12px" }}>
+              <p><strong>Colaborador:</strong> {selectedPayroll.employee?.fullName}</p>
+              <p><strong>Salário Líquido Original:</strong> {formatKwanza(selectedPayroll.netSalaryCents)}</p>
+            </div>
+            <div className="form-grid" style={{ gridTemplateColumns: "1fr" }}>
+              <label>Ajuste Líquido (Kz - positivo ou negativo):
+                <input
+                  type="number"
+                  value={rectifyAdjustmentKz}
+                  onChange={(e) => setRectifyAdjustmentKz(parseFloat(e.target.value) || 0)}
+                  placeholder="Ex: 5000 para retroativo ou -2000 para acerto"
+                />
+              </label>
+              <label>Motivo da Retificação *:
+                <input
+                  value={rectifyReason}
+                  onChange={(e) => setRectifyReason(e.target.value)}
+                  placeholder="Ex: Acerto de subsídio aprovado pela administração"
+                />
+              </label>
+              <label>Notas Adicionais:
+                <textarea
+                  value={rectifyNotes}
+                  onChange={(e) => setRectifyNotes(e.target.value)}
+                  placeholder="Observações complementares..."
+                  rows={3}
+                  style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                />
+              </label>
+              <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                <button className="checkout" onClick={() => void submitRectification()}>
+                  Registar Retificação Auditada
+                </button>
+                <button onClick={() => setActiveModal("none")}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: HISTÓRICO DE RETIFICAÇÕES */}
+      {activeModal === "rectifications" && selectedPayroll && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "8px", maxWidth: "650px", width: "90%", maxHeight: "90vh", overflowY: "auto" }}>
+            <h3 style={{ margin: "0 0 12px", color: "#0f172a" }}>🔍 Histórico de Retificações Auditadas</h3>
+            <p style={{ fontSize: "13px", color: "#64748b" }}>
+              Recibo: <strong>{selectedPayroll.employee?.fullName}</strong> ({selectedPayroll.month})
+            </p>
+            {rectificationsList.length ? (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nº Retificação</th>
+                      <th>Ajuste</th>
+                      <th>Líquido Final</th>
+                      <th>Motivo</th>
+                      <th>Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rectificationsList.map((r) => (
+                      <tr key={r.id}>
+                        <td><code>{r.rectificationNumber}</code></td>
+                        <td style={{ color: r.adjustmentCents >= 0 ? "#16a34a" : "#dc2626", fontWeight: 700 }}>
+                          {r.adjustmentCents >= 0 ? "+" : ""}{formatKwanza(r.adjustmentCents)}
+                        </td>
+                        <td style={{ fontWeight: 700 }}>{formatKwanza(r.adjustedNetSalaryCents)}</td>
+                        <td><small>{r.reason}</small></td>
+                        <td><small>{new Date(r.createdAt).toLocaleDateString("pt-AO")}</small></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ color: "#64748b", fontSize: "13px" }}>Nenhuma retificação registada para este recibo.</p>
+            )}
+            <button onClick={() => setActiveModal("none")} style={{ marginTop: "16px", padding: "8px 16px" }}>Fechar</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function AccountingPanel({ api, token, admin, onError }: Props) {
@@ -7969,7 +8987,7 @@ export function EnterpriseIntegrationsPanel({
                 fontWeight: "600",
               }}
             >
-              Enterprise v2.2.4
+              Enterprise v3.2.2-rc.3
             </span>
           </div>
           <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>

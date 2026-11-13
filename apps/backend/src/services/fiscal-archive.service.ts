@@ -69,8 +69,8 @@ export class FiscalArchiveService {
     const storagePath = `archives/${input.companyId}/${archiveCode}.xml`;
 
     const metadata: FiscalArchiveMetadata = {
-      generatorVersion: "3.2.2-rc.1",
-      softwareVersion: input.softwareVersion ?? fiscalConfig?.softwareVersion ?? "3.2.2-rc.1",
+      generatorVersion: "3.2.2-rc.3",
+      softwareVersion: input.softwareVersion ?? fiscalConfig?.softwareVersion ?? "3.2.2-rc.3",
       certificationReference: input.certificationReference ?? fiscalConfig?.softwareCertificationNumber ?? "PROVISIONAL",
       exportTimestamp: new Date().toISOString(),
       exportedBy: input.exportedBy,

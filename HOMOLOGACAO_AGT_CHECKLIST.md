@@ -1,4 +1,4 @@
-# Checklist de Preparação para Homologação AGT
+# Checklist Técnico de Preparação para Homologação
 
 > **Declaração Obrigatória:**
 > **“Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.”**

@@ -153,7 +153,7 @@ export class EnterpriseCloudUpdateService {
 
   /**
    * Retrieves dynamic live module configurations, allowing installed clients
-   * to automatically enable new features (e.g. VendaJá Copilot, BI, Portals)
+   * to automatically enable new features (e.g. Muambuluisha IA, BI, Portals)
    * in-place without running an OS installer.
    */
   static getLiveConfig(companyId?: string) {

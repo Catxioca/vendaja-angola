@@ -48,7 +48,11 @@ export function registerSuccessfulLogin(key: string) {
 }
 
 export function issueTokens(user: { id: string; role: string }) {
-  const accessToken = jwt.sign({ id: user.id, role: user.role }, getEnv().JWT_SECRET, { expiresIn: "15m" });
+  const accessToken = jwt.sign(
+    { id: user.id, role: user.role, jti: crypto.randomUUID() },
+    getEnv().JWT_SECRET,
+    { expiresIn: "15m" }
+  );
   const refreshToken = crypto.randomBytes(48).toString("base64url");
   return { accessToken, refreshToken };
 }

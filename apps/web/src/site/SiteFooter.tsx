@@ -49,7 +49,7 @@ export function SiteFooter({ onNavigate, institutionalContact }: SiteFooterProps
               offline nos postos de venda e sincronização transacional em nuvem central.
             </p>
             <div className="footer-version" title="Versão do Release Candidate">
-              Versão 3.2.2-rc.3
+              Versão 3.2.2-rc.4
             </div>
           </div>
 

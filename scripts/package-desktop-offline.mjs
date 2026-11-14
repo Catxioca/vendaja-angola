@@ -48,7 +48,8 @@ const run = (command, args) => {
 };
 
 // Do not let a previous version or partial build influence the installer contents.
-rmSync("release", { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+rmSync(join("release", "win-unpacked"), { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+rmSync(join("release", "builder-debug.yml"), { force: true });
 mkdirSync("release", { recursive: true });
 // Older local builds may have written the builder output under the app directory.
 // Exclude and remove it so it cannot be copied into the next asar.

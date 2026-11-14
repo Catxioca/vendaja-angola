@@ -9267,7 +9267,7 @@ export function EnterpriseIntegrationsPanel({
                 fontWeight: "600",
               }}
             >
-              Enterprise v3.2.2-rc.3
+              Enterprise v3.2.2-rc.4
             </span>
           </div>
           <p style={{ margin: 0, fontSize: "13px", opacity: 0.9 }}>

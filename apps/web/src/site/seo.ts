@@ -332,7 +332,7 @@ export function buildStructuredDataJsonLd(origin: string | null): string | null 
           description:
             "Plataforma integrada de gestão comercial, faturação, POS, stocks, tesouraria e ERP multiempresa com arquitetura offline-first para Angola.",
           url: normalizedOrigin,
-          softwareVersion: "3.2.2-rc.3",
+          softwareVersion: "3.2.2-rc.4",
           featureList: [
             "Faturação e Ponto de Venda (POS)",
             "Gestão de Stocks e Armazéns",

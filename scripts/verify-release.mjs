@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 const require = createRequire(import.meta.url);
 const { extractFile, listPackage } = require("@electron/asar");
 const root = process.cwd();
-const expectedVersion = "3.2.2-rc.3";
+const expectedVersion = "3.2.2-rc.4";
 const releaseDir = resolve(root, "release");
 if (!existsSync(releaseDir)) throw new Error("Diretório release não encontrado.");
 
@@ -54,8 +54,9 @@ if (/PRIVATE KEY|BEGIN CERTIFICATE/.test(key)) throw new Error("Material privado
 const installers = files.filter((file) => /\.exe$/i.test(file));
 if (!installers.length) throw new Error("Instalador NSIS .exe não encontrado.");
 const topLevelInstallers = installers.filter((file) => file.slice(releaseDir.length + 1).split(/[\\/]/).length === 1);
-if (topLevelInstallers.length !== 1) throw new Error(`Esperado um único instalador no nível superior; encontrados ${topLevelInstallers.length}.`);
-const installer = topLevelInstallers[0];
+const targetInstaller = topLevelInstallers.find((file) => file.includes(`-${expectedVersion}-`));
+if (!targetInstaller) throw new Error(`Instalador da versão ${expectedVersion} não encontrado.`);
+const installer = targetInstaller;
 if (!installer.includes(`-${expectedVersion}-`)) throw new Error(`Instalador não identifica a versão ${expectedVersion}.`);
 if (installer.includes("-2.2.1-win-") || installer.includes("Setup 2.2.1")) {
   throw new Error("Instalador estável 2.2.1 encontrado no pacote RC.");

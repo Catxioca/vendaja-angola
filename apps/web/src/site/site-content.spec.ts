@@ -200,6 +200,6 @@ test("Site Institucional: Header e Footer - Navegação e links válidos", () =>
   assert.ok(headerHtml.includes("btn-enter-erp"), "Header deve conter botão de entrada no ERP");
 
   const footerHtml = renderToString(React.createElement(SiteFooter, { onNavigate: mockNavigate }));
-  assert.ok(footerHtml.includes("Versão 3.2.2-rc.3"), "Footer deve indicar a versão 3.2.2-rc.3");
+  assert.ok(footerHtml.includes("Versão 3.2.2-rc.4"), "Footer deve indicar a versão 3.2.2-rc.4");
   assert.ok(footerHtml.includes(MANDATORY_REGULATORY_STATEMENT), "Footer deve conter a declaração obrigatória da AGT");
 });

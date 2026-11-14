@@ -1049,7 +1049,7 @@ function App({ onSwitchPortal }: { onSwitchPortal?: (portal: string) => void } =
           {!sidebarCollapsed && (
             <div className="erp-sidebar-branding">
               <h2>Mutshima</h2>
-              <span className="erp-badge">v3.2.2-rc.3</span>
+              <span className="erp-badge">v3.2.2-rc.4</span>
             </div>
           )}
         </div>

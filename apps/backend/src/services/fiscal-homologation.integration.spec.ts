@@ -35,7 +35,7 @@ integration("PostgreSQL Fiscal Engine: FiscalConfig, Sequence and Multi-rate Cal
         companyName: `Fiscal Corp ${suffix}`,
         companyNif: "5412345678",
         softwareCertificationNumber: "PENDING_HOMOLOGATION",
-        softwareVersion: "3.2.2-rc.3",
+        softwareVersion: "3.2.2-rc.4",
         baseCurrency: "AOA",
         fiscalRegime: "GERAL",
         invoiceSeries: `F${suffix.slice(0, 3)}`,

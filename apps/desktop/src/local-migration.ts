@@ -451,26 +451,26 @@ export function resolveMachineSeed(options?: {
   linuxVarDir?: string;
 }): MachineSeedResult {
   const isWin = process.platform === "win32";
-  const programData = options?.programDataDir || process.env.ProgramData || "C:\\ProgramData";
-  const linuxVar = options?.linuxVarDir || "/var/lib";
+  const useProgramData = options?.programDataDir ? true : (options?.linuxVarDir ? false : isWin);
 
   // 1. Prioridade absoluta: identificador legado de sistema
-  const legacySystemPath = isWin
-    ? path.join(programData, "VendaJa", "machine-id")
-    : path.join(linuxVar, "vendaja", "machine-id");
+  const legacySystemPath = useProgramData
+    ? path.join(options?.programDataDir || process.env.ProgramData || "C:\\ProgramData", "VendaJa", "machine-id")
+    : path.join(options?.linuxVarDir || "/var/lib", "vendaja", "machine-id");
+
+  const mutshimaSystemPath = useProgramData
+    ? path.join(options?.programDataDir || process.env.ProgramData || "C:\\ProgramData", "Mutshima", "machine-id")
+    : path.join(options?.linuxVarDir || "/var/lib", "mutshima", "machine-id");
 
   try {
     if (fsSync.existsSync(legacySystemPath)) {
       const val = fsSync.readFileSync(legacySystemPath, "utf8").trim();
       if (val.length >= 16) {
         // Assegura caminho Mutshima para sincronismo futuro sem apagar legado
-        const mutshimaSys = isWin
-          ? path.join(programData, "Mutshima", "machine-id")
-          : path.join(linuxVar, "mutshima", "machine-id");
         try {
-          if (!fsSync.existsSync(mutshimaSys)) {
-            fsSync.mkdirSync(path.dirname(mutshimaSys), { recursive: true });
-            fsSync.writeFileSync(mutshimaSys, val, "utf8");
+          if (!fsSync.existsSync(mutshimaSystemPath)) {
+            fsSync.mkdirSync(path.dirname(mutshimaSystemPath), { recursive: true });
+            fsSync.writeFileSync(mutshimaSystemPath, val, "utf8");
           }
         } catch {
           // Permissão restrita; não impede uso do valor lido
@@ -483,10 +483,6 @@ export function resolveMachineSeed(options?: {
   }
 
   // 2. Identificador de sistema Mutshima existente
-  const mutshimaSystemPath = isWin
-    ? path.join(programData, "Mutshima", "machine-id")
-    : path.join(linuxVar, "mutshima", "machine-id");
-
   try {
     if (fsSync.existsSync(mutshimaSystemPath)) {
       const val = fsSync.readFileSync(mutshimaSystemPath, "utf8").trim();

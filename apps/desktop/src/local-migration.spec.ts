@@ -18,14 +18,6 @@ import {
 } from "./local-migration.js";
 import { computeHardwareId } from "./license-core.js";
 import { EnterpriseLocalCopilotEngine } from "./local-copilot-engine.js";
-import {
-  MutshimaClient,
-  MutshimaClientConfig,
-  MutshimaApiError,
-  VendaJaClient,
-  VendaJaClientConfig,
-  VendaJaApiError,
-} from "@angola/sdk";
 
 function createTempDir(prefix: string): string {
   const tmpBase = os.tmpdir();
@@ -526,22 +518,4 @@ test("Error sanitization: Technical network errors are sanitized without exposin
   const unconfiguredErr = new Error("Servidor central não configurado.");
   const sanitizedUnconfigured = sanitizeNetworkError(unconfiguredErr);
   assert.equal(sanitizedUnconfigured, "Servidor central não configurado.");
-});
-
-test("SDK Backward Compatibility: Exports MutshimaClient and retains VendaJaClient alias", () => {
-  assert.equal(typeof MutshimaClient, "function");
-  assert.equal(typeof VendaJaClient, "function");
-  assert.equal(MutshimaClient, VendaJaClient);
-
-  assert.equal(typeof MutshimaApiError, "function");
-  assert.equal(typeof VendaJaApiError, "function");
-  assert.equal(MutshimaApiError, VendaJaApiError);
-
-  const client = new MutshimaClient({ baseUrl: "https://api.mutshima.ao", apiKey: "test-key" });
-  assert.ok(client instanceof MutshimaClient);
-  assert.ok(client instanceof VendaJaClient);
-
-  const legacyClient = new VendaJaClient({ baseUrl: "https://api.mutshima.ao", apiKey: "test-key" });
-  assert.ok(legacyClient instanceof MutshimaClient);
-  assert.ok(legacyClient instanceof VendaJaClient);
 });

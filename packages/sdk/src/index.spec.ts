@@ -1,7 +1,14 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { MutshimaClient, MutshimaApiError, VendaJaClient, VendaJaApiError } from "./index.js";
+import {
+  MutshimaClient,
+  MutshimaClientConfig,
+  MutshimaApiError,
+  VendaJaClient,
+  VendaJaClientConfig,
+  VendaJaApiError,
+} from "./index.js";
 
 describe("Mutshima Enterprise Developer SDK", () => {
   test("instantiates client with normalized baseUrl", () => {
@@ -36,5 +43,37 @@ describe("Mutshima Enterprise Developer SDK", () => {
     assert.equal(error.status, 401);
     assert.equal(error.code, "token_expired");
     assert.deepEqual(error.details, { expiredAt: 123456 });
+  });
+
+  test("SDK Backward Compatibility: Exports MutshimaClient, MutshimaApiError, and retains aliases", () => {
+    assert.equal(typeof MutshimaClient, "function");
+    assert.equal(typeof VendaJaClient, "function");
+    assert.equal(MutshimaClient, VendaJaClient);
+
+    assert.equal(typeof MutshimaApiError, "function");
+    assert.equal(typeof VendaJaApiError, "function");
+    assert.equal(MutshimaApiError, VendaJaApiError);
+
+    const config: VendaJaClientConfig = {
+      baseUrl: "https://api.mutshima.ao",
+      apiKey: "test-key",
+      companyId: "comp-123",
+      timeoutMs: 5000,
+      maxRetries: 2,
+    };
+    const mutshimaConfig: MutshimaClientConfig = config;
+    assert.equal(mutshimaConfig.baseUrl, "https://api.mutshima.ao");
+
+    const client = new MutshimaClient(config);
+    assert.ok(client instanceof MutshimaClient);
+    assert.ok(client instanceof VendaJaClient);
+
+    const legacyClient = new VendaJaClient(config);
+    assert.ok(legacyClient instanceof MutshimaClient);
+    assert.ok(legacyClient instanceof VendaJaClient);
+
+    const legacyError = new VendaJaApiError("Erro de teste", 400, "bad_request");
+    assert.ok(legacyError instanceof MutshimaApiError);
+    assert.ok(legacyError instanceof VendaJaApiError);
   });
 });

@@ -16,7 +16,7 @@ export function PrivacyPolicyPage({ onNavigate }: PrivacyPolicyPageProps) {
             Política de Privacidade e Tratamento Técnico de Dados
           </h1>
           <p style={{ fontSize: "16px", color: "#475569", lineHeight: 1.6, maxWidth: "760px", margin: "0 auto 24px auto" }}>
-            Estrutura técnica descritiva sobre armazenamento, ciclo de vida de dados de faturação, isolamento de inquilinos e salvaguardas operacionais no VendaJá Angola.
+            Estrutura técnica descritiva sobre armazenamento, ciclo de vida de dados de faturação, isolamento de inquilinos e salvaguardas operacionais no Mutshima.
           </p>
 
           <div
@@ -52,7 +52,7 @@ export function PrivacyPolicyPage({ onNavigate }: PrivacyPolicyPageProps) {
             1. Natureza Técnica dos Dados Tratados
           </h2>
           <p>
-            O VendaJá Angola opera como plataforma transacional para gestão comercial e faturação. Os dados gerados e persistidos no sistema enquadram-se estritamente nas seguintes categorias técnicas:
+            O Mutshima opera como plataforma transacional para gestão comercial e faturação. Os dados gerados e persistidos no sistema enquadram-se estritamente nas seguintes categorias técnicas:
           </p>
           <ul style={{ paddingLeft: "20px" }}>
             <li><strong>Identificadores de Autenticação e Sessão:</strong> Nomes de utilizador, endereços de email de acesso, credenciais de hash criptográfico e identificadores temporários de sessão (JWT).</li>

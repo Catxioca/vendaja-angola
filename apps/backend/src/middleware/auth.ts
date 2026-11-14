@@ -149,7 +149,7 @@ export const requireLicensedModule = (moduleName: string): RequestHandler => asy
       res.status(403).json({
         error: "license_required",
         module: moduleName,
-        message: `O módulo '${moduleName}' requer uma licença empresarial legítima e ativa emitida pela VendaJá.`,
+        message: `O módulo '${moduleName}' requer uma licença empresarial legítima e ativa emitida pela Mutshima.`,
       });
       return;
     }

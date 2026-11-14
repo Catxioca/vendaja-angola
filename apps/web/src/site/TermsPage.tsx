@@ -16,7 +16,7 @@ export function TermsPage({ onNavigate }: TermsPageProps) {
             Termos e Condições de Utilização
           </h1>
           <p style={{ fontSize: "16px", color: "#475569", lineHeight: 1.6, maxWidth: "760px", margin: "0 auto 24px auto" }}>
-            Estrutura técnica descritiva sobre licenciamento, responsabilidades operacionais, integridade de dados e limites de garantia do software VendaJá Angola.
+            Estrutura técnica descritiva sobre licenciamento, responsabilidades operacionais, integridade de dados e limites de garantia do software Mutshima.
           </p>
 
           <div
@@ -52,7 +52,7 @@ export function TermsPage({ onNavigate }: TermsPageProps) {
             1. Objeto e Natureza da Solução
           </h2>
           <p>
-            O VendaJá Angola disponibiliza uma suíte omnicanal composta por aplicação Desktop (Windows), Web ERP e aplicação móvel para Postos de Venda (POS) Android/Tablet, além de serviços centrais de sincronização e API de retaguarda.
+            O Mutshima disponibiliza uma suíte omnicanal composta por aplicação Desktop (Windows), Web ERP e aplicação móvel para Postos de Venda (POS) Android/Tablet, além de serviços centrais de sincronização e API de retaguarda.
           </p>
           <p>
             O software encontra-se em preparação técnica para futuro processo de homologação pela Administração Geral Tributária (AGT). A utilização da plataforma para emissão fiscal em ambiente real pressupõe a conclusão da validação profissional das configurações da empresa e aprovação formal da AGT.

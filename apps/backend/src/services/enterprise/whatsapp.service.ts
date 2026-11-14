@@ -39,7 +39,7 @@ export class EnterpriseWhatsAppService {
       const customer = params.customerName || "Estimado(a) Cliente";
       const number = params.documentNumber || params.invoiceNumber || "FR A/2026/001";
       const total = params.totalKwanza || params.totalKz || "0 Kz";
-      let msg = `Olá *${customer}*, a sua fatura *${number}* no valor de *${total}* foi emitida pela VendaJá Angola com sucesso.`;
+      let msg = `Olá *${customer}*, a sua fatura *${number}* no valor de *${total}* foi emitida pela Mutshima com sucesso.`;
       if (documentUrl) msg += `\n\n📄 Descarregue o PDF oficial: ${documentUrl}`;
       return msg;
     }
@@ -51,7 +51,7 @@ export class EnterpriseWhatsAppService {
       return `Olá *${customer}*, lembramos que tem um saldo pendente de *${balance}*${ref}. Obrigado por comprar connosco!`;
     }
 
-    return `VendaJá Angola: Notificação *${params.orderNumber || "01"}* enviada com sucesso.`;
+    return `Mutshima: Notificação *${params.orderNumber || "01"}* enviada com sucesso.`;
   }
 
   /**

@@ -195,7 +195,7 @@ export function EmployeePortal({ apiUrl }: Props) {
     return (
       <div className="portal-container" style={{ maxWidth: "440px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
         <div style={{ background: "#f5f3ff", border: "1px solid #c4b5fd", color: "#5b21b6", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>👥</span> <span>Portal do Colaborador · Self-Service RH VendaJá</span>
+          <span>👥</span> <span>Portal do Colaborador · Self-Service RH Mutshima</span>
         </div>
 
         <div style={{ display: "flex", gap: "6px", borderBottom: "1px solid #e2e8f0", marginBottom: "20px" }}>

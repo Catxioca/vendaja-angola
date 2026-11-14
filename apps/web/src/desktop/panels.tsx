@@ -6542,7 +6542,20 @@ export function EnterpriseCrmDocumentPanel({
     avgDealSizeCents: 0,
   });
 
-  const [alerts, setAlerts] = useState<Array<{ type: string; title: string; message: string; severity: string }>>([]);
+  const [alerts, setAlerts] = useState<Array<{ type: string; title: string; message: string; severity: string }>>(() => isDemoMode() ? [
+    {
+      type: "CLOSING_SOON",
+      title: "Oportunidade a Fechar em 48h",
+      message: "Proposta #PROP-2026-002 (Unitel SA) tem data prevista de fecho próxima.",
+      severity: "WARNING",
+    },
+    {
+      type: "HIGH_VALUE_LEAD",
+      title: "Novo Lead Qualificado de Alto Valor",
+      message: "Lead Banco BAI estimado em 82.000.000 Kz aguarda contacto inicial.",
+      severity: "INFO",
+    },
+  ] : []);
 
   // Leads State
   const [leads, setLeads] = useState<Array<{
@@ -6556,7 +6569,44 @@ export function EnterpriseCrmDocumentPanel({
     estimatedValueCents: number;
     notes?: string;
     createdAt: string;
-  }>>([]);
+  }>>(() => isDemoMode() ? [
+    {
+      id: "lead-01",
+      name: "Manuel Fernandes",
+      company: "Sonangol EP",
+      email: "m.fernandes@sonangol.co.ao",
+      phone: "+244 923 111 222",
+      source: "REFERRAL",
+      status: "QUALIFIED",
+      estimatedValueCents: 15_000_000_00,
+      notes: "Interesse na automação de 20 pontos de venda em postos de combustível.",
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: "lead-02",
+      name: "Dra. Ana Paula Silva",
+      company: "Unitel SA",
+      email: "ana.silva@unitel.ao",
+      phone: "+244 912 333 444",
+      source: "EVENT",
+      status: "CONTACTED",
+      estimatedValueCents: 9_800_000_00,
+      notes: "Contactada durante a FILDA 2026 para expansão de POS nas lojas express.",
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+    },
+    {
+      id: "lead-03",
+      name: "Eng. Carlos Domingos",
+      company: "Banco BAI",
+      email: "carlos.domingos@bancobai.ao",
+      phone: "+244 934 555 666",
+      source: "WEBSITE",
+      status: "NEW",
+      estimatedValueCents: 8_200_000_00,
+      notes: "Pedido de proposta para integração de faturação com PGCA Contabilidade.",
+      createdAt: new Date(Date.now() - 172800000).toISOString(),
+    },
+  ] : []);
 
   // Opportunities State
   const [opportunities, setOpportunities] = useState<Array<{
@@ -6570,7 +6620,58 @@ export function EnterpriseCrmDocumentPanel({
     probability: number;
     expectedCloseDate?: string;
     notes?: string;
-  }>>([]);
+  }>>(() => isDemoMode() ? [
+    {
+      id: "opp-01",
+      title: "Automação POS 20 Postos Sonangol",
+      customerName: "Sonangol EP",
+      stage: "PROPOSAL",
+      expectedRevenueCents: 15_000_000_00,
+      probability: 60,
+      expectedCloseDate: "2026-11-15",
+      notes: "Proposta técnica submetida à direção de TI.",
+    },
+    {
+      id: "opp-02",
+      title: "Expansão de 15 Terminais PDV Lojas Unitel",
+      customerName: "Unitel SA",
+      stage: "NEGOTIATION",
+      expectedRevenueCents: 9_800_000_00,
+      probability: 80,
+      expectedCloseDate: "2026-10-31",
+      notes: "Revisão de desconto comercial para volume.",
+    },
+    {
+      id: "opp-03",
+      title: "Consultoria e Licenciamento PGCA Contábil",
+      customerName: "Banco BAI",
+      stage: "OPPORTUNITY",
+      expectedRevenueCents: 8_200_000_00,
+      probability: 40,
+      expectedCloseDate: "2026-12-01",
+      notes: "Reunião de demonstração agendada.",
+    },
+    {
+      id: "opp-04",
+      title: "Sistema POS Restaurante & Take-away",
+      customerName: "Kero Hipermercados",
+      stage: "WON",
+      expectedRevenueCents: 18_200_000_00,
+      probability: 100,
+      expectedCloseDate: "2026-09-30",
+      notes: "Contrato assinado e primeira tranche faturada.",
+    },
+    {
+      id: "opp-05",
+      title: "Terminal Portátil de Encomendas",
+      customerName: "Logística Luanda Lda",
+      stage: "LOST",
+      expectedRevenueCents: 3_500_000_00,
+      probability: 0,
+      expectedCloseDate: "2026-08-15",
+      notes: "Optaram por manter solução legada interna.",
+    },
+  ] : []);
 
   // Commercial Proposals State
   const [proposals, setProposals] = useState<Array<{
@@ -6592,7 +6693,60 @@ export function EnterpriseCrmDocumentPanel({
       discountCents: number;
       totalCents: number;
     }>;
-  }>>([]);
+  }>>(() => isDemoMode() ? [
+    {
+      id: "prop-01",
+      number: "PROP-2026-001",
+      customerId: "cust-01",
+      customerName: "Sonangol EP",
+      status: "SENT",
+      subtotalCents: 13_157_895_00,
+      taxCents: 1_842_105_00,
+      totalCents: 15_000_000_00,
+      validUntil: "2026-11-30",
+      notes: "Inclui fornecimento de hardware POS e formação técnica.",
+      lines: [
+        {
+          description: "Licenças Mutshima Enterprise Terminal (20 unidades)",
+          quantity: 20,
+          unitPriceCents: 500_000_00,
+          taxRate: 0.14,
+          discountCents: 0,
+          totalCents: 11_400_000_00,
+        },
+        {
+          description: "Serviço de Instalação e Integração de Rede",
+          quantity: 1,
+          unitPriceCents: 3_157_895_00,
+          taxRate: 0.14,
+          discountCents: 0,
+          totalCents: 3_600_000_00,
+        },
+      ],
+    },
+    {
+      id: "prop-02",
+      number: "PROP-2026-002",
+      customerId: "cust-02",
+      customerName: "Unitel SA",
+      status: "ACCEPTED",
+      subtotalCents: 8_596_491_00,
+      taxCents: 1_203_509_00,
+      totalCents: 9_800_000_00,
+      validUntil: "2026-10-31",
+      notes: "Proposta aceite pelo departamento de compras da Unitel.",
+      lines: [
+        {
+          description: "Módulos POS Express + Integração Multicaixa",
+          quantity: 15,
+          unitPriceCents: 573_099_00,
+          taxRate: 0.14,
+          discountCents: 0,
+          totalCents: 9_800_000_00,
+        },
+      ],
+    },
+  ] : []);
 
   // Commercial Agenda State
   const [activities, setActivities] = useState<Array<{
@@ -6604,7 +6758,36 @@ export function EnterpriseCrmDocumentPanel({
     status: string;
     outcome?: string;
     contactName?: string;
-  }>>([]);
+  }>>(() => isDemoMode() ? [
+    {
+      id: "act-01",
+      type: "MEETING",
+      title: "Apresentação Executiva do ERP à Direção",
+      description: "Demonstrar módulos de PGCA e Relatórios SAF-T para Angola.",
+      scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+      status: "PENDING",
+      contactName: "Sonangol EP (Manuel Fernandes)",
+    },
+    {
+      id: "act-02",
+      type: "CALL",
+      title: "Follow-up de Envio da Proposta Comercial",
+      description: "Confirmar receção da proposta PROP-2026-002 e tirar dúvidas de SLA.",
+      scheduledAt: new Date(Date.now() + 172800000).toISOString(),
+      status: "PENDING",
+      contactName: "Unitel SA (Dra. Ana Paula Silva)",
+    },
+    {
+      id: "act-03",
+      type: "VISIT",
+      title: "Visita Técnica às Instalações",
+      description: "Vistoria da infraestrutura de rede para instalação dos terminais POS.",
+      scheduledAt: new Date(Date.now() - 86400000).toISOString(),
+      status: "COMPLETED",
+      outcome: "Instalações aprovadas; 20 pontos de rede prontos para ligação.",
+      contactName: "Sonangol EP",
+    },
+  ] : []);
 
   // Tickets / Helpdesk State
   const [tickets, setTickets] = useState<Array<{
@@ -6618,7 +6801,31 @@ export function EnterpriseCrmDocumentPanel({
     status: string;
     resolutionNotes?: string;
     createdAt: string;
-  }>>([]);
+  }>>(() => isDemoMode() ? [
+    {
+      id: "tck-01",
+      ticketNumber: "TCK-2026-0001",
+      customerName: "Kero Hipermercados",
+      subject: "Dúvida no fecho de caixa cego por operador",
+      description: "O operador precisa de conferir notas sem visualizar o total estimado.",
+      category: "INQUIRY",
+      priority: "MEDIUM",
+      status: "RESOLVED",
+      resolutionNotes: "Explicada a funcionalidade de Caixa Cego com relatório pós-fecho.",
+      createdAt: new Date(Date.now() - 172800000).toISOString(),
+    },
+    {
+      id: "tck-02",
+      ticketNumber: "TCK-2026-0002",
+      customerName: "Sonangol EP",
+      subject: "Configuração de Impressora de Talões Térmica",
+      description: "Solicitada assistência para teste de corte automático de papel ESC/POS.",
+      category: "INCIDENT",
+      priority: "HIGH",
+      status: "OPEN",
+      createdAt: new Date().toISOString(),
+    },
+  ] : []);
 
   // Documents State (GED)
   const [documents, setDocuments] = useState<Array<{
@@ -6640,7 +6847,60 @@ export function EnterpriseCrmDocumentPanel({
       createdAt: string;
     }>;
     createdAt: string;
-  }>>([]);
+  }>>(() => isDemoMode() ? [
+    {
+      id: "doc-01",
+      title: "Contrato de Prestação de Serviços ERP 2026",
+      originalName: "Contrato_Mutshima_Sonangol_2026.pdf",
+      category: "CONTRACT",
+      tags: ["sonangol", "contrato", "juridico", "2026"],
+      mimeType: "application/pdf",
+      sizeBytes: 2_450_000,
+      currentVersion: 2,
+      checksumSha256: "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+      versions: [
+        {
+          version: 1,
+          versionName: "v1.0 Minuta Inicial",
+          sizeBytes: 2_300_000,
+          checksumSha256: "3c9902b9a7647be7308c02824cfabefbc5d2be653f57297e64b870e633d73919",
+          changeNotes: "Primeira minuta partilhada com o cliente.",
+          createdAt: new Date(Date.now() - 604800000).toISOString(),
+        },
+        {
+          version: 2,
+          versionName: "v2.0 Assinado Digitalmente",
+          sizeBytes: 2_450_000,
+          checksumSha256: "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+          changeNotes: "Versão rubricada com anexos de SLA técnico.",
+          createdAt: new Date(Date.now() - 86400000).toISOString(),
+        },
+      ],
+      createdAt: new Date(Date.now() - 604800000).toISOString(),
+    },
+    {
+      id: "doc-02",
+      title: "Dossiê Técnico de Preparação Fiscal",
+      originalName: "Dossie_Tecnico_Homologacao_Mutshima.pdf",
+      category: "LEGAL",
+      tags: ["agt", "fiscal", "homologacao", "rsa"],
+      mimeType: "application/pdf",
+      sizeBytes: 1_120_000,
+      currentVersion: 1,
+      checksumSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      versions: [
+        {
+          version: 1,
+          versionName: "v1.0 Dossiê Interno",
+          sizeBytes: 1_120_000,
+          checksumSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          changeNotes: "Documentação técnica preparada para processo de homologação; não homologado até aprovação formal da AGT.",
+          createdAt: new Date(Date.now() - 2592000000).toISOString(),
+        },
+      ],
+      createdAt: new Date(Date.now() - 2592000000).toISOString(),
+    },
+  ] : []);
 
   // Customer 360 State
   const [selectedCustomer, setSelectedCustomer] = useState<{
@@ -6658,7 +6918,27 @@ export function EnterpriseCrmDocumentPanel({
       churnRisk: string;
       details: string[];
     };
-  }>({
+  }>(() => isDemoMode() ? {
+    id: "cust-01",
+    name: "Sonangol EP",
+    nif: "5412345678",
+    email: "compras@sonangol.co.ao",
+    phone: "+244 222 642 000",
+    address: "Rua Rainha Ginga, n.º 29-31, Luanda",
+    creditLimitCents: 50_000_000_00,
+    outstandingDebtCents: 1_500_000_00,
+    healthScore: {
+      score: 88,
+      classification: "Excelente / Saudável",
+      churnRisk: "BAIXO",
+      details: [
+        "Pagamentos em dia sem faturas em atraso",
+        "Volume de compras superior a 30M Kz nos últimos 90 dias",
+        "0 incidentes de SLA pendentes",
+        "Contrato plurianual em vigor até 2028",
+      ],
+    },
+  } : {
     id: "",
     name: "Nenhum cliente selecionado",
     nif: "—",
@@ -6699,7 +6979,7 @@ export function EnterpriseCrmDocumentPanel({
 
   const [oppForm, setOppForm] = useState({
     title: "",
-    customerName: "",
+    customerName: "Sonangol EP",
     stage: "OPPORTUNITY",
     expectedRevenue: "10000000",
     probability: "50",
@@ -6709,7 +6989,7 @@ export function EnterpriseCrmDocumentPanel({
 
   const [proposalForm, setProposalForm] = useState({
     number: `PROP-2026-00${proposals.length + 1}`,
-    customerName: "",
+    customerName: "Sonangol EP",
     validUntil: "2026-12-31",
     notes: "Condições padrão de pagamento a 30 dias.",
     itemDesc: "Serviço de Consultoria de Implementação ERP",
@@ -6726,7 +7006,7 @@ export function EnterpriseCrmDocumentPanel({
   });
 
   const [ticketForm, setTicketForm] = useState({
-    customerName: "",
+    customerName: "Sonangol EP",
     subject: "",
     category: "COMPLAINT",
     priority: "HIGH",
@@ -6917,7 +7197,7 @@ export function EnterpriseCrmDocumentPanel({
       // local fallback
     }
     setOpportunities([newOpp, ...opportunities]);
-    setOppForm({ title: "", customerName: "", stage: "OPPORTUNITY", expectedRevenue: "10000000", probability: "50", expectedCloseDate: "2026-12-31", notes: "" });
+    setOppForm({ title: "", customerName: "Sonangol EP", stage: "OPPORTUNITY", expectedRevenue: "10000000", probability: "50", expectedCloseDate: "2026-12-31", notes: "" });
     setStatusMessage("Oportunidade adicionada ao pipeline com sucesso!");
   };
 
@@ -7050,7 +7330,7 @@ export function EnterpriseCrmDocumentPanel({
       // local fallback
     }
     setTickets([newTck, ...tickets]);
-    setTicketForm({ customerName: "", subject: "", category: "COMPLAINT", priority: "HIGH", description: "" });
+    setTicketForm({ customerName: "Sonangol EP", subject: "", category: "COMPLAINT", priority: "HIGH", description: "" });
     setStatusMessage(`Ocorrência ${newTck.ticketNumber} registada com sucesso!`);
   };
 
@@ -7460,7 +7740,7 @@ export function EnterpriseCrmDocumentPanel({
                 <input
                   value={leadForm.company}
                   onChange={(e) => setLeadForm({ ...leadForm, company: e.target.value })}
-                  placeholder="ex: Empresa de Distribuição Lda"
+                  placeholder="ex: Sonangol, Unitel..."
                 />
               </label>
               <label>
@@ -7877,7 +8157,7 @@ export function EnterpriseCrmDocumentPanel({
                 <input
                   value={activityForm.contactName}
                   onChange={(e) => setActivityForm({ ...activityForm, contactName: e.target.value })}
-                  placeholder="ex: Cliente Geral Lda"
+                  placeholder="ex: Sonangol EP"
                 />
               </label>
               <label>
@@ -8527,8 +8807,8 @@ export function EnterpriseIntegrationsPanel({
       setLoading(true);
       const res = await request<{ data: Array<any> }>(`${api}/api/v1/integrations/plugins`, token).catch(() => ({
         data: [
-          { id: "plugin-saft-validator", name: "SAF-T AO Auditor Estrutural", version: "2.4.0", author: "VendaJá Labs", category: "Fiscal", installed: true, enabled: true, description: "Integração estrutural/piloto para verificação de ficheiro SAF-T AO; validação formal depende de ficheiro XSD oficial externo." },
-          { id: "plugin-multicaixa-gpo", name: "Multicaixa Express GPO Gateway", version: "1.2.0", author: "EMIS / VendaJá", category: "Pagamentos", installed: true, enabled: true, description: "Processamento de pagamentos móveis EMIS e reconciliação automática de extrato." },
+          { id: "plugin-saft-validator", name: "SAF-T AO Auditor Estrutural", version: "2.4.0", author: "Mutshima Labs", category: "Fiscal", installed: true, enabled: true, description: "Integração estrutural/piloto para verificação de ficheiro SAF-T AO; validação formal depende de ficheiro XSD oficial externo." },
+          { id: "plugin-multicaixa-gpo", name: "Multicaixa Express GPO Gateway", version: "1.2.0", author: "EMIS / Mutshima", category: "Pagamentos", installed: true, enabled: true, description: "Processamento de pagamentos móveis EMIS e reconciliação automática de extrato." },
           { id: "plugin-primavera-bridge", name: "Primavera BSS v10 Connector", version: "1.0.4", author: "Enterprise Connect", category: "ERP", installed: true, enabled: true, description: "Sincronização bidirecional de movimentos de caixa, clientes e plano geral de contabilidade (PGCA)." },
           { id: "plugin-sap-b1-sync", name: "SAP Business One Mirror", version: "1.1.2", author: "Enterprise Connect", category: "ERP", installed: false, enabled: false, description: "Integração corporativa com SAP B1 para sincronização de stocks e saídas de armazém." },
           { id: "plugin-whatsapp-notifier", name: "WhatsApp Business Direct Notifier", version: "2.1.0", author: "Meta Cloud Provider", category: "Comunicação", installed: true, enabled: true, description: "Envio instantâneo de faturas, recibos e alertas de cobrança via WhatsApp Business API." },
@@ -8749,7 +9029,7 @@ export function EnterpriseIntegrationsPanel({
       setFeedback("A disparar evento de teste 'ping.test' para todos os webhooks...");
       const res = await request<any>(`${api}/api/v1/integrations/webhooks/test`, token, {
         method: "POST",
-        body: JSON.stringify({ event: "ping.test", payload: { system: "VendaJá Angola ERP", pingTime: new Date().toISOString() } }),
+        body: JSON.stringify({ event: "ping.test", payload: { system: "Mutshima ERP", pingTime: new Date().toISOString() } }),
       }).catch(() => ({ message: "Webhook disparado com sucesso", deliveries: [{ id: "del-ping", status: "DELIVERED", statusCode: 200 }] }));
 
       setFeedback("Notificação de teste enviada para os destinos subscritos!");
@@ -8768,7 +9048,7 @@ export function EnterpriseIntegrationsPanel({
         `${api}/api/v1/integrations/bi/${biDataset}${query}`,
         token
       ).catch(() => ({
-        dataset: `VendaJá_${biDataset.toUpperCase()}_Analytics`,
+        dataset: `Mutshima_${biDataset.toUpperCase()}_Analytics`,
         count: 5,
         records: [
           { id: "1", documentNumber: "FR 2026/001", totalCents: 4500000, taxCents: 630000, date: new Date().toISOString() },
@@ -8869,7 +9149,7 @@ export function EnterpriseIntegrationsPanel({
           method: "POST",
           body: JSON.stringify({
             to: messageForm.to,
-            subject: messageForm.subject || "Notificação VendaJá Angola",
+            subject: messageForm.subject || "Notificação Mutshima",
             templateId: messageForm.templateId,
             body: messageForm.body,
           }),
@@ -9765,7 +10045,7 @@ in
                       if (exchangeEntity === "PRODUCTS") {
                         setImportContent("name,sku,priceCents,taxRate,stock\nArroz Kilamba 5kg,ARR-005,1250000,0.14,20\nÓleo Alimentar 1L,OLE-001,850000,0.14,40");
                       } else {
-                        setImportContent("name,nif,email,phone\nEmpresa Modelo Luanda Lda,5000001234,contato@modelo.ao,+244923112233\nSociedade Comercial Geral Lda,5000005678,comercial@sociedade.ao,+244923445566");
+                        setImportContent("name,nif,email,phone\nSonangol Distribuição,5000001234,contato@sonangol.co.ao,+244923112233\nUnitel SA,5000005678,empresas@unitel.ao,+244923445566");
                       }
                     }}
                     style={{ background: "#f1f5f9", border: "1px solid #cbd5e1", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "12px" }}
@@ -9868,7 +10148,7 @@ in
                     Assunto do E-mail
                     <input
                       type="text"
-                      placeholder="Ex: Sua Fatura/Recibo VendaJá n.º FR 2026/001"
+                      placeholder="Ex: Sua Fatura/Recibo Mutshima n.º FR 2026/001"
                       value={messageForm.subject}
                       onChange={(e) => setMessageForm({ ...messageForm, subject: e.target.value })}
                       style={{ width: "100%", padding: "8px 10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
@@ -10082,7 +10362,7 @@ in
           <div style={{ background: "#fff", borderRadius: "10px", padding: "18px", border: "1px solid #e2e8f0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
               <div>
-                <h3 style={{ margin: "0 0 4px", fontSize: "15px", color: "#0f172a" }}>SDK Oficial VendaJá para Desenvolvedores (@angola/sdk)</h3>
+                <h3 style={{ margin: "0 0 4px", fontSize: "15px", color: "#0f172a" }}>SDK Oficial Mutshima para Desenvolvedores (@angola/sdk)</h3>
                 <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
                   Integração rápida em TypeScript / Node.js, Python e C# (.NET) para conectar qualquer sistema externo.
                 </p>
@@ -10112,9 +10392,9 @@ in
 
             <div style={{ background: "#0f172a", color: "#f8fafc", padding: "16px", borderRadius: "8px", fontSize: "12px", fontFamily: "monospace", overflowX: "auto" }}>
               {sdkLang === "ts" && (
-                <pre style={{ margin: 0 }}>{`import { VendaJaClient } from "@angola/sdk";
+                <pre style={{ margin: 0 }}>{`import { MutshimaClient } from "@angola/sdk";
 
-const client = new VendaJaClient({
+const client = new MutshimaClient({
   baseUrl: "${api}",
   apiKey: "vj_live_exemplo_sua_chave_aqui",
 });

@@ -367,7 +367,7 @@ export function EnterpriseSaasCloudPanel({ api, token, onError }: Props) {
       }
     } catch {
       setMcxRef({
-        entity: "00112 (VendaJá Cloud SA)",
+        entity: "00112 (Mutshima Cloud SA)",
         reference: "982 451 092",
         amountKz: 75000,
       });

@@ -122,7 +122,7 @@ export class EnterpriseMfaService {
   /**
    * Prepares MFA setup for a user: generates secret, recovery codes and QR code image
    */
-  public static async setupMfa(userId: string, appName = "VendaJá Angola"): Promise<{
+  public static async setupMfa(userId: string, appName = "Mutshima"): Promise<{
     secret: string;
     otpauthUrl: string;
     qrCodeDataUrl: string;

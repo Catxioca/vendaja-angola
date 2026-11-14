@@ -16,7 +16,7 @@ const rawEnvSchema = z.object({
   FISCAL_CONFIG_KEY: secret("FISCAL_CONFIG_KEY"),
   FISCAL_PRIVATE_KEY: z.string().trim().min(1).optional(),
   COMPANY_NIF: z.string().trim().min(1).default('5001234567'),
-  COMPANY_NAME: z.string().trim().min(1).default('VendaJá Angola Lda'),
+  COMPANY_NAME: z.string().trim().min(1).default('Mutshima Lda'),
   CORS_ORIGIN: z.string().trim().min(1).default('*'),
   COOKIE_SAME_SITE: z.enum(["lax", "strict", "none"]).optional(),
   COOKIE_CROSS_SITE: z.coerce.boolean().optional(),

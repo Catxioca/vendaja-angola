@@ -382,8 +382,8 @@ test("Site PWA: manifest.webmanifest mantém integridade e ícones", () => {
   assert.ok(fs.existsSync(manifestPath));
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-  assert.equal(manifest.name, "VendaJá Angola");
-  assert.equal(manifest.short_name, "VendaJá");
+  assert.equal(manifest.name, "Mutshima");
+  assert.equal(manifest.short_name, "Mutshima");
   assert.equal(manifest.start_url, "./");
   assert.equal(manifest.display, "standalone");
   assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 2);

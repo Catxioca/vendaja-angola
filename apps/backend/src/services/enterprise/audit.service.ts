@@ -68,7 +68,7 @@ export class EnterpriseAuditService {
     else if (/chrome|crios/i.test(userAgent)) browser = "Google Chrome";
     else if (/firefox|fxios/i.test(userAgent)) browser = "Mozilla Firefox";
     else if (/safari/i.test(userAgent)) browser = "Apple Safari";
-    else if (/electron/i.test(userAgent)) browser = "VendaJá Desktop (Electron)";
+    else if (/electron/i.test(userAgent)) browser = "Mutshima Desktop (Electron)";
 
     let deviceName = "PC / Desktop";
     if (/mobile/i.test(userAgent)) deviceName = "Mobile Device";

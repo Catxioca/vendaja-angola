@@ -19,7 +19,7 @@ describe("Resilient API Client & Diagnostics Suite", () => {
     assert.equal(classified.isNetworkFailure, true);
     assert.equal(classified.category, "CONNECTION_REFUSED");
     assert.match(classified.userMessage, /Serviço de Automação & Workflows/);
-    assert.match(classified.userMessage, /Verifique se o serviço VendaJá Backend/);
+    assert.match(classified.userMessage, /Verifique se o serviço Mutshima Backend/);
     assert.equal(classified.url, "http://127.0.0.1:4000/api/v1/automation");
   });
 

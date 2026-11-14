@@ -1,6 +1,6 @@
 /**
  * Serviço de Notificação e Gestão de Contactos Institucionais
- * VendaJá Angola — Soberania Tecnológica e Rigor de Governação
+ * Mutshima — Soberania Tecnológica e Rigor de Governação
  */
 
 export interface ContactMessage {

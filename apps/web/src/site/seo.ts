@@ -18,72 +18,72 @@ export interface PageSeoMetadata {
 
 export const PUBLIC_INDEXABLE_SEO_CATALOG: Record<string, Omit<PageSeoMetadata, "canonicalUrl">> = {
   home: {
-    title: "VendaJá Angola — Software de Gestão Comercial e ERP Soberano",
+    title: "Mutshima — Software de Gestão Comercial e ERP Soberano",
     description:
       "Plataforma integrada de gestão comercial, faturação, POS, inventário, compras, tesouraria e contabilidade em Angola.",
     canonicalPath: "/",
     indexable: true,
   },
   solucoes: {
-    title: "Soluções Empresariais — VendaJá Angola",
+    title: "Soluções Empresariais — Mutshima",
     description:
       "Soluções de POS balcão, faturação, armazéns, compras, tesouraria, contabilidade e multiempresa para Desktop, Web e Android.",
     canonicalPath: "/solucoes",
     indexable: true,
   },
   modulos: {
-    title: "Módulos & Matriz de Capacidades — VendaJá Angola",
+    title: "Módulos & Matriz de Capacidades — Mutshima",
     description:
-      "Matriz factual dos módulos disponíveis no ecossistema VendaJá Angola com classificação transparente de dependências.",
+      "Matriz factual dos módulos disponíveis no ecossistema Mutshima com classificação transparente de dependências.",
     canonicalPath: "/modulos",
     indexable: true,
   },
   seguranca: {
-    title: "Segurança, RBAC & Governação Soberana — VendaJá Angola",
+    title: "Segurança, RBAC & Governação Soberana — Mutshima",
     description:
-      "Arquitetura de isolamento multiempresa, outbox criptográfico offline, RBAC granular e integridade no VendaJá Angola.",
+      "Arquitetura de isolamento multiempresa, outbox criptográfico offline, RBAC granular e integridade no Mutshima.",
     canonicalPath: "/seguranca",
     indexable: true,
   },
   "conformidade-fiscal": {
-    title: "Conformidade Fiscal & SAF-T Angola — VendaJá Angola",
+    title: "Conformidade Fiscal & SAF-T Angola — Mutshima",
     description:
       "Estrutura técnica para faturação angolana e SAF-T (AO). Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT.",
     canonicalPath: "/conformidade-fiscal",
     indexable: true,
   },
   sobre: {
-    title: "Sobre o VendaJá Angola — Engenharia e Visão Institucional",
+    title: "Sobre o Mutshima — Engenharia e Visão Institucional",
     description:
-      "Conheça a arquitetura offline-first, base única ERP/POS/Mobile e os princípios de transparência técnica do VendaJá Angola.",
+      "Conheça a arquitetura offline-first, base única ERP/POS/Mobile e os princípios de transparência técnica do Mutshima.",
     canonicalPath: "/sobre",
     indexable: true,
   },
   contacto: {
-    title: "Contacto & Demonstração — VendaJá Angola",
+    title: "Contacto & Demonstração — Mutshima",
     description:
-      "Entre em contacto com a equipa técnica e comercial do VendaJá Angola para pedidos de informação e demonstrações institucionais.",
+      "Entre em contacto com a equipa técnica e comercial do Mutshima para pedidos de informação e demonstrações institucionais.",
     canonicalPath: "/contacto",
     indexable: true,
   },
   estado: {
-    title: "Estado dos Serviços & Conetividade — VendaJá Angola",
+    title: "Estado dos Serviços & Conetividade — Mutshima",
     description:
-      "Monitorização em tempo real do estado de conetividade da API, sincronização offline e serviços centrais do VendaJá Angola.",
+      "Monitorização em tempo real do estado de conetividade da API, sincronização offline e serviços centrais do Mutshima.",
     canonicalPath: "/estado",
     indexable: true,
   },
   privacidade: {
-    title: "Política de Privacidade — VendaJá Angola",
+    title: "Política de Privacidade — Mutshima",
     description:
       "Compromisso de proteção de dados, soberania empresarial e privacidade no tratamento de informação comercial.",
     canonicalPath: "/privacidade",
     indexable: true,
   },
   termos: {
-    title: "Termos & Condições de Utilização — VendaJá Angola",
+    title: "Termos & Condições de Utilização — Mutshima",
     description:
-      "Termos de licenciamento de software, responsabilidade operacional e utilização da plataforma VendaJá Angola.",
+      "Termos de licenciamento de software, responsabilidade operacional e utilização da plataforma Mutshima.",
     canonicalPath: "/termos",
     indexable: true,
   },
@@ -91,16 +91,16 @@ export const PUBLIC_INDEXABLE_SEO_CATALOG: Record<string, Omit<PageSeoMetadata, 
 
 export const NON_INDEXABLE_SEO_CATALOG: Record<string, Omit<PageSeoMetadata, "canonicalUrl">> = {
   entrar: {
-    title: "Iniciar Sessão — VendaJá Angola",
+    title: "Iniciar Sessão — Mutshima",
     description:
       "Acesso autenticado à plataforma de gestão empresarial e aos portais de clientes, fornecedores e colaboradores.",
     canonicalPath: null,
     indexable: false,
   },
   "criar-conta": {
-    title: "Criar Conta de Administrador — VendaJá Angola",
+    title: "Criar Conta de Administrador — Mutshima",
     description:
-      "Configuração inicial da empresa e registo do primeiro utilizador administrador no sistema VendaJá Angola.",
+      "Configuração inicial da empresa e registo do primeiro utilizador administrador no sistema Mutshima.",
     canonicalPath: null,
     indexable: false,
   },
@@ -136,8 +136,8 @@ export const PRIVATE_DISALLOW_PATHS: readonly string[] = [
 ] as const;
 
 const DEFAULT_PRIVATE_SEO_METADATA: Omit<PageSeoMetadata, "canonicalUrl"> = {
-  title: "Área Autenticada — VendaJá Angola",
-  description: "Ambiente operacional autenticado e multiempresa do VendaJá Angola.",
+  title: "Área Autenticada — Mutshima",
+  description: "Ambiente operacional autenticado e multiempresa do Mutshima.",
   canonicalPath: null,
   indexable: false,
 };
@@ -326,7 +326,7 @@ export function buildStructuredDataJsonLd(origin: string | null): string | null 
       "@graph": [
         {
           "@type": "SoftwareApplication",
-          name: "VendaJá Angola",
+          name: "Mutshima",
           applicationCategory: "BusinessApplication",
           operatingSystem: "Windows, macOS, Linux, Web, Android",
           description:
@@ -346,7 +346,7 @@ export function buildStructuredDataJsonLd(origin: string | null): string | null 
         },
         {
           "@type": "Organization",
-          name: "VendaJá Angola",
+          name: "Mutshima",
           url: normalizedOrigin,
           logo: `${normalizedOrigin}/icons/icon-512.png`,
           description: "Soluções soberanas de software de gestão comercial e empresarial em Angola.",

@@ -31,6 +31,24 @@ import type {
   ModularLicenseInfo,
   LicenseAuditLogEntry,
 } from "./license.js";
+import {
+  ensureDesktopDataMigration,
+  resolveMachineSeed,
+  sanitizeNetworkError,
+  LEGACY_DIR_NAMES,
+} from "./local-migration.js";
+
+// Executa migração atómica de dados locais de instalações anteriores (VendaJá -> Mutshima)
+// antes de qualquer leitura ou escrita de ficheiros em userData.
+try {
+  ensureDesktopDataMigration({
+    targetUserDataDir: app.getPath("userData"),
+    appDataDir: app.getPath("appData"),
+  });
+} catch (err) {
+  console.warn("[desktop] Verificação de migração local legada:", err);
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 let backendProcess: ChildProcess | null = null;
 const backendEntry = () => app.isPackaged
@@ -101,28 +119,12 @@ async function readLicensePublicKey(): Promise<string> {
  */
 function getMachinePersistentSeed(): string {
   try {
-    const seedPath = process.platform === "win32"
-      ? path.join(process.env.ProgramData || "C:\\ProgramData", "VendaJa", "machine-id")
-      : path.join("/var/lib/vendaja", "machine-id");
-
-    if (fsSync.existsSync(seedPath)) {
-      const existing = fsSync.readFileSync(seedPath, "utf8").trim();
-      if (existing.length >= 16) return existing;
-    }
-  } catch {
-    // Permission-restricted environment; proceed to fallback
-  }
-
-  try {
-    const fallbackPath = path.join(app.getPath("userData"), "machine-id");
-    if (fsSync.existsSync(fallbackPath)) {
-      const existing = fsSync.readFileSync(fallbackPath, "utf8").trim();
-      if (existing.length >= 16) return existing;
-    }
-    const newId = crypto.randomUUID();
-    fsSync.mkdirSync(path.dirname(fallbackPath), { recursive: true });
-    fsSync.writeFileSync(fallbackPath, newId, "utf8");
-    return newId;
+    const legacyDirs = LEGACY_DIR_NAMES.map((name) => path.join(app.getPath("appData"), name));
+    const res = resolveMachineSeed({
+      targetUserDataDir: app.getPath("userData"),
+      legacyUserDataDirs: legacyDirs,
+    });
+    return res.seed;
   } catch {
     return "STABLE-MACHINE-DEFAULT-SEED";
   }
@@ -446,7 +448,7 @@ async function activateLicenseToken(
   return validateLicense();
 }
 const createWindow = () => {
-  const win = new BrowserWindow({ width: 1200, height: 800, webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false } });
+  const win = new BrowserWindow({ width: 1200, height: 800, title: "Mutshima", webPreferences: { preload: path.join(here, "preload.cjs"), contextIsolation: true, nodeIntegration: false } });
   win.webContents.on("did-fail-load", (_event, code, description, url) => console.error("[desktop] renderer failed to load", { code, description, url }));
   win.webContents.on("console-message", (_event, level, message, line, sourceId) => console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`));
   win.loadFile(path.join(here, "renderer/index.html")).catch((error) => console.error("[desktop] loadFile failed", error));
@@ -750,18 +752,44 @@ ipcMain.handle("log-license-audit", async (_event, event: string, details: strin
 ipcMain.handle("check-live-updates", async (_event, apiUrl?: string) => {
   try {
     const config = await readServerConfig();
-    const targetUrl = apiUrl || config?.apiUrl || "http://localhost:4000";
+    const rawUrl = (apiUrl || config?.apiUrl || "").trim();
+    if (!rawUrl) {
+      return {
+        updateAvailable: false,
+        error: "Servidor central não configurado. Por favor, defina o endereço do servidor nas configurações.",
+      };
+    }
+    const targetUrl = rawUrl.replace(/\/+$/, "");
     const res = await fetch(`${targetUrl}/api/v1/saas/updates/check?currentVersion=${app.getVersion()}`);
     if (res.ok) return await res.json();
     return { updateAvailable: false, manifest: { version: app.getVersion() } };
   } catch (err) {
-    return { updateAvailable: false, error: String(err) };
+    return {
+      updateAvailable: false,
+      error: sanitizeNetworkError(err, "Não foi possível verificar atualizações no servidor."),
+    };
   }
 });
 ipcMain.handle("sync-live-config", async (_event, apiUrl?: string) => {
   try {
     const config = await readServerConfig();
-    const targetUrl = apiUrl || config?.apiUrl || "http://localhost:4000";
+    const rawUrl = (apiUrl || config?.apiUrl || "").trim();
+    if (!rawUrl) {
+      return {
+        success: true,
+        isLocalFallback: true,
+        serverUnconfigured: true,
+        activeModules: OPERATIONAL_MODULES,
+        minVersion: app.getVersion(),
+        liveConfig: {
+          activeModules: OPERATIONAL_MODULES,
+          minVersion: app.getVersion(),
+          version: app.getVersion(),
+          unconfigured: true,
+        },
+      };
+    }
+    const targetUrl = rawUrl.replace(/\/+$/, "");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${targetUrl}/api/v1/saas/updates/live-config`, {
@@ -810,7 +838,15 @@ ipcMain.handle(
   async (_event, payload: { query: string; contextModule?: string; token?: string; apiUrl?: string }) => {
     try {
       const config = await readServerConfig();
-      const targetUrl = payload.apiUrl || config?.apiUrl || "http://localhost:4000";
+      const rawUrl = (payload.apiUrl || config?.apiUrl || "").trim();
+      if (!rawUrl) {
+        return {
+          success: false,
+          isOffline: true,
+          error: "Servidor central não configurado. Configure a ligação ao servidor para utilizar a Muambuluisha IA.",
+        };
+      }
+      const targetUrl = rawUrl.replace(/\/+$/, "");
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 6000);
 
@@ -836,7 +872,7 @@ ipcMain.handle(
         return {
           success: false,
           statusCode: res.status,
-          error: errData.error || `Erro HTTP ${res.status}`,
+          error: errData.error || `Erro de comunicação com o servidor (${res.status}).`,
           requiredPermission: errData.requiredPermission,
         };
       }
@@ -847,11 +883,10 @@ ipcMain.handle(
         result: reply,
       };
     } catch (err: unknown) {
-      const rawMsg = err instanceof Error ? err.message : String(err);
       return {
         success: false,
         isOffline: true,
-        error: rawMsg,
+        error: sanitizeNetworkError(err, "Falha de ligação ao servidor da Muambuluisha IA."),
       };
     }
   }
@@ -884,7 +919,15 @@ ipcMain.handle("secure-store-unprotect", (_event, cipherBase64: string) => {
 ipcMain.handle("ai-copilot-status", async (_event, apiUrl?: string) => {
   try {
     const config = await readServerConfig();
-    const targetUrl = apiUrl || config?.apiUrl || "http://localhost:4000";
+    const rawUrl = (apiUrl || config?.apiUrl || "").trim();
+    if (!rawUrl) {
+      return {
+        online: false,
+        reason: "Servidor central não configurado.",
+        localBackendRunning: !!backendProcess,
+      };
+    }
+    const targetUrl = rawUrl.replace(/\/+$/, "");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(`${targetUrl}/api/v1/ai/status`, {
@@ -895,11 +938,11 @@ ipcMain.handle("ai-copilot-status", async (_event, apiUrl?: string) => {
       const data = await res.json();
       return { online: true, ...data };
     }
-    return { online: false, reason: `HTTP ${res.status}` };
+    return { online: false, reason: `Servidor central indisponível (código ${res.status}).` };
   } catch (err) {
     return {
       online: false,
-      reason: "Serviço central de IA parado ou backend inacessível.",
+      reason: sanitizeNetworkError(err, "Serviço central de IA indisponível ou inacessível."),
       localBackendRunning: !!backendProcess,
     };
   }

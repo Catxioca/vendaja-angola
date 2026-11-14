@@ -51,7 +51,7 @@ export function FiscalCompliancePage({ onNavigate }: FiscalCompliancePageProps) 
             1. Estado do Software e Esclarecimento Legal
           </h2>
           <p style={{ color: "#475569", lineHeight: 1.6, marginBottom: "14px" }}>
-            O <strong>VendaJá Angola</strong> disponibiliza uma arquitetura técnica parametrizável destinada a suportar a futura submissão no âmbito do processo formal junto da <strong>Administração Geral Tributária (AGT)</strong>.
+            O <strong>Mutshima</strong> disponibiliza uma arquitetura técnica parametrizável destinada a suportar a futura submissão no âmbito do processo formal junto da <strong>Administração Geral Tributária (AGT)</strong>.
           </p>
           <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "16px", color: "#92400e", fontSize: "13px", lineHeight: 1.6 }}>
             <strong>Nota de Rigor:</strong> O sistema não se encontra homologado até aprovação formal da AGT. Nenhuma fatura emitida em ambiente de demonstração, piloto ou instalação interna constitui documento fiscal definitivo sem a devida aprovação formal e configuração validada pela fonte oficial vigente.

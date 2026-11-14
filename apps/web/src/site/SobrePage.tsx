@@ -12,9 +12,9 @@ export function SobrePage({ onNavigate }: SobrePageProps) {
           <span className="hero-badge primary">🇦🇴 Arquitetura Orientada a Angola</span>
           <span className="hero-badge">Base Única ERP + POS + Mobile</span>
         </div>
-        <h1>Sobre o VendaJá Angola</h1>
+        <h1>Sobre o Mutshima</h1>
         <p>
-          O VendaJá Angola é uma plataforma de gestão comercial e operacional concebida para responder aos desafios
+          O Mutshima é uma plataforma de gestão comercial e operacional concebida para responder aos desafios
           reais do retalho, distribuição e serviços em ambiente de conectividade variável, mantendo uma única base
           técnica para Web ERP, POS e dispositivos móveis.
         </p>

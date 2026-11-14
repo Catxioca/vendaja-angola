@@ -386,7 +386,7 @@ export function CommercialDocumentView({
                 "Talão indispensável em caso de troca ou devolução no prazo legal de 15 dias."}
             </div>
             <div className="thermal-software-brand">
-              Processado por software de faturação VendaJá Angola · www.vendaja.ao
+              Processado por software de faturação Mutshima · mutshima.ao
             </div>
 
             <div className="thermal-cut-line">
@@ -753,7 +753,7 @@ export function CommercialDocumentView({
                   : "Documento probatório emitido a título informativo, sem eficácia de validação fiscal."}
               </div>
               <div className="office-software-credit">
-                Emitido por software de gestão empresarial VendaJá Angola Enterprise · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT
+                Emitido por software de gestão empresarial Mutshima Enterprise · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT
               </div>
             </div>
 

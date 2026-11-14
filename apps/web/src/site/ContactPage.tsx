@@ -179,7 +179,7 @@ export function ContactPage({ apiUrl, onNavigate, institutionalContact }: Contac
             <span>✉️</span> Contacto e Demonstração Institucional
           </div>
           <h1 style={{ fontSize: "32px", fontWeight: 900, color: "#0f172a", marginBottom: "16px", lineHeight: 1.2 }}>
-            Fale com a Equipa do VendaJá Angola
+            Fale com a Equipa do Mutshima
           </h1>
           <p style={{ fontSize: "16px", color: "#475569", lineHeight: 1.6, maxWidth: "760px", margin: "0 auto 24px auto" }}>
             Solicite uma demonstração técnica das soluções de faturação e POS, esclareça dúvidas sobre implantação multi-filial ou apresente propostas de parceria operacional.
@@ -511,7 +511,7 @@ export function ContactPage({ apiUrl, onNavigate, institutionalContact }: Contac
                 />
                 <span>
                   Declaro que autorizo o tratamento dos dados acima submetidos exclusivamente para efeitos de contacto,
-                  esclarecimento e demonstração institucional do VendaJá Angola. Compreendo que os dados não são utilizados
+                  esclarecimento e demonstração institucional do Mutshima. Compreendo que os dados não são utilizados
                   para fins de publicidade não solicitada. *
                 </span>
               </label>

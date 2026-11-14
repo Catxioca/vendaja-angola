@@ -6707,7 +6707,7 @@ export function EnterpriseCrmDocumentPanel({
       notes: "Inclui fornecimento de hardware POS e formação técnica.",
       lines: [
         {
-          description: "Licenças VendaJá Enterprise Terminal (20 unidades)",
+          description: "Licenças Mutshima Enterprise Terminal (20 unidades)",
           quantity: 20,
           unitPriceCents: 500_000_00,
           taxRate: 0.14,
@@ -6851,7 +6851,7 @@ export function EnterpriseCrmDocumentPanel({
     {
       id: "doc-01",
       title: "Contrato de Prestação de Serviços ERP 2026",
-      originalName: "Contrato_VendaJa_Sonangol_2026.pdf",
+      originalName: "Contrato_Mutshima_Sonangol_2026.pdf",
       category: "CONTRACT",
       tags: ["sonangol", "contrato", "juridico", "2026"],
       mimeType: "application/pdf",
@@ -6881,7 +6881,7 @@ export function EnterpriseCrmDocumentPanel({
     {
       id: "doc-02",
       title: "Dossiê Técnico de Preparação Fiscal",
-      originalName: "Dossie_Tecnico_Homologacao_VendaJa.pdf",
+      originalName: "Dossie_Tecnico_Homologacao_Mutshima.pdf",
       category: "LEGAL",
       tags: ["agt", "fiscal", "homologacao", "rsa"],
       mimeType: "application/pdf",
@@ -8807,8 +8807,8 @@ export function EnterpriseIntegrationsPanel({
       setLoading(true);
       const res = await request<{ data: Array<any> }>(`${api}/api/v1/integrations/plugins`, token).catch(() => ({
         data: [
-          { id: "plugin-saft-validator", name: "SAF-T AO Auditor Estrutural", version: "2.4.0", author: "VendaJá Labs", category: "Fiscal", installed: true, enabled: true, description: "Integração estrutural/piloto para verificação de ficheiro SAF-T AO; validação formal depende de ficheiro XSD oficial externo." },
-          { id: "plugin-multicaixa-gpo", name: "Multicaixa Express GPO Gateway", version: "1.2.0", author: "EMIS / VendaJá", category: "Pagamentos", installed: true, enabled: true, description: "Processamento de pagamentos móveis EMIS e reconciliação automática de extrato." },
+          { id: "plugin-saft-validator", name: "SAF-T AO Auditor Estrutural", version: "2.4.0", author: "Mutshima Labs", category: "Fiscal", installed: true, enabled: true, description: "Integração estrutural/piloto para verificação de ficheiro SAF-T AO; validação formal depende de ficheiro XSD oficial externo." },
+          { id: "plugin-multicaixa-gpo", name: "Multicaixa Express GPO Gateway", version: "1.2.0", author: "EMIS / Mutshima", category: "Pagamentos", installed: true, enabled: true, description: "Processamento de pagamentos móveis EMIS e reconciliação automática de extrato." },
           { id: "plugin-primavera-bridge", name: "Primavera BSS v10 Connector", version: "1.0.4", author: "Enterprise Connect", category: "ERP", installed: true, enabled: true, description: "Sincronização bidirecional de movimentos de caixa, clientes e plano geral de contabilidade (PGCA)." },
           { id: "plugin-sap-b1-sync", name: "SAP Business One Mirror", version: "1.1.2", author: "Enterprise Connect", category: "ERP", installed: false, enabled: false, description: "Integração corporativa com SAP B1 para sincronização de stocks e saídas de armazém." },
           { id: "plugin-whatsapp-notifier", name: "WhatsApp Business Direct Notifier", version: "2.1.0", author: "Meta Cloud Provider", category: "Comunicação", installed: true, enabled: true, description: "Envio instantâneo de faturas, recibos e alertas de cobrança via WhatsApp Business API." },
@@ -9029,7 +9029,7 @@ export function EnterpriseIntegrationsPanel({
       setFeedback("A disparar evento de teste 'ping.test' para todos os webhooks...");
       const res = await request<any>(`${api}/api/v1/integrations/webhooks/test`, token, {
         method: "POST",
-        body: JSON.stringify({ event: "ping.test", payload: { system: "VendaJá Angola ERP", pingTime: new Date().toISOString() } }),
+        body: JSON.stringify({ event: "ping.test", payload: { system: "Mutshima ERP", pingTime: new Date().toISOString() } }),
       }).catch(() => ({ message: "Webhook disparado com sucesso", deliveries: [{ id: "del-ping", status: "DELIVERED", statusCode: 200 }] }));
 
       setFeedback("Notificação de teste enviada para os destinos subscritos!");
@@ -9048,7 +9048,7 @@ export function EnterpriseIntegrationsPanel({
         `${api}/api/v1/integrations/bi/${biDataset}${query}`,
         token
       ).catch(() => ({
-        dataset: `VendaJá_${biDataset.toUpperCase()}_Analytics`,
+        dataset: `Mutshima_${biDataset.toUpperCase()}_Analytics`,
         count: 5,
         records: [
           { id: "1", documentNumber: "FR 2026/001", totalCents: 4500000, taxCents: 630000, date: new Date().toISOString() },
@@ -9149,7 +9149,7 @@ export function EnterpriseIntegrationsPanel({
           method: "POST",
           body: JSON.stringify({
             to: messageForm.to,
-            subject: messageForm.subject || "Notificação VendaJá Angola",
+            subject: messageForm.subject || "Notificação Mutshima",
             templateId: messageForm.templateId,
             body: messageForm.body,
           }),
@@ -10148,7 +10148,7 @@ in
                     Assunto do E-mail
                     <input
                       type="text"
-                      placeholder="Ex: Sua Fatura/Recibo VendaJá n.º FR 2026/001"
+                      placeholder="Ex: Sua Fatura/Recibo Mutshima n.º FR 2026/001"
                       value={messageForm.subject}
                       onChange={(e) => setMessageForm({ ...messageForm, subject: e.target.value })}
                       style={{ width: "100%", padding: "8px 10px", marginTop: "4px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
@@ -10362,7 +10362,7 @@ in
           <div style={{ background: "#fff", borderRadius: "10px", padding: "18px", border: "1px solid #e2e8f0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
               <div>
-                <h3 style={{ margin: "0 0 4px", fontSize: "15px", color: "#0f172a" }}>SDK Oficial VendaJá para Desenvolvedores (@angola/sdk)</h3>
+                <h3 style={{ margin: "0 0 4px", fontSize: "15px", color: "#0f172a" }}>SDK Oficial Mutshima para Desenvolvedores (@angola/sdk)</h3>
                 <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
                   Integração rápida em TypeScript / Node.js, Python e C# (.NET) para conectar qualquer sistema externo.
                 </p>
@@ -10392,9 +10392,9 @@ in
 
             <div style={{ background: "#0f172a", color: "#f8fafc", padding: "16px", borderRadius: "8px", fontSize: "12px", fontFamily: "monospace", overflowX: "auto" }}>
               {sdkLang === "ts" && (
-                <pre style={{ margin: 0 }}>{`import { VendaJaClient } from "@angola/sdk";
+                <pre style={{ margin: 0 }}>{`import { MutshimaClient } from "@angola/sdk";
 
-const client = new VendaJaClient({
+const client = new MutshimaClient({
   baseUrl: "${api}",
   apiKey: "vj_live_exemplo_sua_chave_aqui",
 });

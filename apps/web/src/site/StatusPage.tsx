@@ -97,7 +97,7 @@ export function StatusPage({ apiUrl, onNavigate }: StatusPageProps) {
                 Estado público indisponível
               </div>
               <p style={{ color: "#475569", fontSize: "13px", lineHeight: 1.6, margin: 0 }}>
-                O VendaJá Angola não apresenta métricas artificiais de uptime sem um serviço público de telemetria independente e auditável. As instalações corporativas operam em infraestruturas dedicadas de cada cliente ou em servidores de desenvolvimento, dependendo do regime contratual.
+                O Mutshima não apresenta métricas artificiais de uptime sem um serviço público de telemetria independente e auditável. As instalações corporativas operam em infraestruturas dedicadas de cada cliente ou em servidores de desenvolvimento, dependendo do regime contratual.
               </p>
             </div>
           </div>

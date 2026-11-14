@@ -30,7 +30,7 @@ licenseRouter.get("/status", requireAuth, requireCompanyContext, async (req, res
         valid: false,
         reason: "no_license_installed",
         modules: ["SETTINGS"],
-        message: "Nenhuma licença instalada nesta empresa. É necessária ativação com chave assinada pela VendaJá.",
+        message: "Nenhuma licença instalada nesta empresa. É necessária ativação com chave assinada pela Mutshima.",
       });
       return;
     }
@@ -110,7 +110,7 @@ licenseRouter.post("/activate", requireAuth, requireCompanyContext, requireRole(
       );
 
       const messages: Record<string, string> = {
-        invalid_signature: "A assinatura digital RSA da licença é inválida ou foi adulterada. Chave não emitida pelo fornecedor oficial VendaJá.",
+        invalid_signature: "A assinatura digital RSA da licença é inválida ou foi adulterada. Chave não emitida pelo fornecedor oficial Mutshima.",
         expired: "Esta licença empresarial atingiu a data de expiração e não é válida.",
         not_started: "Esta licença ainda não atingiu a data inicial de validade.",
         hardware_mismatch: "Esta licença foi emitida para outro identificador de instalação.",
@@ -161,7 +161,7 @@ licenseRouter.post("/activate", requireAuth, requireCompanyContext, requireRole(
 
     res.status(200).json({
       success: true,
-      message: "Licença empresarial validada criptograficamente com sucesso pela autoridade VendaJá e ativada no servidor.",
+      message: "Licença empresarial validada criptograficamente com sucesso pela autoridade Mutshima e ativada no servidor.",
       status: {
         valid: true,
         licenseId: decoded.payload.licenseId,

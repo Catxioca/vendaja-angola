@@ -9,9 +9,9 @@ export class EnterprisePowerBiService {
   public static getSemanticModelMetadata(apiBaseUrl = "http://localhost:4000") {
     return {
       version: "2.2.0",
-      modelName: "VendaJa_Angola_Enterprise_SemanticModel",
+      modelName: "Mutshima_Enterprise_SemanticModel",
       compatibilityLevel: 1560,
-      description: "Modelo Semântico Corporativo do VendaJá Angola para Microsoft Power BI",
+      description: "Modelo Semântico Corporativo do Mutshima para Microsoft Power BI",
       culture: "pt-AO",
       endpoints: {
         salesOData: `${apiBaseUrl}/api/v1/bi/powerbi/sales`,

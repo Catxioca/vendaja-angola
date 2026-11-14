@@ -152,7 +152,7 @@ export function LoginPage({ apiUrl, onSuccess, onNavigate }: LoginPageProps) {
             V<span>J</span>
           </div>
           <h2 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 6px 0" }}>
-            Aceder ao VendaJá Angola
+            Aceder ao Mutshima
           </h2>
           <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>
             Início de sessão no ERP Web e Gestão Comercial

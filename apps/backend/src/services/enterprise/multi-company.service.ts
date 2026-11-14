@@ -78,16 +78,16 @@ export class MultiCompanyService {
       });
     } catch {
       companies = [
-        { id: "comp-holding-01", legalName: "VendaJá Holding, SA", nif: "5401928371" },
-        { id: "comp-distrib-02", legalName: "VendaJá Distribuição & Retalho, Lda", nif: "5402839482" },
-        { id: "comp-logist-03", legalName: "VendaJá Logística e Transportes, Lda", nif: "5403847583" },
+        { id: "comp-holding-01", legalName: "Mutshima Holding, SA", nif: "5401928371" },
+        { id: "comp-distrib-02", legalName: "Mutshima Distribuição & Retalho, Lda", nif: "5402839482" },
+        { id: "comp-logist-03", legalName: "Mutshima Logística e Transportes, Lda", nif: "5403847583" },
       ];
     }
 
     if (!companies || companies.length === 0) {
       companies = [
-        { id: "comp-holding-01", legalName: "VendaJá Holding, SA", nif: "5401928371" },
-        { id: "comp-distrib-02", legalName: "VendaJá Distribuição & Retalho, Lda", nif: "5402839482" },
+        { id: "comp-holding-01", legalName: "Mutshima Holding, SA", nif: "5401928371" },
+        { id: "comp-distrib-02", legalName: "Mutshima Distribuição & Retalho, Lda", nif: "5402839482" },
       ];
     }
 

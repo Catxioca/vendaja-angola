@@ -45,7 +45,7 @@ export interface SubscriptionInvoice {
 export const SAAS_PLANS: SaasSubscriptionPlan[] = [
   {
     code: "STARTER",
-    name: "VendaJá Starter",
+    name: "Mutshima Starter",
     monthlyPriceCents: 4500000, // 45.000 Kz
     annualPriceCents: 43200000, // 432.000 Kz (20% desconto: 36.000 Kz/mês)
     currency: "AOA",
@@ -65,7 +65,7 @@ export const SAAS_PLANS: SaasSubscriptionPlan[] = [
   },
   {
     code: "PROFESSIONAL",
-    name: "VendaJá Professional",
+    name: "Mutshima Professional",
     monthlyPriceCents: 9500000, // 95.000 Kz
     annualPriceCents: 91200000, // 912.000 Kz (20% desconto: 76.000 Kz/mês)
     currency: "AOA",
@@ -87,7 +87,7 @@ export const SAAS_PLANS: SaasSubscriptionPlan[] = [
   },
   {
     code: "BUSINESS",
-    name: "VendaJá Business",
+    name: "Mutshima Business",
     monthlyPriceCents: 22000000, // 220.000 Kz
     annualPriceCents: 211200000, // 2.112.000 Kz (20% desconto: 176.000 Kz/mês)
     currency: "AOA",
@@ -110,7 +110,7 @@ export const SAAS_PLANS: SaasSubscriptionPlan[] = [
   },
   {
     code: "ENTERPRISE",
-    name: "VendaJá Enterprise Cloud",
+    name: "Mutshima Enterprise Cloud",
     monthlyPriceCents: 50000000, // 500.000 Kz
     annualPriceCents: 480000000, // 4.800.000 Kz (400.000 Kz/mês)
     currency: "AOA",

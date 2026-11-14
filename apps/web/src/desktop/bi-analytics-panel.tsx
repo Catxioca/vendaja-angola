@@ -282,7 +282,7 @@ export function EnterpriseBiAnalyticsPanel({
   // STATE: HOLDING CONSOLIDATION
   // ==========================================
   const [consolidationReport, setConsolidationReport] = useState<any>(() => isDemoMode() ? {
-    groupName: "Grupo Empresarial VendaJá Angola, SA",
+    groupName: "Grupo Empresarial Mutshima, SA",
     consolidationCurrency: "AOA",
     eliminationsApplied: true,
     subsidiariesCount: 3,
@@ -299,9 +299,9 @@ export function EnterpriseBiAnalyticsPanel({
       consolidatedHeadcount: 64,
     },
     subsidiaryContributions: [
-      { companyName: "VendaJá Angola Sede (Luanda)", taxNumber: "5419082341", revenueGroupCurrencyCents: 520_000_000_00, grossMarginPercent: 44.5, netMarginPercent: 15.2, shareOfGroupRevenuePercent: 53.1, healthScore: 92, status: "LEADER" },
-      { companyName: "VendaJá Distribuição Benguela Lda", taxNumber: "5419082342", revenueGroupCurrencyCents: 280_000_000_00, grossMarginPercent: 39.8, netMarginPercent: 14.1, shareOfGroupRevenuePercent: 28.6, healthScore: 84, status: "PERFORMER" },
-      { companyName: "VendaJá Logística Huambo Lda", taxNumber: "5419082343", revenueGroupCurrencyCents: 180_000_000_00, grossMarginPercent: 34.2, netMarginPercent: 12.0, shareOfGroupRevenuePercent: 18.3, healthScore: 76, status: "PERFORMER" },
+      { companyName: "Mutshima Sede (Luanda)", taxNumber: "5419082341", revenueGroupCurrencyCents: 520_000_000_00, grossMarginPercent: 44.5, netMarginPercent: 15.2, shareOfGroupRevenuePercent: 53.1, healthScore: 92, status: "LEADER" },
+      { companyName: "Mutshima Distribuição Benguela Lda", taxNumber: "5419082342", revenueGroupCurrencyCents: 280_000_000_00, grossMarginPercent: 39.8, netMarginPercent: 14.1, shareOfGroupRevenuePercent: 28.6, healthScore: 84, status: "PERFORMER" },
+      { companyName: "Mutshima Logística Huambo Lda", taxNumber: "5419082343", revenueGroupCurrencyCents: 180_000_000_00, grossMarginPercent: 34.2, netMarginPercent: 12.0, shareOfGroupRevenuePercent: 18.3, healthScore: 76, status: "PERFORMER" },
     ],
   } : null);
 
@@ -1275,7 +1275,7 @@ export function EnterpriseBiAnalyticsPanel({
                 cursor: "pointer",
               }}
             >
-              📥 Descarregar Conector VendaJa_BI.pbids
+              📥 Descarregar Conector Mutshima_BI.pbids
             </button>
           </div>
 

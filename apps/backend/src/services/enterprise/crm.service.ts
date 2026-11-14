@@ -171,7 +171,7 @@ export class EnterpriseCrmService {
       status: "OPEN",
       probabilityPercent: 20,
       source: "REFERRAL",
-      notes: "Interesse em equipar 5 armazéns com o VendaJá Angola Desktop e leitores de código de barras.",
+      notes: "Interesse em equipar 5 armazéns com o Mutshima Desktop e leitores de código de barras.",
       createdAt: now,
       updatedAt: now,
     };
@@ -198,7 +198,7 @@ export class EnterpriseCrmService {
     const proposal: CrmProposalData = {
       id: "prop-2026-001",
       number: "PROP-2026-0001",
-      title: "Proposta Comercial Solução VendaJá Enterprise",
+      title: "Proposta Comercial Solução Mutshima Enterprise",
       opportunityId: opp.id,
       customerName: "Hipermercados do Sul, SA",
       status: "SENT",
@@ -206,7 +206,7 @@ export class EnterpriseCrmService {
       currency: "AOA",
       validUntil: new Date(Date.now() + 30 * 86400000).toISOString(),
       items: [
-        { description: "Licenciamento ERP VendaJá Angola v2.2.4 (8 Postos)", quantity: 8, unitPriceCents: 1_200_000_00, totalCents: 9_600_000_00 },
+        { description: "Licenciamento ERP Mutshima v2.2.4 (8 Postos)", quantity: 8, unitPriceCents: 1_200_000_00, totalCents: 9_600_000_00 },
         { description: "Serviço de Implantação, Formação de Caixas e Parametrização Fiscal", quantity: 1, unitPriceCents: 3_200_000_00, totalCents: 3_200_000_00 },
       ],
       createdAt: now,

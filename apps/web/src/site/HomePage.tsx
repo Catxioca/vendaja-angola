@@ -36,7 +36,7 @@ export function HomePage({ apiUrl, onNavigate }: HomePageProps) {
         </h2>
 
         <p className="hero-subtitle">
-          O <strong>VendaJá Angola</strong> combina operação offline-first nos postos de venda com
+          O <strong>Mutshima</strong> combina operação offline-first nos postos de venda com
           sincronização centralizada em nuvem. Operação offline-first enquanto o posto de trabalho
           permanece operacional; a continuidade perante falha elétrica depende de energia e hardware
           compatíveis.

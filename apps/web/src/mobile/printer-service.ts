@@ -246,7 +246,7 @@ export class MobilePrinterService {
           <div>Forma Pagamento: ${receipt.paymentMethod}</div>
           <div class="border-b"></div>
           <div class="center" style="font-size: 9px; margin-top: 8px;">
-            VendaJá Angola • Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.
+            Mutshima • Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.
           </div>
         </body>
       </html>

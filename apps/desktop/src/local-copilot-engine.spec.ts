@@ -225,4 +225,16 @@ test("Local Copilot Engine: Error classification eliminates generic 'Failed to f
   const classifiedForbidden = EnterpriseLocalCopilotEngine.classifyError(forbiddenErr);
   assert.equal(classifiedForbidden.code, "PERMISSION_DENIED");
   assert.ok(classifiedForbidden.userMessage.includes("Permissão AI.Chat em falta"));
+
+  // Verificação de URL não configurada: nunca presume localhost:4000
+  const unconfiguredFetch = EnterpriseLocalCopilotEngine.classifyError(fetchErr);
+  assert.equal(unconfiguredFetch.isOffline, true);
+  assert.equal(unconfiguredFetch.code, "SERVER_UNCONFIGURED");
+  assert.ok(!unconfiguredFetch.userMessage.includes("localhost"));
+  assert.ok(!unconfiguredFetch.userMessage.includes("4000"));
+  assert.ok(unconfiguredFetch.userMessage.includes("Servidor central não configurado"));
+
+  const emptyUrlFetch = EnterpriseLocalCopilotEngine.classifyError(fetchErr, "");
+  assert.equal(emptyUrlFetch.code, "SERVER_UNCONFIGURED");
+  assert.ok(!emptyUrlFetch.userMessage.includes("localhost"));
 });

@@ -164,7 +164,7 @@ export function BootstrapPage({ apiUrl, onSuccess, onNavigate }: BootstrapPagePr
             Configuração Inicial Não Disponível
           </h2>
           <p style={{ fontSize: "14px", color: "#475467", lineHeight: 1.6, marginBottom: "24px" }}>
-            Esta instalação do <strong>VendaJá Angola</strong> já se encontra inicializada com uma empresa
+            Esta instalação do <strong>Mutshima</strong> já se encontra inicializada com uma empresa
             e um administrador configurados. Por imperativo de segurança, a criação de novos utilizadores
             ou filiais adicionais é realizada internamente pelo Administrador através do Centro Corporativo.
           </p>

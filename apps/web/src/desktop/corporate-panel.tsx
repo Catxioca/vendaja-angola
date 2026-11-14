@@ -1936,7 +1936,7 @@ export const CorporatePanel: React.FC<CorporatePanelProps> = ({
                 </label>
                 <input
                   type="email"
-                  placeholder="Ex: carlos.silva@vendaja.ao"
+                  placeholder="Ex: carlos.silva@mutshima.ao"
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   style={{ width: "100%", padding: "8px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "13px" }}
@@ -2495,7 +2495,7 @@ export const CorporatePanel: React.FC<CorporatePanelProps> = ({
           {/* Topology Hub Diagram */}
           <div style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "20px" }}>
             <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>
-              Topologia da Rede Corporativa VendaJá Angola
+              Topologia da Rede Corporativa Mutshima
             </h3>
             <div
               style={{

@@ -319,8 +319,8 @@ export class LocalGovernanceEngine {
     latencyMs: 0,
     mode: "OFFLINE_LOCAL",
     lastChecked: new Date().toISOString(),
-    backendUrl: "http://localhost:4000",
-    diagnosticDetails: "Inicializado em modo resiliente local.",
+    backendUrl: "",
+    diagnosticDetails: "Inicializado em modo resiliente local (servidor central não configurado).",
   };
 
   private memoryStorage: Record<string, string> = {};
@@ -483,7 +483,7 @@ export class LocalGovernanceEngine {
           ipAddress: "127.0.0.1",
           deviceName: "Terminal Principal (Desktop)",
           operatingSystem: "Windows / Electron",
-          browser: "VendaJá Desktop App",
+          browser: "Mutshima Desktop App",
           lastActiveAt: new Date().toISOString(),
           expiresAt: new Date(Date.now() + 86400000).toISOString(),
           isSuspicious: false,
@@ -1112,7 +1112,7 @@ export class LocalGovernanceEngine {
     // Local Snapshot creation with SHA-256
     const snapshotPayload = {
       timestamp: new Date().toISOString(),
-      source: "VendaJá Desktop Local Database",
+      source: "Mutshima Desktop Local Database",
       version: "2.2.4",
       roles: this.getLocalRoles(),
       policy: this.getLocalPolicy(),

@@ -42,9 +42,7 @@ export function SiteFooter({ onNavigate, institutionalContact }: SiteFooterProps
       <div className="site-footer-container">
         <div className="footer-top">
           <div className="footer-brand">
-            <h3>
-              VendaJá <span>Angola</span>
-            </h3>
+            <h3>Mutshima</h3>
             <p>
               Plataforma soberana de gestão comercial, faturação híbrida e portais omnichannel.
               Concebida de raiz para a realidade operacional angolana, combinando alta resiliência
@@ -61,7 +59,7 @@ export function SiteFooter({ onNavigate, institutionalContact }: SiteFooterProps
               <FooterNavLink view="home" label="Página Inicial" onNavigate={onNavigate} />
               <FooterNavLink view="solucoes" label="Soluções Verticais" onNavigate={onNavigate} />
               <FooterNavLink view="modulos" label="Catálogo de Módulos" onNavigate={onNavigate} />
-              <FooterNavLink view="sobre" label="Sobre o VendaJá Angola" onNavigate={onNavigate} />
+              <FooterNavLink view="sobre" label="Sobre o Mutshima" onNavigate={onNavigate} />
               <FooterNavLink view="entrar" label="Entrar no ERP" onNavigate={onNavigate} />
               <FooterNavLink view="criar-conta" label="Criar Conta Inicial" onNavigate={onNavigate} />
               <FooterNavLink view="contacto" label="Contacto & Demonstração" onNavigate={onNavigate} />
@@ -152,7 +150,7 @@ export function SiteFooter({ onNavigate, institutionalContact }: SiteFooterProps
 
         <div className="footer-bottom">
           <div>
-            © {new Date().getFullYear()} VendaJá Angola. Todos os direitos reservados. Soberania tecnológica no comércio nacional.
+            © {new Date().getFullYear()} Mutshima. Todos os direitos reservados. Soberania tecnológica no comércio nacional.
           </div>
           <div>
             {channels.address

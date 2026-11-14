@@ -5,12 +5,12 @@ export const openapiRouter = Router();
 export const openApiSpecification = {
   openapi: "3.0.3",
   info: {
-    title: "VendaJá Angola — Enterprise API Gateway",
+    title: "Mutshima — Enterprise API Gateway",
     version: "5.0.0",
     description:
-      "API REST Corporativa, aberta, escalável e segura do ecossistema ERP VendaJá Angola. Suporta autenticação JWT, OAuth2 (Client Credentials), chaves de API ('x-api-key'), Webhooks com assinatura HMAC-SHA256, conectores governamentais (AGT SAF-T AO), conectores financeiros (Multicaixa Express / GPO EMIS), ERPs externos (Primavera BSS, SAP Business One), E-Commerce (Shopify / WooCommerce) e Datasets analíticos para Microsoft Power BI.",
+      "API REST Corporativa, aberta, escalável e segura do ecossistema ERP Mutshima. Suporta autenticação JWT, OAuth2 (Client Credentials), chaves de API ('x-api-key'), Webhooks com assinatura HMAC-SHA256, conectores governamentais (AGT SAF-T AO), conectores financeiros (Multicaixa Express / GPO EMIS), ERPs externos (Primavera BSS, SAP Business One), E-Commerce (Shopify / WooCommerce) e Datasets analíticos para Microsoft Power BI.",
     contact: {
-      name: "VendaJá Angola Enterprise Support & Developer Portal",
+      name: "Mutshima Enterprise Support & Developer Portal",
       email: "developers@vendaja.ao",
       url: "https://vendaja.ao/developers",
     },
@@ -425,7 +425,7 @@ openapiRouter.get("/docs", (_req: Request, res: Response) => {
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <title>VendaJá Angola — Enterprise API Documentation</title>
+  <title>Mutshima — Enterprise API Documentation</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
   <style>
     body { margin: 0; padding: 0; background-color: #0f172a; color: #f8fafc; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -441,7 +441,7 @@ openapiRouter.get("/docs", (_req: Request, res: Response) => {
 <body>
   <div class="topbar">
     <div class="topbar-brand">
-      <span>🇦🇴 VendaJá Angola ERP</span>
+      <span>🇦🇴 Mutshima ERP</span>
       <span class="topbar-tag">OpenAPI 3.0.3 Gateway</span>
     </div>
     <div>
@@ -450,7 +450,7 @@ openapiRouter.get("/docs", (_req: Request, res: Response) => {
   </div>
   <div id="swagger-ui"></div>
   <div class="footer-bar">
-    VendaJá Angola v5.0 — Conectividade Corporativa (Primavera BSS, SAP Business One, EMIS Multicaixa, AGT SAF-T AO, Microsoft Power BI)
+    Mutshima v5.0 — Conectividade Corporativa (Primavera BSS, SAP Business One, EMIS Multicaixa, AGT SAF-T AO, Microsoft Power BI)
   </div>
   <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>

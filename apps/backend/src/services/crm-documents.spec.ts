@@ -57,7 +57,7 @@ test("EnterpriseCrmService: creates, updates, and converts Leads into Customers 
 test("EnterpriseCrmService: manages Opportunities and calculates visual Kanban Pipeline metrics", async () => {
   // 1. Create Opportunities across different stages
   const opp1 = await EnterpriseCrmService.createOpportunity({
-    title: "Contrato Anual Suporte VendaJá",
+    title: "Contrato Anual Suporte Mutshima",
     customerName: "PetroAngola Serviços Lda",
     stage: "OPPORTUNITY",
     expectedRevenueCents: 6_000_000_00, // 6.000.000 Kz
@@ -126,7 +126,7 @@ test("EnterpriseCrmService: manages Commercial Proposals, calculates line totals
     customerName: "Distribuidora do Cazenga Lda",
     validUntil: new Date(Date.now() + 15 * 86400000).toISOString(),
     items: [
-      { description: "Módulo POS VendaJá Desktop", quantity: 4, unitPriceCents: 500_000_00, totalCents: 2_000_000_00 },
+      { description: "Módulo POS Mutshima Desktop", quantity: 4, unitPriceCents: 500_000_00, totalCents: 2_000_000_00 },
       { description: "Módulo de Contabilidade PGCA e SAF-T", quantity: 1, unitPriceCents: 800_000_00, totalCents: 800_000_00 },
     ],
   });

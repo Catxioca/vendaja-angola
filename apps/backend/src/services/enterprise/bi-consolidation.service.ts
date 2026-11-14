@@ -110,13 +110,13 @@ export class BiConsolidationService {
 
     if (!companies || companies.length === 0) {
       companies = [
-        { id: "default-company", name: "VendaJá Angola Sede (Luanda)", taxNumber: "5419082341", currency: "AOA", active: true },
-        { id: "comp-benguela", name: "VendaJá Distribuição Benguela Lda", taxNumber: "5419082342", currency: "AOA", active: true },
-        { id: "comp-huambo", name: "VendaJá Logística Huambo Lda", taxNumber: "5419082343", currency: "AOA", active: true },
+        { id: "default-company", name: "Mutshima Sede (Luanda)", taxNumber: "5419082341", currency: "AOA", active: true },
+        { id: "comp-benguela", name: "Mutshima Distribuição Benguela Lda", taxNumber: "5419082342", currency: "AOA", active: true },
+        { id: "comp-huambo", name: "Mutshima Logística Huambo Lda", taxNumber: "5419082343", currency: "AOA", active: true },
       ];
     }
 
-    const groupName = group?.name || "Grupo Empresarial VendaJá Angola, SA";
+    const groupName = group?.name || "Grupo Empresarial Mutshima, SA";
     const groupId = group?.id || "grp-holding-angola";
 
     // 2. Fetch KPIs and cubes for each company
@@ -291,7 +291,7 @@ export class BiConsolidationService {
 
       return {
         companyId: rc.company.id,
-        companyName: rc.company.name || rc.company.legalName || "VendaJá Angola",
+        companyName: rc.company.name || rc.company.legalName || "Mutshima",
         taxNumber: rc.company.taxNumber || rc.company.nif || "5419082341",
         currency: rc.company.currency || "AOA",
         exchangeRateToGroup: factor,

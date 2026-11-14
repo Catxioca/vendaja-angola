@@ -26,7 +26,7 @@ test("Site Institucional: Renderização estática da HomePage sem erros", () =>
     })
   );
 
-  assert.ok(html.includes("VendaJá"), "HomePage deve conter a marca VendaJá");
+  assert.ok(html.includes("Mutshima"), "HomePage deve conter a marca Mutshima");
   assert.ok(html.includes("Faturação Comercial"), "HomePage deve apresentar o produto");
   assert.ok(html.includes("Operação Offline Autónoma"), "HomePage deve explicar operação offline");
   assert.ok(html.includes("Sincronização Segura e Idempotente"), "HomePage deve explicar sincronização");

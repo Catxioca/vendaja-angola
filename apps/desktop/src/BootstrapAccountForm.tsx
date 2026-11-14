@@ -91,75 +91,80 @@ export function BootstrapAccountForm({
       const pinHash = form.pin ? await credentialHash(form.pin) : await credentialHash("123456");
 
       let remoteRegistered = false;
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3500);
-        const response = await fetch(`${apiUrl}/api/v1/auth/bootstrap`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            company: {
-              legalName: form.legalName.trim(),
-              nif: form.nif.trim() || undefined,
-              branchCode: form.branchCode.trim(),
-              branchName: form.branchName.trim(),
-            },
-            admin: {
-              displayName: form.displayName.trim(),
+      if (apiUrl && apiUrl.trim()) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 3500);
+          const response = await fetch(`${apiUrl}/api/v1/auth/bootstrap`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              company: {
+                legalName: form.legalName.trim(),
+                nif: form.nif.trim() || undefined,
+                branchCode: form.branchCode.trim(),
+                branchName: form.branchName.trim(),
+              },
+              admin: {
+                displayName: form.displayName.trim(),
+                username: form.username.trim(),
+                email: form.email.trim(),
+                password: form.password,
+                pin: form.pin.trim() || undefined,
+              },
+            }),
+          });
+          clearTimeout(timeout);
+
+          const data = (await response.json().catch(() => ({}))) as Partial<BootstrapResponse> & { error?: string };
+          if (response.ok && data.accessToken && data.user && data.context) {
+            // Synchronize local offline credentials with remote bootstrap
+            const localAuth = {
               username: form.username.trim(),
               email: form.email.trim(),
-              password: form.password,
-              pin: form.pin.trim() || undefined,
-            },
-          }),
-        });
-        clearTimeout(timeout);
+              displayName: form.displayName.trim() || form.username.trim(),
+              role: "ADMIN",
+              passwordHash,
+              pinHash,
+            };
+            localStorage.setItem("vendaja-local-auth", JSON.stringify(localAuth));
 
-        const data = (await response.json().catch(() => ({}))) as Partial<BootstrapResponse> & { error?: string };
-        if (response.ok && data.accessToken && data.user && data.context) {
-          // Synchronize local offline credentials with remote bootstrap
-          const localAuth = {
-            username: form.username.trim(),
-            email: form.email.trim(),
-            displayName: form.displayName.trim() || form.username.trim(),
-            role: "ADMIN",
-            passwordHash,
-            pinHash,
-          };
-          localStorage.setItem("vendaja-local-auth", JSON.stringify(localAuth));
+            const companyData = {
+              name: form.legalName.trim(),
+              nif: form.nif.trim() || "—",
+              address: form.branchName.trim() || "Angola",
+              province: "Luanda",
+              phone: "—",
+              branchCode: form.branchCode.trim() || "MAIN",
+            };
+            localStorage.setItem("vendaja-local-company", JSON.stringify(companyData));
 
-          const companyData = {
-            name: form.legalName.trim(),
-            nif: form.nif.trim() || "—",
-            address: form.branchName.trim() || "Angola",
-            province: "Luanda",
-            phone: "—",
-            branchCode: form.branchCode.trim() || "MAIN",
-          };
-          localStorage.setItem("vendaja-local-company", JSON.stringify(companyData));
+            localStorage.setItem("accessToken", data.accessToken);
+            localStorage.setItem("refreshToken", data.refreshToken ?? "");
+            localStorage.setItem("posUser", JSON.stringify(data.user));
+            localStorage.setItem("vendaja-company-id", data.context.companyId);
+            localStorage.setItem("vendaja-branch-id", data.context.branchId);
 
-          localStorage.setItem("accessToken", data.accessToken);
-          localStorage.setItem("refreshToken", data.refreshToken ?? "");
-          localStorage.setItem("posUser", JSON.stringify(data.user));
-          localStorage.setItem("vendaja-company-id", data.context.companyId);
-          localStorage.setItem("vendaja-branch-id", data.context.branchId);
+            window.dispatchEvent(new CustomEvent("company-updated"));
+            onComplete(data.accessToken, data.refreshToken ?? "", data.user);
+            remoteRegistered = true;
+            return;
+          }
 
-          window.dispatchEvent(new CustomEvent("company-updated"));
-          onComplete(data.accessToken, data.refreshToken ?? "", data.user);
-          remoteRegistered = true;
-          return;
+          if (data.error === "bootstrap_unavailable") {
+            setError("A instalação já foi inicializada no servidor. Inicie sessão com uma conta existente.");
+            return;
+          }
+          throw new Error(data.error ?? "Não foi possível registar no servidor.");
+        } catch (networkError) {
+          if (remoteRegistered) return;
+          // Backend offline or unreachable: initialize offline-first tenant and admin
+          console.warn("[bootstrap] backend unreachable; falling back to offline-first local provisioning", networkError);
+          await provisionLocalOffline(passwordHash, pinHash);
         }
-
-        if (data.error === "bootstrap_unavailable") {
-          setError("A instalação já foi inicializada no servidor. Inicie sessão com uma conta existente.");
-          return;
-        }
-        throw new Error(data.error ?? "Não foi possível registar no servidor.");
-      } catch (networkError) {
-        if (remoteRegistered) return;
-        // Backend offline or unreachable: initialize offline-first tenant and admin
-        console.warn("[bootstrap] backend unreachable; falling back to offline-first local provisioning", networkError);
+      } else {
+        // Servidor não configurado: inicializa diretamente em modo offline-first
         await provisionLocalOffline(passwordHash, pinHash);
       }
     } catch {
@@ -176,7 +181,7 @@ export function BootstrapAccountForm({
         <h2>Criar Conta de Administrador</h2>
         <p>Cria a primeira empresa, filial e conta administradora. Funciona online ou em modo offline local.</p>
         <p className="bootstrap-server-hint">
-          Destino: <code>{apiUrl || "http://localhost:4000"}</code>
+          Destino: <code>{apiUrl || "Modo local offline (servidor não configurado)"}</code>
           <span className="offline-mode-tag">● Offline-First Ativo</span>
         </p>
       </header>

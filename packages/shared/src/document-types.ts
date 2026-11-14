@@ -338,8 +338,8 @@ export function createSampleCommercialDocument(
   companyOverride?: Partial<DocumentCompanyInfo>
 ): CommercialDocument {
   const company: DocumentCompanyInfo = {
-    name: "VendaJá Angola Soluções Comerciais, Lda.",
-    tradeName: "VendaJá Angola Enterprise",
+    name: "Mutshima Soluções Comerciais, Lda.",
+    tradeName: "Mutshima Enterprise",
     nif: "5417283921",
     address: "Avenida 4 de Fevereiro, n.º 120, 4.º Andar",
     city: "Luanda",
@@ -566,7 +566,7 @@ export function createSampleCommercialDocument(
         transport: {
           vehiclePlate: "LD-22-44-AB",
           driverName: "Mateus Silva",
-          departureAddress: "VendaJá Armazém 1 - Viana",
+          departureAddress: "Mutshima Armazém 1 - Viana",
           deliveryAddress: "Armazém Central - Rua Rainha Ginga, Luanda",
           departureDateTime: new Date().toISOString(),
         },
@@ -798,7 +798,7 @@ export function createSampleCommercialDocument(
           vehiclePlate: "LD-84-29-HL",
           driverName: "João Baptista Afonso",
           driverIdDoc: "BI 003928172LA041",
-          departureAddress: "Armazém Central VendaJá - Viana, Km 14, Luanda",
+          departureAddress: "Armazém Central Mutshima - Viana, Km 14, Luanda",
           deliveryAddress: "Centro Logístico Geral - Estrada de Cacuaco, Luanda",
           departureDateTime: new Date().toISOString(),
           arrivalDateTime: new Date(Date.now() + 14400000).toISOString(),

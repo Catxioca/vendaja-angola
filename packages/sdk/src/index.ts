@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-export interface VendaJaClientConfig {
+export interface MutshimaClientConfig {
   baseUrl: string;
   apiKey?: string;
   bearerToken?: string;
@@ -38,25 +38,25 @@ export interface PaginationParams {
   q?: string;
 }
 
-export class VendaJaApiError extends Error {
+export class MutshimaApiError extends Error {
   public status: number;
   public code?: string;
   public details?: unknown;
 
   constructor(message: string, status: number, code?: string, details?: unknown) {
     super(message);
-    this.name = "VendaJaApiError";
+    this.name = "MutshimaApiError";
     this.status = status;
     this.code = code;
     this.details = details;
   }
 }
 
-export class VendaJaClient {
-  private config: VendaJaClientConfig;
+export class MutshimaClient {
+  private config: MutshimaClientConfig;
   private cachedOAuthToken?: { token: string; expiresAt: number };
 
-  constructor(config: VendaJaClientConfig) {
+  constructor(config: MutshimaClientConfig) {
     this.config = {
       timeoutMs: 15000,
       maxRetries: 3,
@@ -121,7 +121,7 @@ export class VendaJaClient {
       });
 
       if (!tokenRes.ok) {
-        throw new VendaJaApiError("Falha na autenticação OAuth2 Client Credentials", tokenRes.status);
+        throw new MutshimaApiError("Falha na autenticação OAuth2 Client Credentials", tokenRes.status);
       }
 
       const tokenData = (await tokenRes.json()) as { access_token: string; expires_in: number };
@@ -175,7 +175,7 @@ export class VendaJaClient {
           } catch {
             errorData = { message: response.statusText };
           }
-          throw new VendaJaApiError(
+          throw new MutshimaApiError(
             errorData.message || errorData.error || `HTTP ${response.status}`,
             response.status,
             errorData.error,
@@ -191,9 +191,9 @@ export class VendaJaClient {
       } catch (err: any) {
         lastError = err;
         if (err.name === "AbortError") {
-          throw new VendaJaApiError("Tempo limite de requisição excedido (Timeout)", 408);
+          throw new MutshimaApiError("Tempo limite de requisição excedido (Timeout)", 408);
         }
-        if (err instanceof VendaJaApiError && err.status < 500 && err.status !== 429) {
+        if (err instanceof MutshimaApiError && err.status < 500 && err.status !== 429) {
           throw err;
         }
         if (attempt === maxRetries) {
@@ -309,3 +309,8 @@ export class VendaJaClient {
       ),
   };
 }
+
+// Backward compatibility aliases
+export { MutshimaClient as VendaJaClient };
+export { MutshimaClientConfig as VendaJaClientConfig };
+export { MutshimaApiError as VendaJaApiError };

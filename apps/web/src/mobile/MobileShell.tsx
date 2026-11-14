@@ -1005,7 +1005,7 @@ export function MobileShell({ apiUrl }: Props) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white p-4">
         <div className="text-4xl mb-3 animate-bounce">🇦🇴</div>
-        <h2 className="text-lg font-bold">VendaJá Angola Mobile</h2>
+        <h2 className="text-lg font-bold">Mutshima Mobile</h2>
         <p className="text-slate-400 text-sm mt-1">A carregar segurança e integridade...</p>
       </main>
     );
@@ -1018,7 +1018,7 @@ export function MobileShell({ apiUrl }: Props) {
         <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white shadow-2xl">
           <div className="text-center mb-5">
             <span className="text-4xl">🇦🇴</span>
-            <h1 className="text-xl font-black mt-2 text-sky-400">VendaJá Angola</h1>
+            <h1 className="text-xl font-black mt-2 text-sky-400">Mutshima</h1>
             <p className="text-slate-400 text-xs">Terminal POS & ERP Android / Tablet</p>
           </div>
 

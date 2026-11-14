@@ -37,15 +37,11 @@ export function SiteHeader({ currentView, onNavigate }: SiteHeaderProps) {
             e.preventDefault();
             navigateTo("home");
           }}
-          aria-label="VendaJá Angola - Página Inicial"
+          aria-label="Mutshima - Página Inicial"
         >
-          <div className="site-logo-badge" aria-hidden="true">
-            V<span>J</span>
-          </div>
+          <div className="site-logo-badge" aria-hidden="true">M</div>
           <div className="site-brand-text">
-            <h1>
-              VendaJá <span>Angola</span>
-            </h1>
+            <h1>Mutshima</h1>
             <span className="site-brand-tagline">Comércio, Faturação e ERP Soberano</span>
           </div>
         </a>

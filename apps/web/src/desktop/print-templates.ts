@@ -724,7 +724,7 @@ function renderThermal58mmHtml(
   const isProforma = doc.type === "FP";
   const customerName = escapeHtml(doc.customer?.name || "Consumidor Final");
   const customerNif = escapeHtml(doc.customer?.nif || "999999999");
-  const companyName = escapeHtml(doc.company.name || "VendaJá Angola");
+  const companyName = escapeHtml(doc.company.name || "Mutshima");
   const companyNif = escapeHtml(doc.company.nif || "5000000000");
   const companyAddress = escapeHtml(doc.company.address || "Angola");
   const companyPhone = escapeHtml(doc.company.phone || "—");
@@ -929,7 +929,7 @@ function renderThermal80mmHtml(
   const customerName = escapeHtml(doc.customer?.name || "Consumidor Final");
   const customerNif = escapeHtml(doc.customer?.nif || "999999999");
   const customerAddr = escapeHtml(doc.customer?.address || "");
-  const companyName = escapeHtml(doc.company.name || "VendaJá Angola");
+  const companyName = escapeHtml(doc.company.name || "Mutshima");
   const companyTrade = escapeHtml(doc.company.tradeName || "");
   const companyNif = escapeHtml(doc.company.nif || "5000000000");
   const companyAddress = escapeHtml(doc.company.address || "Angola");
@@ -1181,7 +1181,7 @@ function renderOfficeHtml(
   const customerName = escapeHtml(doc.customer?.name || "Consumidor Final");
   const customerNif = escapeHtml(doc.customer?.nif || "999999999");
   const customerAddr = escapeHtml(doc.customer?.address || "Luanda, Angola");
-  const companyName = escapeHtml(doc.company.name || "VendaJá Angola Enterprise");
+  const companyName = escapeHtml(doc.company.name || "Mutshima Enterprise");
   const companyTrade = escapeHtml(doc.company.tradeName || "");
   const companyNif = escapeHtml(doc.company.nif || "5000000000");
   const companyAddress = escapeHtml(doc.company.address || "Rua Rainha Ginga, Vernon");
@@ -1458,7 +1458,7 @@ function renderOfficeHtml(
             }
           </div>
           <div style="font-style: italic; color: #64748b;">
-            Emitido por software de gestão empresarial VendaJá Angola Enterprise · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT
+            Emitido por software de gestão empresarial Mutshima Enterprise · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT
           </div>
           ${doc.company.thanksMessage ? `<div style="font-weight: 600; color: #0f172a; margin-top: 4px;">${escapeHtml(doc.company.thanksMessage)}</div>` : ""}
           ${doc.company.footerText ? `<div style="color: #64748b; font-size: 8.5px;">${escapeHtml(doc.company.footerText)}</div>` : ""}

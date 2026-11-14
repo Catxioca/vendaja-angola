@@ -37,7 +37,7 @@ test("EnterpriseAuditService: extracts client forensic info from Request accurat
   } as unknown as import("express").Request;
 
   const electronInfo = EnterpriseAuditService.extractClientInfo(mockReqElectron);
-  assert.equal(electronInfo.browser, "VendaJá Desktop (Electron)");
+  assert.equal(electronInfo.browser, "Mutshima Desktop (Electron)");
   assert.equal(electronInfo.ipAddress, "192.168.1.150");
 });
 

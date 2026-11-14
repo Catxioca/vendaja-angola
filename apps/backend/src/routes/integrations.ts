@@ -204,32 +204,32 @@ integrationsRouter.get("/bi/sales", requireApiAuth("API.Sales.Read"), async (req
   const companyId = (req.query.companyId as string) || (req.headers["x-company-id"] as string) || "comp-default";
   const since = req.query.since ? new Date(String(req.query.since)) : undefined;
   const data = await EnterpriseBiService.getSalesDataset(companyId, since);
-  res.json({ dataset: "VendaJá_Sales_Analytics", count: data.length, records: data });
+  res.json({ dataset: "Mutshima_Sales_Analytics", count: data.length, records: data });
 });
 
 integrationsRouter.get("/bi/purchases", requireApiAuth("API.Purchases.Read"), async (req: Request, res: Response) => {
   const companyId = (req.query.companyId as string) || (req.headers["x-company-id"] as string) || "comp-default";
   const since = req.query.since ? new Date(String(req.query.since)) : undefined;
   const data = await EnterpriseBiService.getPurchasesDataset(companyId, since);
-  res.json({ dataset: "VendaJá_Purchases_Analytics", count: data.length, records: data });
+  res.json({ dataset: "Mutshima_Purchases_Analytics", count: data.length, records: data });
 });
 
 integrationsRouter.get("/bi/inventory", requireApiAuth("API.Products.Read"), async (req: Request, res: Response) => {
   const companyId = (req.query.companyId as string) || (req.headers["x-company-id"] as string) || "comp-default";
   const data = await EnterpriseBiService.getInventoryDataset(companyId);
-  res.json({ dataset: "VendaJá_Inventory_Analytics", count: data.length, records: data });
+  res.json({ dataset: "Mutshima_Inventory_Analytics", count: data.length, records: data });
 });
 
 integrationsRouter.get("/bi/cashflow", requireApiAuth("API.Accounting.Read"), async (req: Request, res: Response) => {
   const companyId = (req.query.companyId as string) || (req.headers["x-company-id"] as string) || "comp-default";
   const data = await EnterpriseBiService.getCashflowDataset(companyId);
-  res.json({ dataset: "VendaJá_Cashflow_Analytics", count: data.length, records: data });
+  res.json({ dataset: "Mutshima_Cashflow_Analytics", count: data.length, records: data });
 });
 
 integrationsRouter.get("/bi/payroll", requireApiAuth("API.Accounting.Read"), async (req: Request, res: Response) => {
   const companyId = (req.query.companyId as string) || (req.headers["x-company-id"] as string) || "comp-default";
   const data = await EnterpriseBiService.getHrDataset(companyId);
-  res.json({ dataset: "VendaJá_Payroll_Analytics", count: data.length, records: data });
+  res.json({ dataset: "Mutshima_Payroll_Analytics", count: data.length, records: data });
 });
 
 // ==========================================
@@ -279,7 +279,7 @@ integrationsRouter.post("/email/send", requireApiAuth("API.Integrations.Manage")
   const result = await EnterpriseEmailService.sendEmail({
     companyId: targetCompany,
     to,
-    subject: subject || "Notificação VendaJá Angola",
+    subject: subject || "Notificação Mutshima",
     body: body || "",
     templateId,
     templateVariables,

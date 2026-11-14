@@ -17,7 +17,7 @@ export function SecurityPage({ onNavigate }: SecurityPageProps) {
             Arquitetura de Segurança e Isolamento Multiempresa
           </h1>
           <p style={{ fontSize: "16px", color: "#475569", lineHeight: 1.6, maxWidth: "760px", margin: "0 auto 24px auto" }}>
-            Conheça as salvaguardas técnicas, controlos criptográficos, garantias de idempotência e limites reais de armazenamento que protegem as operações comerciais e fiscais da sua empresa no VendaJá Angola.
+            Conheça as salvaguardas técnicas, controlos criptográficos, garantias de idempotência e limites reais de armazenamento que protegem as operações comerciais e fiscais da sua empresa no Mutshima.
           </p>
 
           <div
@@ -45,7 +45,7 @@ export function SecurityPage({ onNavigate }: SecurityPageProps) {
             <span>🔐</span> 1. Autenticação Robusta e Controlo de Acesso Baseado em Papéis (RBAC)
           </h2>
           <p style={{ color: "#475569", lineHeight: 1.6, marginBottom: "16px" }}>
-            O controlo de acessos no VendaJá Angola é implementado em profundidade: a interface gráfica apenas reflete permissões, mas todas as regras de segurança são estritamente validadas na camada de API e serviços de base de dados.
+            O controlo de acessos no Mutshima é implementado em profundidade: a interface gráfica apenas reflete permissões, mas todas as regras de segurança são estritamente validadas na camada de API e serviços de base de dados.
           </p>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", marginTop: "20px" }}>
@@ -112,7 +112,7 @@ export function SecurityPage({ onNavigate }: SecurityPageProps) {
             <span>⚡</span> 3. Fila de Saída Offline (Outbox) e Garantia de Idempotência
           </h2>
           <p style={{ color: "#475569", lineHeight: 1.6, marginBottom: "16px" }}>
-            Para operar sem interrupções em locais com conectividade instável, o VendaJá Angola implementa o padrão arquitetural de <strong>Outbox Local com Chaves Determinísticas de Idempotência</strong>.
+            Para operar sem interrupções em locais com conectividade instável, o Mutshima implementa o padrão arquitetural de <strong>Outbox Local com Chaves Determinísticas de Idempotência</strong>.
           </p>
 
           <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "18px", fontSize: "13px", color: "#334155", lineHeight: 1.7 }}>
@@ -160,7 +160,7 @@ export function SecurityPage({ onNavigate }: SecurityPageProps) {
             5. Matriz de Maturidade Técnica dos Componentes de Segurança
           </h2>
           <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "12px" }}>
-            Classificação interna e descritiva das capacidades de segurança do VendaJá Angola:
+            Classificação interna e descritiva das capacidades de segurança do Mutshima:
           </p>
           <div style={{ background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "8px", padding: "12px 16px", fontSize: "12px", color: "#334155", marginBottom: "20px", lineHeight: 1.6 }}>
             <strong>Âmbito da Classificação:</strong> A designação <strong>“Coberto por testes internos”</strong> indica exclusivamente cobertura por testes automatizados do próprio repositório e <strong>não equivale a certificação, homologação nem garantia externa</strong> por entidades oficiais ou auditorias independentes.

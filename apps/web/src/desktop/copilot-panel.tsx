@@ -93,7 +93,7 @@ export function EnterpriseCopilotPanel({
     {
       id: "initial",
       sender: "copilot",
-      text: "Olá! Sou o **Muambuluisha IA — Assistente inteligente do VendaJá Angola**. Pergunte-me sobre faturação, clientes em dívida, previsões de vendas, controlo de stocks ou custos com pessoal. Todos os dados são extraídos em tempo real da base de dados do ERP.",
+      text: "Olá! Sou o **Muambuluisha IA — Assistente inteligente do Mutshima**. Pergunte-me sobre faturação, clientes em dívida, previsões de vendas, controlo de stocks ou custos com pessoal. Todos os dados são extraídos em tempo real da base de dados do ERP.",
       timestamp: new Date().toLocaleTimeString("pt-AO", { hour: "2-digit", minute: "2-digit" }),
       domain: "GENERAL",
     },
@@ -457,7 +457,7 @@ export function EnterpriseCopilotPanel({
           <span style={{ fontSize: "28px" }}>🤖</span>
           <div>
             <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "8px" }}>
-              Muambuluisha IA — Assistente inteligente do VendaJá Angola
+              Muambuluisha IA — Assistente inteligente do Mutshima
               <span
                 style={{
                   fontSize: "11px",
@@ -941,7 +941,7 @@ export function EnterpriseCopilotPanel({
               🔄 Atualização Contínua em Tempo Real (Sem Novos Instaladores)
             </h3>
             <p style={{ margin: "0 0 16px", fontSize: "13px", color: "#475569", lineHeight: "1.5" }}>
-              O ERP VendaJá Angola possui um sistema de <strong>Hot-Sync Dinâmico</strong>. Quando novos módulos ou
+              O ERP Mutshima possui um sistema de <strong>Hot-Sync Dinâmico</strong>. Quando novos módulos ou
               configurações fiscais forem ativados no backend ou na cloud, o sistema sincroniza os recursos diretamente
               na aplicação já instalada, <strong>sem necessidade de descarregar ou reinstalar instaladores (.exe/.msi)</strong>.
             </p>

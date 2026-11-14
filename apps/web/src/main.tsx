@@ -68,10 +68,7 @@ const api = () => {
   if (custom) return custom;
   const envUrl = (import.meta as ImportMeta & { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL;
   if (envUrl) return envUrl;
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-    return "https://vendaja-api.onrender.com";
-  }
-  return "http://localhost:4000";
+  return "";
 };
 function Login({ onLogin }: { onLogin: () => void }) {
   const [identifier, setIdentifier] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [showBootstrap, setShowBootstrap] = useState(false);
@@ -127,7 +124,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
   return <main className="startup-loading">{showBootstrap
     ? <BootstrapAccountForm apiUrl={api()} onComplete={onLogin} onCancel={() => setShowBootstrap(false)} />
     : <form onSubmit={(e) => void submit(e)}>
-        <h1>VendaJá Angola</h1>
+        <h1>Mutshima</h1>
         <p style={{ color: "#64748b", fontSize: "14px", margin: "0 0 16px 0" }}>Gestão Comercial Integrada & Portais Self-Service</p>
         <input placeholder="Email ou username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
         <input type="password" placeholder="Password ou PIN" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} />
@@ -297,7 +294,7 @@ function Dashboard() {
   const todayTotal = todaySales.reduce((sum, sale) => sum + sale.totalCents, 0);
   const visibleCustomers = customers.filter((customer) => `${customer.name} ${customer.nif ?? ""} ${customer.email ?? ""}`.toLowerCase().includes(customerQuery.toLowerCase()));
   const totalDebt = customers.reduce((sum, customer) => sum + customer.outstandingDebtCents, 0);
-  return <main><nav><b>VendaJá Angola</b><span>{online ? "● Online" : "● Offline"}　 Dashboard　 Clientes　 Crédito　 Contas a Receber　 Fluxo de caixa　 <button onClick={() => setShowConfig(!showConfig)}>Configuração fiscal</button></span></nav><h1>Visão geral</h1><CompanyContextSelector />{!online && <p className="offline-notice">Modo offline ativo. As vendas locais serão sincronizadas quando a ligação for restabelecida.</p>}{showConfig && <section><h2>Configuração AGT</h2><p>Credenciais armazenadas cifradas; nunca são exibidas. A configuração requer acesso de administrador.</p><input type="file" aria-label="Certificado PFX" /><input type="password" placeholder="Passphrase do certificado" />  <p><small>Validação SAF-T: estrutural até ser configurado o XSD oficial atual. Isto não constitui homologação legal.</small></p></section>  }{online && <CommercialDashboard />}
+  return <main><nav><b>Mutshima</b><span>{online ? "● Online" : "● Offline"}　 Dashboard　 Clientes　 Crédito　 Contas a Receber　 Fluxo de caixa　 <button onClick={() => setShowConfig(!showConfig)}>Configuração fiscal</button></span></nav><h1>Visão geral</h1><CompanyContextSelector />{!online && <p className="offline-notice">Modo offline ativo. As vendas locais serão sincronizadas quando a ligação for restabelecida.</p>}{showConfig && <section><h2>Configuração AGT</h2><p>Credenciais armazenadas cifradas; nunca são exibidas. A configuração requer acesso de administrador.</p><input type="file" aria-label="Certificado PFX" /><input type="password" placeholder="Passphrase do certificado" />  <p><small>Validação SAF-T: estrutural até ser configurado o XSD oficial atual. Isto não constitui homologação legal.</small></p></section>  }{online && <CommercialDashboard />}
       <div style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}><CopilotWidget apiUrl={api()} standalone={false} /></div><AccountingOperations /><StockOperations online={online} /><div className="cards"><article><small>Vendas hoje</small><strong>{formatKwanza(todayTotal)}</strong><em>{todaySales.length} documentos</em></article><article><small>Clientes ativos</small><strong>{customers.filter((customer) => customer.active).length}</strong><em>{customers.length} registados</em></article><article><small>Total a receber</small><strong>{formatKwanza(totalDebt)}</strong><em>Saldo de crédito pendente</em></article></div><section><h2>Clientes e crédito</h2><input placeholder="Pesquisar nome, NIF ou email" value={customerQuery} onChange={(event) => setCustomerQuery(event.target.value)} />{receivableMessage && <p className={receivableMessage.includes("sucesso") ? "ok" : "error-message"}>{receivableMessage}</p>}<table><thead><tr><th>Cliente</th><th>NIF</th><th>Contacto</th><th>Limite</th><th>Saldo</th><th>Estado</th></tr></thead><tbody>{visibleCustomers.map((customer) => <tr key={customer.id}><td>{customer.name}</td><td>{customer.nif ?? "—"}</td><td>{customer.phone ?? customer.email ?? "—"}</td><td>{formatKwanza(customer.creditLimitCents)}</td><td>{formatKwanza(customer.outstandingDebtCents)}</td><td>{customer.outstandingDebtCents <= 0 ? "PAGO" : "PENDENTE"}</td></tr>)}{!visibleCustomers.length && <tr><td colSpan={6}>Nenhum cliente encontrado.</td></tr>}</tbody></table></section><section><h2>Registar recebimento</h2><div className="customer-fields"><label>Cliente<select value={paymentCustomerId} onChange={(event) => setPaymentCustomerId(event.target.value)}><option value="">Selecione</option>{customers.filter((customer) => customer.outstandingDebtCents > 0).map((customer) => <option key={customer.id} value={customer.id}>{customer.name} — {formatKwanza(customer.outstandingDebtCents)}</option>)}</select></label><label>Valor (Kz)<input type="number" min="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} /></label><label>Sessão de caixa<input value={cashSessionId} onChange={(event) => setCashSessionId(event.target.value)} placeholder="UUID da sessão aberta" /></label></div><button onClick={() => void receivePayment()}>Registar recebimento</button></section>  <Cashflow /><CommercialOperations online={online} /><Reports /></main>;
 }
 
@@ -567,7 +564,7 @@ function Boot() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <strong style={{ color: "#38bdf8", fontSize: "14px" }}>🇦🇴 VendaJá Omnichannel Suite</strong>
+          <strong style={{ color: "#38bdf8", fontSize: "14px" }}>🇦🇴 Mutshima Omnichannel Suite</strong>
           <span style={{ color: "#64748b" }}>|</span>
           <span style={{ color: "#94a3b8" }}>Plataforma Digital Integrada</span>
         </div>
@@ -586,7 +583,7 @@ function Boot() {
               color: "#38bdf8",
               marginRight: "4px",
             }}
-            title="Voltar ao Site Institucional VendaJá Angola"
+            title="Voltar ao Site Institucional Mutshima"
           >
             🏠 Início
           </button>

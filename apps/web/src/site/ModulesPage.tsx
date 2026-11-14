@@ -198,7 +198,7 @@ export const MODULES_DETAILED_CATALOG: ModuleItem[] = [
   },
   {
     code: "AI",
-    name: "Muambuluisha IA — Assistente inteligente do VendaJá Angola",
+    name: "Muambuluisha IA — Assistente inteligente do Mutshima",
     category: "Gestão & Stock",
     icon: "🤖",
     status: "configuravel",
@@ -287,7 +287,7 @@ export function ModulesPage({ onNavigate }: ModulesPageProps) {
               “Preparado tecnicamente para processo de homologação; não homologado até aprovação formal da AGT.”
             </span>
             <br />
-            A VendaJá Angola apresenta métricas verificáveis e classificação honesta por estado de maturidade, sem alegações comerciais infundadas ou selos fictícios.
+            O Mutshima apresenta métricas verificáveis e classificação honesta por estado de maturidade, sem alegações comerciais infundadas ou selos fictícios.
             Qualquer emissão fiscal em produção depende da validação profissional das configurações da empresa, da fonte oficial vigente e de aprovação formal pela Administração Geral Tributária.
           </p>
         </div>
@@ -346,7 +346,7 @@ export function ModulesPage({ onNavigate }: ModulesPageProps) {
           Transparência sobre o Processo de Homologação
         </h3>
         <p style={{ fontSize: "14px", color: "#475467", lineHeight: 1.6, margin: "0 0 16px 0" }}>
-          Os mecanismos fiscais do VendaJá Angola foram estruturados de forma parametrizável para apoiar o futuro
+          Os mecanismos fiscais do Mutshima foram estruturados de forma parametrizável para apoiar o futuro
           enquadramento em processos de homologação, dependendo de validação profissional, do esquema e tabelas da
           fonte oficial vigente e de aprovação formal pela AGT. Isto inclui:
         </p>

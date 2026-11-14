@@ -40,16 +40,16 @@ export class EnterpriseEmailService {
       const customer = variables.customerName || "Estimado(a) Cliente";
       const total = variables.totalKwanza || variables.totalKz || "0.00 Kz";
       return {
-        subject: `VendaJá Angola — Fatura/Recibo n.º ${docNum}`,
+        subject: `Mutshima — Fatura/Recibo n.º ${docNum}`,
         bodyHtml: `
           <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #dce3ee; border-radius: 8px;">
-            <h2 style="color: #0d3764;">VendaJá Angola</h2>
+            <h2 style="color: #0d3764;">Mutshima</h2>
             <p>Olá <b>${customer}</b>,</p>
             <p>Junto enviamos a sua fatura/recibo com a referência fiscal n.º <b>${docNum}</b>.</p>
             <div style="background: #f1f5f9; padding: 15px; border-radius: 6px; margin: 20px 0;">
               <p style="margin: 0;">Valor Total: <b style="font-size: 18px; color: #16a34a;">${total}</b></p>
             </div>
-            <p style="color: #64748b; font-size: 12px;">Documento comercial processado por programa de faturação VendaJá Angola · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT.</p>
+            <p style="color: #64748b; font-size: 12px;">Documento comercial processado por programa de faturação Mutshima · Preparado tecnicamente para homologação; não homologado até aprovação formal da AGT.</p>
           </div>
         `,
       };
@@ -74,8 +74,8 @@ export class EnterpriseEmailService {
     }
 
     return {
-      subject: String(variables.subject || "Notificação do Sistema VendaJá"),
-      bodyHtml: `<p>${variables.message || "Alerta geral emitido pelo ERP VendaJá."}</p>`,
+      subject: String(variables.subject || "Notificação do Sistema Mutshima"),
+      bodyHtml: `<p>${variables.message || "Alerta geral emitido pelo ERP Mutshima."}</p>`,
     };
   }
 

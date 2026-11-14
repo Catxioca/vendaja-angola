@@ -1,6 +1,6 @@
 {
   "appId": "ao.co.vendaja.erp",
-  "appName": "VendaJá Angola",
+  "appName": "Mutshima",
   "webDir": "apps/web/dist",
   "server": {
     "cleartext": false,

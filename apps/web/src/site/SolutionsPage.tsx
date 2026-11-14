@@ -157,7 +157,7 @@ export function SolutionsPage({ onNavigate }: SolutionsPageProps) {
         <span className="section-tag">Soluções Verticais</span>
         <h2 className="section-title">Soluções Adaptadas à Economia Real Angolana</h2>
         <p className="section-desc">
-          Conheça as capacidades operacionais reais do VendaJá Angola para retalho, restauração, grossistas,
+          Conheça as capacidades operacionais reais do Mutshima para retalho, restauração, grossistas,
           indústria e empresas de serviços. Cada funcionalidade é sustentada por testes exaustivos e contratos
           de integridade estritos.
         </p>

@@ -217,7 +217,7 @@ describe("ETAPA 8 — Validação Integrada do Site Institucional e ERP Web", ()
     assert.ok(fs.existsSync(capConfig), "capacitor.config.json deve existir na raiz");
     const capJson = JSON.parse(fs.readFileSync(capConfig, "utf-8"));
     assert.equal(capJson.appId, "ao.co.vendaja.erp");
-    assert.equal(capJson.appName, "VendaJá Angola");
+    assert.equal(capJson.appName, "Mutshima");
 
     // 6.4 Android Assets
     const androidAssets = path.join(rootDir, "android/app/src/main/assets");

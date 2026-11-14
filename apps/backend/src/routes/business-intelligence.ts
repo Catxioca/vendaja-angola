@@ -25,7 +25,7 @@ businessIntelligenceRouter.get("/powerbi/connector.pbids", async (req: Request, 
   const apiBaseUrl = `${protocol}://${host}`;
 
   const pbidsContent = EnterprisePowerBiService.generatePbidsFile(apiBaseUrl, companyId);
-  res.setHeader("Content-Disposition", `attachment; filename="VendaJa_BI_${companyId}.pbids"`);
+  res.setHeader("Content-Disposition", `attachment; filename="Mutshima_BI_${companyId}.pbids"`);
   res.setHeader("Content-Type", "application/json");
   res.send(pbidsContent);
 });

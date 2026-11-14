@@ -1152,7 +1152,7 @@ export class EnterpriseAiCopilotService {
 
       default: {
         return {
-          textAnswer: `Olá! Sou a **Muambuluisha IA**, o assistente corporativo inteligente do VendaJá Angola. Posso ajudar com análises de **Vendas**, **Financeiro & Tesouraria**, **Stocks**, **Recursos Humanos**, **CRM**, **Previsões de Negócio**, **Deteção de Anomalias** e **Recomendações**. Experimente fazer uma pergunta em linguagem natural!`,
+          textAnswer: `Olá! Sou a **Muambuluisha IA**, o assistente corporativo inteligente do Mutshima. Posso ajudar com análises de **Vendas**, **Financeiro & Tesouraria**, **Stocks**, **Recursos Humanos**, **CRM**, **Previsões de Negócio**, **Deteção de Anomalias** e **Recomendações**. Experimente fazer uma pergunta em linguagem natural!`,
           metrics: [
             { label: "Status da Muambuluisha IA", value: "Ativo & Pronto" },
             { label: "Base de Dados", value: "Conectada (Real)" },

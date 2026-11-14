@@ -61,35 +61,22 @@ export interface LocalCopilotResult {
 export class EnterpriseLocalCopilotEngine {
   /**
    * Translates raw network / fetch errors into actionable Portuguese enterprise diagnostics.
+   * Não assume localhost:4000 quando não há URL configurada.
    */
-  public static classifyError(err: unknown, targetUrl = "http://localhost:4000"): {
+  public static classifyError(err: unknown, targetUrl?: string): {
     userMessage: string;
     code: string;
     isOffline: boolean;
   } {
     const rawMsg = err instanceof Error ? err.message : String(err);
     const lower = rawMsg.toLowerCase();
+    const cleanUrl = (targetUrl || "").trim();
 
-    if (lower.includes("failed to fetch") || lower.includes("econnrefused") || lower.includes("networkerror") || lower.includes("load failed")) {
-      return {
-        userMessage: `Serviço central de IA parado ou backend inacessível em ${targetUrl}. A Muambuluisha IA ativou o motor local offline com base na base de dados do seu terminal.`,
-        code: "SERVICE_UNREACHABLE",
-        isOffline: true,
-      };
-    }
-
+    // 1. Verificações de respostas e erros com semântica específica
     if (lower.includes("timeout") || lower.includes("abort")) {
       return {
         userMessage: `Timeout do serviço IA: O servidor demorou mais de 5 segundos a responder. A consulta foi respondida com os dados locais do terminal.`,
         code: "TIMEOUT",
-        isOffline: true,
-      };
-    }
-
-    if (lower.includes("404") || lower.includes("endpoint")) {
-      return {
-        userMessage: "Endpoint IA inexistente no servidor central. O motor local de contingência foi acionado.",
-        code: "ENDPOINT_NOT_FOUND",
         isOffline: true,
       };
     }
@@ -110,10 +97,35 @@ export class EnterpriseLocalCopilotEngine {
       };
     }
 
+    if (lower.includes("404") || lower.includes("endpoint")) {
+      return {
+        userMessage: "Endpoint IA inexistente no servidor central. O motor local de contingência foi acionado.",
+        code: "ENDPOINT_NOT_FOUND",
+        isOffline: true,
+      };
+    }
+
     if (lower.includes("database") || lower.includes("prisma") || lower.includes("base de dados")) {
       return {
         userMessage: "Base de dados central temporariamente indisponível. A consultar dados do armazenamento local.",
         code: "DATABASE_UNAVAILABLE",
+        isOffline: true,
+      };
+    }
+
+    // 2. Erros de rede: se o servidor não estiver configurado ou targetUrl for omitida, nunca assume localhost
+    if (!cleanUrl || lower.includes("não configurado") || lower.includes("unconfigured")) {
+      return {
+        userMessage: "Servidor central não configurado. A Muambuluisha IA ativou o motor local offline com base na base de dados do seu terminal.",
+        code: "SERVER_UNCONFIGURED",
+        isOffline: true,
+      };
+    }
+
+    if (lower.includes("failed to fetch") || lower.includes("econnrefused") || lower.includes("networkerror") || lower.includes("load failed")) {
+      return {
+        userMessage: `Serviço central de IA parado ou backend inacessível em ${cleanUrl}. A Muambuluisha IA ativou o motor local offline com base na base de dados do seu terminal.`,
+        code: "SERVICE_UNREACHABLE",
         isOffline: true,
       };
     }
@@ -672,7 +684,7 @@ export class EnterpriseLocalCopilotEngine {
 
       default: {
         return {
-          textAnswer: `Sou a **Muambuluisha IA** a operar em **Modo Local Offline** (Assistente inteligente do VendaJá Angola). Posso responder a perguntas sobre:
+          textAnswer: `Sou a **Muambuluisha IA** a operar em **Modo Local Offline** (Assistente inteligente do Mutshima). Posso responder a perguntas sobre:
 - **Vendas**: *"Quanto vendi hoje?"*, *"Quantas faturas foram emitidas esta semana?"*
 - **Caixa**: *"Qual o saldo atual de caixa?"*
 - **Stocks**: *"Quais produtos estão com stock crítico?"*
@@ -684,7 +696,7 @@ Todos os cálculos são executados diretamente a partir dos dados do seu termina
             { label: "Base de Dados", value: "Terminal Local" },
           ],
           insights: [
-            "Para previsões globais da rede de lojas, conecte-se ao servidor central VendaJá Backend.",
+            "Para previsões globais da rede de lojas, conecte-se ao servidor central Mutshima Backend.",
           ],
           recommendations: [
             "Experimente perguntar: 'Quanto vendi hoje?' ou 'Qual o saldo atual de caixa?'",

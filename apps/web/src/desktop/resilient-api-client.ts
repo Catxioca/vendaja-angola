@@ -226,7 +226,7 @@ export function classifyNetworkError(
       isNetworkFailure: true,
       code: "SERVICE_UNREACHABLE",
       category: "CONNECTION_REFUSED",
-      userMessage: `${serviceLabel} inacessível ou indisponível em ${origin || "127.0.0.1:4000"}. Verifique se o serviço VendaJá Backend está em execução.`,
+      userMessage: `${serviceLabel} inacessível ou indisponível em ${origin || "127.0.0.1:4000"}. Verifique se o serviço Mutshima Backend está em execução.`,
       technicalDetails: `Failed to connect to ${url}: ${rawMsg}. Ensure the backend service is running and CORS/port 4000 is open.`,
       url,
       timestamp,

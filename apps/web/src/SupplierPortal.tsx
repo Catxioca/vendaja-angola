@@ -221,7 +221,7 @@ export function SupplierPortal({ apiUrl }: Props) {
     return (
       <div className="portal-container" style={{ maxWidth: "480px", margin: "40px auto", padding: "24px", background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
         <div style={{ background: "#ecfdf5", border: "1px solid #10b981", color: "#065f46", padding: "10px 14px", borderRadius: "6px", marginBottom: "16px", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span>🚛</span> <span>Portal do Fornecedor · Self-Service B2B VendaJá</span>
+          <span>🚛</span> <span>Portal do Fornecedor · Self-Service B2B Mutshima</span>
         </div>
 
         <div style={{ display: "flex", gap: "6px", borderBottom: "1px solid #e2e8f0", marginBottom: "20px" }}>
